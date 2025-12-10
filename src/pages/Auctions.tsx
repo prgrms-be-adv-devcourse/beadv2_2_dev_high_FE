@@ -10,19 +10,13 @@ import {
 import React, { useEffect } from "react";
 import { Link as RouterLink } from "react-router-dom"; // Link 추가
 import { auctionApi, type AuctionQueryParams } from "../apis/auctionApi";
+import type { Auction } from "../types/auction";
 
 // 경매 항목 타입 정의
-interface AuctionItem {
-  auctionId: string; // 또는 number
-  title: string;
-  startBid: number;
-  // TODO: 실제 API 응답에 따라 다른 필드 추가
-  imageUrl?: string; // 이미지 URL 필드 추가 (임시)
-}
 
 // 경매 목록 API 응답 타입 정의 (페이징 포함)
 interface AuctionListResponse {
-  content: AuctionItem[];
+  content: Auction[];
   pageable: object; // 페이징 정보 (필요시 상세 타입 정의)
   last: boolean;
   totalPages: number;
@@ -38,19 +32,23 @@ interface AuctionListResponse {
 const Auctions: React.FC = () => {
   const [data, setData] = React.useState<AuctionListResponse | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [params, setParams] = React.useState<AuctionQueryParams>({}); // params 타입 지정
+  const [params, setParams] = React.useState<AuctionQueryParams>({
+    page: 0,
+    size: 20,
+    status: ["READY", "IN_PROGRESS"],
+  }); // params 타입 지정
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const { data }: { data: AuctionListResponse } =
-          await auctionApi.getAuctions(params); // 반환 타입 명시
-
+        const data: AuctionListResponse = await auctionApi
+          .getAuctions(params)
+          .then((res) => res.data); // 반환 타입 명시
         const itemsWithImages = data?.content?.map((item) => ({
           ...item,
           imageUrl:
-            item.imageUrl ||
-            `https://picsum.photos/seed/${item.auctionId}/300/200`, // 임시 이미지
+            item?.imageUrl ||
+            `https://picsum.photos/seed/${item.auctionId}/500/400`, // 임시 이미지
         }));
         console.log(itemsWithImages);
         setData({ ...data, content: itemsWithImages }); // 여기서 상태 업데이트
@@ -70,7 +68,7 @@ const Auctions: React.FC = () => {
       </Typography>
       <Grid container spacing={4}>
         {/* spacing으로 카드 간 간격 설정 */}
-        {data?.content?.map((auction: AuctionItem) => (
+        {data?.content?.map((auction: Auction) => (
           <Grid key={auction.auctionId}>
             {/* 한 줄에 4개씩 표시 */}
             <Card
@@ -79,17 +77,25 @@ const Auctions: React.FC = () => {
             >
               <CardMedia
                 height={200}
-                width={300}
+                width={250}
                 component="img"
                 image={auction.imageUrl}
-                alt={auction.title}
+                alt={auction.productName}
               />
               <CardContent sx={{ flexGrow: 1 }}>
                 <Typography gutterBottom variant="h5" component="h2">
-                  {auction.title}
+                  {auction.productName}
                 </Typography>
-                <Typography variant="h6" color="text.secondary">
-                  현재가: {auction.startBid.toLocaleString()}원
+                <Typography
+                  variant="h6"
+                  color="text.secondary"
+                  textAlign={"right"}
+                >
+                  {Math.max(
+                    auction?.currentBid ?? 0,
+                    auction.startBid
+                  ).toLocaleString()}
+                  ₩
                 </Typography>
               </CardContent>
               <Button

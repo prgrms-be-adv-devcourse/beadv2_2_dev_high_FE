@@ -12,8 +12,8 @@ const SellerRegistration: React.FC = () => {
     formState: { errors },
   } = useForm({
     defaultValues: {
-      bank_name: "",
-      bank_account: "",
+      bankName: "",
+      bankAccount: "",
     },
   });
   const navigate = useNavigate();
@@ -46,7 +46,7 @@ const SellerRegistration: React.FC = () => {
       <Grid container spacing={2}>
         <Grid component="div" flexGrow={1}>
           <Controller
-            name="bank_name"
+            name="bankName"
             control={control}
             rules={{ required: "은행명은 필수 항목입니다." }}
             render={({ field }) => (
@@ -55,15 +55,15 @@ const SellerRegistration: React.FC = () => {
                 required
                 fullWidth
                 label="은행명"
-                error={!!errors.bank_name}
-                helperText={errors.bank_name?.message}
+                error={!!errors.bankName}
+                helperText={errors.bankName?.message}
               />
             )}
           />
         </Grid>
         <Grid component="div" flexGrow={1}>
           <Controller
-            name="bank_account"
+            name="bankAccount"
             control={control}
             rules={{ required: "계좌번호는 필수 항목입니다." }}
             render={({ field }) => (
@@ -72,8 +72,8 @@ const SellerRegistration: React.FC = () => {
                 required
                 fullWidth
                 label="계좌번호"
-                error={!!errors.bank_account}
-                helperText={errors.bank_account?.message}
+                error={!!errors.bankAccount}
+                helperText={errors.bankAccount?.message}
               />
             )}
           />

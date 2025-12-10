@@ -22,9 +22,9 @@ const Login: React.FC = () => {
   const onSubmit = async (data: LoginParams) => {
     try {
       const response = await userApi.login(data);
-      const { user, accessToken } = response.data;
+      const { user, accessToken, refreshToken } = response.data;
 
-      auth.login(user, accessToken); // 로그인 상태 업데이트
+      auth.login(accessToken, refreshToken, user as any); // 로그인 상태 업데이트
 
       alert("로그인 성공!");
       navigate("/");

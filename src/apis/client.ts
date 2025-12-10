@@ -6,6 +6,12 @@ import axios from "axios";
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api/v1";
 
+export interface ApiResponseDto<T> {
+  code: string; // 예: "SUCCESS"
+  message: string; // 예: "정상적으로 처리되었습니다."
+  data: T; // 실제 페이로드
+}
+
 /**
  * 기본 axios 인스턴스입니다.
  * 모든 API 요청에 이 인스턴스를 사용합니다.
@@ -44,25 +50,25 @@ client.interceptors.response.use(
   },
   async (error) => {
     // HTTP 상태 코드가 2xx 범위를 벗어나는 경우 이곳에서 처리됩니다.
-    // 예: 401 Unauthorized 에러 발생 시 로그인 페이지로 리디렉션
-    // if (error.response && error.response.status === 401) {
-    //   window.location.href = '/login';
-    // }
+
     const originalRequest = error.config;
 
     // 401 에러 && 아직 재시도 안함
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true; // 무한 루프 방지
-      const newToken = await refreshToken();
+      try {
+        const newToken = await refreshToken(); // 재발급 대기
+        if (newToken) {
+          originalRequest.headers["Authorization"] = `Bearer ${newToken}`;
+          return client(originalRequest); // 재시도
+        } else {
+          localStorage.removeItem("accessToken");
+          localStorage.removeItem("refreshToken");
 
-      if (newToken) {
-        // 새 토큰으로 요청 재시도
-        originalRequest.headers["Authorization"] = `Bearer ${newToken}`;
-        return client(originalRequest);
-      } else {
-        // 재발급 실패 → 로그아웃 처리
-        localStorage.removeItem("accessToken");
-        window.location.href = "/login";
+          throw new Error("토큰 재발급 실패");
+        }
+      } catch (err) {
+        return Promise.reject(err); // 재발급 실패
       }
     }
     return Promise.reject(error);
@@ -72,13 +78,18 @@ client.interceptors.response.use(
 // 토큰 재발급 함수 예시
 async function refreshToken() {
   try {
-    const response = await axios.post(
-      `${import.meta.env.VITE_API_BASE_URL}/auth/refresh`,
-      {
-        // 필요 시 refresh token 전달
-      }
-    );
-    const newAccessToken = response.data.accessToken;
+    const refreshToken = localStorage.getItem("refreshToken");
+    if (!refreshToken) {
+      console.error("리프레시 토큰이 없습니다.");
+      return null;
+    }
+
+    const response = await axios.post(`${API_BASE_URL}/auth/refresh/token`, {
+      // 필요 시 refresh token 전달
+      refreshToken,
+    });
+    const data = response.data as ApiResponseDto<{ accessToken: string }>;
+    const newAccessToken = data.data.accessToken;
     localStorage.setItem("accessToken", newAccessToken);
     return newAccessToken;
   } catch (err) {

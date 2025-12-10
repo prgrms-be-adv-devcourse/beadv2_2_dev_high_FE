@@ -1,138 +1,648 @@
-import React, { useState } from "react";
-import { useParams } from "react-router-dom";
 import {
-  Typography,
-  Container,
+  Alert,
   Box,
-  Paper,
+  Button,
+  Chip,
+  CircularProgress,
+  Container,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
   List,
   ListItem,
   ListItemText,
+  Paper,
   TextField,
-  Button,
-  Chip,
+  Typography,
 } from "@mui/material";
-import { useStomp } from "../hooks/useStomp";
 import type { IMessage } from "@stomp/stompjs";
+import { format } from "date-fns";
+import { ko } from "date-fns/locale";
+import React, { useCallback, useEffect, useState } from "react";
+import InfiniteScroll from "react-infinite-scroll-component";
+import { useNavigate, useParams } from "react-router-dom";
+import { auctionApi } from "../apis/auctionApi";
+import RemainingTime from "../components/RemainingTime";
+import { useAuth } from "../hooks/useAuth";
+import { useStomp } from "../hooks/useStomp";
+import {
+  type AuctionBidMessage,
+  type AuctionDetailResponse,
+  type AuctionParticipationResponse,
+  AuctionStatus,
+} from "../types/auction";
+
+// 보증금 및 참여 상태를 표시하는 컴포넌트
+const AuctionParticipationStatus: React.FC<{
+  participationStatus: AuctionParticipationResponse;
+  depositAmount: number;
+  handleWithdraw: () => void;
+}> = ({ participationStatus, depositAmount, handleWithdraw }) => {
+  const { isParticipated, isWithdrawn, isRefund, lastBidPrice } =
+    participationStatus;
+
+  let statusChip;
+  if (isWithdrawn && isRefund) {
+    statusChip = <Chip label="참여 포기 + 환급 완료" color="success" />;
+  } else if (isWithdrawn) {
+    statusChip = <Chip label="참여 포기" color="warning" />;
+  } else if (isRefund) {
+    statusChip = <Chip label="보증금 환급 완료" color="success" />;
+  } else if (isParticipated) {
+    if (lastBidPrice && lastBidPrice > 0) {
+      statusChip = <Chip label="참여중" color="secondary" />;
+    } else {
+      statusChip = <Chip label="보증금 납부 완료" color="primary" />;
+    }
+  } else {
+    statusChip = <Chip label="미참여" color="default" />;
+  }
+
+  return (
+    <Paper sx={{ p: 2, mt: 2, backgroundColor: "grey.50" }}>
+      <Box
+        display="flex"
+        justifyContent="space-between"
+        alignItems="center"
+        mb={2}
+      >
+        <Typography variant="h6" gutterBottom>
+          나의 경매 참여 상태
+        </Typography>
+        {isWithdrawn && !isRefund && (
+          <Box display="flex" gap={1}>
+            <Button variant="contained">환불요청</Button>
+          </Box>
+        )}
+      </Box>
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: 2,
+          justifyContent: "space-between",
+        }}
+      >
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          {statusChip}
+
+          {lastBidPrice && lastBidPrice > 0 && (
+            <Typography variant="h5" sx={{ mt: 1 }}>
+              마지막 입찰가: {lastBidPrice.toLocaleString()}원
+            </Typography>
+          )}
+        </Box>
+
+        <Box
+          flexDirection={"column"}
+          alignContent={"flex-end"}
+          display={"flex"}
+          gap={1}
+        >
+          <Typography variant="body1" textAlign="right">
+            {isParticipated || isRefund
+              ? `보증금: ${depositAmount.toLocaleString()}원`
+              : `필요 보증금: ${depositAmount.toLocaleString()}원`}
+          </Typography>
+          {isParticipated && !isWithdrawn && !isRefund && (
+            <Button
+              variant="contained"
+              color="error"
+              onClick={handleWithdraw}
+              size="medium"
+            >
+              경매 포기하기
+            </Button>
+          )}
+        </Box>
+      </Box>
+
+      {isWithdrawn && (
+        <Alert
+          severity="warning"
+          sx={{
+            mt: 2,
+            mb: 2,
+            display: "flex",
+          }}
+        >
+          경매 참여를 포기하여 더 이상 입찰할 수 없습니다.
+        </Alert>
+      )}
+    </Paper>
+  );
+};
 
 const AuctionDetail: React.FC = () => {
   const { id: auctionId } = useParams<{ id: string }>();
-  const [currentUsers, setCurrentUsers] = useState(0);
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
 
-  const [bids, setBids] = useState<
-    { bidder: string; price: number; timestamp: string }[]
-  >([]);
-  const [newBid, setNewBid] = useState("");
-  // 메시지 수신 처리 콜백
-  const handleNewMessage = (message: IMessage) => {
+  const [auctionDetail, setAuctionDetail] =
+    useState<AuctionDetailResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [currentBidPrice, setCurrentBidPrice] = useState<number>(0);
+  const [highestBidderInfo, setHighestBidderInfo] = useState<{
+    id?: string;
+    username?: string;
+  } | null>(null);
+  const [currentUserCount, setCurrentUserCount] = useState(0);
+  const [newBidAmount, setNewBidAmount] = useState<string>("");
+
+  const [openLoginPrompt, setOpenLoginPrompt] = useState(false);
+  const [openDepositPrompt, setOpenDepositPrompt] = useState(false);
+  const [participationStatus, setParticipationStatus] =
+    useState<AuctionParticipationResponse>({
+      isParticipated: false,
+      isWithdrawn: false,
+      isRefund: false,
+    });
+
+  // 입찰 내역 상태
+  const [bidHistory, setBidHistory] = useState<AuctionBidMessage[]>([]);
+  const [bidHistoryPage, setBidHistoryPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+
+  const fetchAuctionDetail = async () => {
     try {
-      const payload = JSON.parse(message.body);
-
-      switch (payload.type) {
-        case "USER_JOIN":
-          console.log("사용자 입장, 현재 인원:", payload.currentUsers);
-          // UI 업데이트: 예를 들어 setUserCount(payload.currentUsers)
-          setCurrentUsers(payload.currentUsers);
-          break;
-
-        case "USER_LEAVE":
-          console.log("사용자 퇴장, 현재 인원:", payload.currentUsers);
-          setCurrentUsers(payload.currentUsers);
-          // UI 업데이트
-          break;
-
-        case "BID_SUCCESS":
-          console.log(
-            "최고 입찰자:",
-            payload.highestUserId,
-            "가격:",
-            payload.bidPrice
-          );
-          // UI 업데이트: 예를 들어 setHighestBid(payload)
-          break;
-
-        default:
-          console.warn("알 수 없는 메시지 타입:", payload);
+      const data: AuctionDetailResponse = await auctionApi
+        .getAuctionDetail(auctionId as string)
+        .then((res) => res.data);
+      setAuctionDetail(data);
+      setCurrentBidPrice(data.currentBid || data.startBid);
+      if (data.highestUserId) {
+        setHighestBidderInfo({ id: data.highestUserId, username: "" });
       }
-    } catch (error) {
-      console.error("수신된 메시지를 파싱할 수 없습니다:", message.body, error);
+    } catch (err) {
+      console.error("경매 상세 정보 로딩 실패:", err);
+      setError("경매 상세 정보를 불러오는 데 실패했습니다.");
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleBidSubmit = () => {};
+  const fetchAuctionParticipation = async () => {
+    try {
+      const res = await auctionApi.checkParticipationStatus(
+        auctionId as string
+      );
+      setParticipationStatus(res?.data);
+    } catch (err) {
+      console.error("경매 참여 정보 로딩 실패:", err);
+    }
+  };
 
-  // useStomp 훅 사용
-  const { isConnected, sendMessage } = useStomp({
-    topic: "auction", // 이 경매를 위한 고유한 토픽
+  const fetchMoreHistory = async () => {
+    if (!auctionId) return;
+    try {
+      const response = await auctionApi.getAuctionBidHistory(auctionId, {
+        page: bidHistoryPage,
+        size: 20,
+      });
+
+      const data = response.data;
+
+      setBidHistory((prev) => [...prev, ...data.content]);
+      setHasMore(!data.last);
+      setBidHistoryPage((prev) => prev + 1);
+    } catch (err) {
+      console.error("입찰 내역 추가 로딩 실패:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (auctionId) {
+      fetchAuctionDetail();
+      fetchAuctionParticipation();
+    }
+  }, [auctionId, isAuthenticated]);
+
+  useEffect(() => {
+    if (!auctionId) return;
+    // Reset and fetch initial data when auctionId changes
+    setBidHistory([]);
+    setBidHistoryPage(0);
+    setHasMore(true);
+    auctionApi
+      .getAuctionBidHistory(auctionId, { page: 0, size: 20 })
+      .then((response) => {
+        const data = response.data;
+        setBidHistory(data.content);
+        setHasMore(!data.last);
+        setBidHistoryPage(1);
+      })
+      .catch((err) => {
+        console.error("입찰 내역 초기 로딩 실패:", err);
+      });
+  }, [auctionId]);
+
+  const handleNewMessage = useCallback(
+    (message: IMessage) => {
+      try {
+        const payload: AuctionBidMessage = JSON.parse(message.body);
+        switch (payload.type) {
+          case "USER_JOIN":
+          case "USER_LEAVE":
+            setCurrentUserCount(payload.currentUsers);
+            break;
+          case "BID_SUCCESS":
+            console.log("입찰 성공 메시지 처리:", payload);
+            setCurrentBidPrice(payload.bidPrice);
+            setHighestBidderInfo({
+              id: payload.highestUserId,
+              username: payload.highestUsername,
+            });
+            setCurrentUserCount(payload.currentUsers);
+            setBidHistory((prev) => {
+              const newBid: AuctionBidMessage = {
+                bidSrno: payload.bidSrno,
+                highestUserId: payload.highestUserId!,
+                highestUsername: payload.highestUsername! ?? "-",
+                bidPrice: payload.bidPrice,
+                bidAt: payload.bidAt,
+                type: "BID_SUCCESS",
+                auctionId: payload.auctionId,
+                currentUsers: payload.currentUsers,
+              };
+              if (prev.some((bid) => bid.bidSrno === newBid.bidSrno)) {
+                return prev;
+              }
+              return [newBid, ...prev];
+            });
+            break;
+          default:
+            break;
+        }
+      } catch (e) {
+        console.error("메시지 파싱 오류:", e);
+      }
+    },
+    [setBidHistory]
+  );
+
+  const { isConnected } = useStomp({
+    topic: auctionId ? `/topic/auction.${auctionId}` : "",
     onMessage: handleNewMessage,
-    auctionId: auctionId || "",
   });
 
-  // const handleBidSubmit = (event: React.FormEvent) => {
-  //   event.preventDefault();
-  //   const price = parseInt(newBid, 10);
-  //   if (!price || price <= 0) {
-  //     alert("올바른 입찰 금액을 입력해주세요.");
-  //     return;
-  //   }
+  const handleBidSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!isAuthenticated) {
+      setOpenLoginPrompt(true);
+      return;
+    }
+    if (participationStatus.isWithdrawn) {
+      alert("경매 참여를 포기하여 입찰할 수 없습니다.");
+      return;
+    }
+    if (!participationStatus.isParticipated) {
+      setOpenDepositPrompt(true);
+      return;
+    }
 
-  //   // 메시지 전송
-  // };
+    const bid = Number(newBidAmount);
+    if (isNaN(bid) || bid <= 0 || bid % 100 !== 0) {
+      alert("입찰 금액은 100원 단위의 올바른 숫자여야 합니다.");
+      return;
+    }
+    if (bid <= currentBidPrice) {
+      alert(
+        `입찰 금액은 현재가(${currentBidPrice.toLocaleString()}원)보다 높아야 합니다.`
+      );
+      return;
+    }
+
+    try {
+      await auctionApi.placeBid(auctionId!, bid);
+      setNewBidAmount("");
+
+      setParticipationStatus((prev) => ({
+        ...prev,
+        lastBidPrice: bid,
+      }));
+      alert("입찰이 성공적으로 접수되었습니다.");
+    } catch (err: any) {
+      alert(`입찰 실패: ${err.response?.data?.message || err.message}`);
+    }
+  };
+
+  const handleWithdraw = async () => {
+    try {
+      const res = await auctionApi.withdrawnParticipation(auctionId!);
+      setNewBidAmount("");
+
+      setParticipationStatus(res.data);
+    } catch (err) {
+      console.error("경매 포기 실패:", err);
+    }
+  };
+
+  const handleCloseLoginPrompt = () => {
+    setOpenLoginPrompt(false);
+    navigate("/login");
+  };
+
+  const handleCloseDepositPrompt = () => {
+    setOpenDepositPrompt(false);
+    auctionApi
+      .createParticipation(auctionId!, {
+        depositAmount: auctionDetail?.depositAmount,
+      })
+      .then((res) => {
+        setParticipationStatus(res.data);
+        alert("보증금 결제가 완료되었습니다. 이제 입찰할 수 있습니다.");
+      });
+  };
+
+  if (loading)
+    return (
+      <Container sx={{ textAlign: "center", mt: 5 }}>
+        <CircularProgress />
+      </Container>
+    );
+  if (error)
+    return (
+      <Container sx={{ mt: 5 }}>
+        <Alert severity="error">{error}</Alert>
+      </Container>
+    );
+  if (!auctionDetail)
+    return (
+      <Container sx={{ mt: 5 }}>
+        <Alert severity="warning">경매 정보를 찾을 수 없습니다.</Alert>
+      </Container>
+    );
+
+  const isAuctionInProgress =
+    auctionDetail.status === AuctionStatus.IN_PROGRESS;
 
   return (
     <Container>
       <Box sx={{ display: "flex", alignItems: "center", gap: 2, my: 4 }}>
-        <Typography variant="h4">경매 상세 (ID: {auctionId})</Typography>
-        <Chip
-          label={isConnected ? "실시간 연결 중" : "연결 끊김"}
-          color={isConnected ? "success" : "error"}
-        />
-        <Typography variant="subtitle1">
-          현재 보고있는 유저: {currentUsers}명
-        </Typography>
+        <Typography variant="h4">{auctionDetail.productName}</Typography>
       </Box>
 
-      <Paper sx={{ p: 2, mb: 4 }}>
-        <Typography variant="h6">실시간 입찰 현황</Typography>
-        <List sx={{ maxHeight: 400, overflow: "auto" }}>
-          {bids?.length === 0 && (
-            <ListItem>
-              <ListItemText primary="아직 입찰 내역이 없습니다." />
-            </ListItem>
-          )}
-          {bids?.map((bid, index) => (
-            <ListItem key={index}>
-              <ListItemText
-                primary={`${
-                  bid.bidder
-                }님의 입찰: ${bid.price.toLocaleString()}원`}
-                secondary={new Date(bid.timestamp).toLocaleString()}
-              />
-            </ListItem>
-          ))}
+      <Paper sx={{ p: 3, mb: 4 }}>
+        <Box
+          display="flex"
+          justifyContent="space-between"
+          alignItems="center"
+          mb={2}
+        >
+          <Typography variant="h5">경매 정보</Typography>
+          <Box display="flex" gap={1}>
+            <Chip
+              label={auctionDetail.status}
+              color={isAuctionInProgress ? "success" : "default"}
+            />
+            <Chip
+              label={isConnected ? "실시간 연결 중" : "연결 끊김"}
+              color={isConnected ? "success" : "warning"}
+            />
+          </Box>
+        </Box>
+        <List dense>
+          <ListItem>
+            <ListItemText
+              primary="시작가"
+              secondary={`${auctionDetail.startBid.toLocaleString()}원`}
+            />
+          </ListItem>
+          <ListItem>
+            <ListItemText
+              primary="최고 입찰가"
+              secondary={
+                <Typography component="span" variant="h5" color="primary">
+                  {currentBidPrice.toLocaleString()}원
+                </Typography>
+              }
+            />
+          </ListItem>
+          <ListItem>
+            <ListItemText
+              primary="최고 입찰자"
+              secondary={
+                highestBidderInfo?.id
+                  ? `${
+                      highestBidderInfo.username
+                    } (ID: ${highestBidderInfo.id.slice(0, 4)}****)`
+                  : "없음"
+              }
+            />
+          </ListItem>
+          <ListItem>
+            <ListItemText
+              primary="경매 시작"
+              secondary={format(
+                new Date(auctionDetail.auctionStartAt),
+                "yyyy-MM-dd HH:mm",
+                { locale: ko }
+              )}
+            />
+          </ListItem>
+          <ListItem>
+            <ListItemText
+              primary="경매 종료"
+              secondary={format(
+                new Date(auctionDetail.auctionEndAt),
+                "yyyy-MM-dd HH:mm",
+                { locale: ko }
+              )}
+            />
+          </ListItem>
+          <ListItem>
+            <ListItemText
+              primary="남은 시간"
+              secondary={
+                <RemainingTime auctionEndAt={auctionDetail.auctionEndAt} />
+              }
+            />
+          </ListItem>
+          <ListItem>
+            <ListItemText
+              primary="현재 접속자"
+              secondary={`${currentUserCount}명`}
+            />
+          </ListItem>
         </List>
+        <Box sx={{ mt: 2 }}>
+          <Typography variant="body1">
+            상품 설명: {auctionDetail.description}
+          </Typography>
+        </Box>
+        {isAuthenticated && (
+          <AuctionParticipationStatus
+            participationStatus={participationStatus}
+            depositAmount={auctionDetail.depositAmount}
+            handleWithdraw={handleWithdraw}
+          />
+        )}
       </Paper>
 
-      {isConnected && (
-        <Paper sx={{ p: 2 }}>
+      {isAuctionInProgress && (
+        <Paper sx={{ p: 2, mb: 4 }}>
+          <Typography variant="h6" gutterBottom>
+            입찰하기
+          </Typography>
           <Box
             component="form"
             onSubmit={handleBidSubmit}
-            sx={{ display: "flex", gap: 2 }}
+            sx={{ display: "flex", gap: 2, alignItems: "center" }}
           >
             <TextField
               type="number"
-              label="입찰 금액"
-              value={newBid}
-              onChange={(e) => setNewBid(e.target.value)}
+              label={`입찰 금액 (현재가 ${currentBidPrice.toLocaleString()}원 이상)`}
+              value={newBidAmount}
+              onChange={(e) => setNewBidAmount(e.target.value)}
               fullWidth
+              onFocus={() =>
+                !newBidAmount && setNewBidAmount(String(currentBidPrice + 100))
+              }
+              disabled={!isConnected || participationStatus.isWithdrawn}
+              inputProps={{ min: currentBidPrice + 100, step: 100 }}
             />
-            <Button type="submit" variant="contained">
+            <Button
+              type="submit"
+              variant="contained"
+              size="large"
+              disabled={!isConnected || participationStatus.isWithdrawn}
+              sx={{ p: 2 }}
+            >
               입찰
             </Button>
           </Box>
+          {!isAuthenticated && (
+            <Alert severity="info" sx={{ mt: 2 }}>
+              입찰에 참여하려면 로그인해주세요.
+            </Alert>
+          )}
+          {!isConnected && (
+            <Alert severity="warning" sx={{ mt: 2 }}>
+              실시간 서버와 연결이 끊어졌습니다. 입찰을 시도할 수 없습니다.
+            </Alert>
+          )}
         </Paper>
       )}
+
+      {isAuthenticated ? (
+        <Paper sx={{ p: 2, mt: 4, mb: 4 }}>
+          <Typography variant="h6" gutterBottom>
+            실시간 입찰 내역
+          </Typography>
+          <Box id="bidHistoryContainer" sx={{ height: 400, overflow: "auto" }}>
+            <InfiniteScroll
+              dataLength={bidHistory.length}
+              next={fetchMoreHistory}
+              hasMore={hasMore}
+              loader={
+                <Box sx={{ textAlign: "center", py: 2 }}>
+                  <CircularProgress />
+                </Box>
+              }
+              endMessage={
+                <Typography variant="body2" sx={{ textAlign: "center", py: 2 }}>
+                  <b>더 이상 입찰 내역이 없습니다.</b>
+                </Typography>
+              }
+              scrollableTarget="bidHistoryContainer"
+            >
+              <List>
+                {bidHistory.map((bid) => (
+                  <React.Fragment key={bid.bidSrno}>
+                    <ListItem>
+                      <ListItemText
+                        primary={
+                          <Typography component="span" fontWeight="bold">
+                            {bid.bidPrice.toLocaleString()}원
+                          </Typography>
+                        }
+                        secondary={
+                          <>
+                            <Typography component="span" display="block">
+                              입찰자: {bid?.highestUsername} (ID:{" "}
+                              {bid.highestUserId?.slice(0, 4)}
+                              ****)
+                            </Typography>
+                            <Typography
+                              component="span"
+                              display="block"
+                              color="text.secondary"
+                            >
+                              {format(
+                                new Date(bid.bidAt),
+                                "yyyy-MM-dd HH:mm:ss",
+                                { locale: ko }
+                              )}
+                            </Typography>
+                          </>
+                        }
+                      />
+                    </ListItem>
+                    <Divider component="li" />
+                  </React.Fragment>
+                ))}
+              </List>
+            </InfiniteScroll>
+          </Box>
+        </Paper>
+      ) : (
+        <Paper sx={{ p: 2, mt: 4, mb: 4 }}>
+          <Typography variant="h6" gutterBottom>
+            실시간 입찰 내역
+          </Typography>
+          <Alert severity="info" sx={{ mt: 2 }}>
+            입찰 내역은 로그인 후 확인 가능합니다.
+            <Button onClick={() => navigate("/login")} sx={{ ml: 1 }}>
+              로그인
+            </Button>
+          </Alert>
+        </Paper>
+      )}
+
+      <Dialog open={openLoginPrompt} onClose={() => setOpenLoginPrompt(false)}>
+        <DialogTitle>로그인 필요</DialogTitle>
+        <DialogContent>
+          <Typography>입찰에 참여하려면 먼저 로그인해야 합니다.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenLoginPrompt(false)}>취소</Button>
+          <Button onClick={handleCloseLoginPrompt} autoFocus>
+            로그인
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={openDepositPrompt}
+        onClose={() => setOpenDepositPrompt(false)}
+      >
+        <DialogTitle>보증금 필요</DialogTitle>
+        <DialogContent>
+          <Typography>
+            경매에 처음 입찰하시려면 보증금{" "}
+            <Typography component="span" fontWeight="bold">
+              {auctionDetail.depositAmount.toLocaleString()}원
+            </Typography>
+            이 필요합니다.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenDepositPrompt(false)}>취소</Button>
+          <Button onClick={handleCloseDepositPrompt} autoFocus>
+            보증금 결제
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };

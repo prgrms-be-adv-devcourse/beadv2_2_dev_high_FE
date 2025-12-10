@@ -22,6 +22,14 @@ const Home: React.FC = () => {
       <Stack direction="row" spacing={2} sx={{ mt: 4 }}>
         <Button
           component={RouterLink}
+          to="/login"
+          variant="outlined"
+          size="large"
+        >
+          로그인
+        </Button>
+        <Button
+          component={RouterLink}
           to="/signup"
           variant="outlined"
           size="large"
@@ -37,10 +45,42 @@ const Home: React.FC = () => {
         >
           판매자 등록
         </Button>
-        <Button component={RouterLink} to="/" variant="contained" size="large">
-          상품등록
+        <Button
+          component={RouterLink}
+          to="/product/new"
+          variant="contained"
+          color="primary"
+          size="large"
+        >
+          상품 등록
+        </Button>
+        <Button
+          component={RouterLink}
+          to="/auction/new"
+          variant="contained"
+          color="primary"
+          size="large"
+        >
+          경매 등록
+        </Button>
+        <Button
+          component={RouterLink}
+          to="/products"
+          variant="contained"
+          size="large"
+        >
+          상품 목록
+        </Button>
+        <Button
+          component={RouterLink}
+          to="/auctions"
+          variant="contained"
+          size="large"
+        >
+          경매 목록
         </Button>
       </Stack>
+      <Stack></Stack>
     </Box>
   );
 };

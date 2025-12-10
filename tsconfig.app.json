@@ -18,8 +18,11 @@
 
     /* Linting */
     "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
+
+    // 👉 팀 프로젝트에서는 false 추천
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true

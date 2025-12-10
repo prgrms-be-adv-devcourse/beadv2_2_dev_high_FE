@@ -1,4 +1,11 @@
-import { AppBar, Button, Container, Toolbar, Typography } from "@mui/material";
+import {
+  AppBar,
+  Box,
+  Button,
+  Container,
+  Toolbar,
+  Typography,
+} from "@mui/material";
 import React from "react";
 import { Outlet, Link as RouterLink } from "react-router-dom";
 import { useAuth } from "./hooks/useAuth";
@@ -20,51 +27,54 @@ function App() {
     <React.Fragment>
       <AppBar position="static">
         <Container maxWidth="lg">
-          {" "}
-          {/* 툴바 콘텐츠 너비를 lg로 제한 */}
-          <Toolbar disableGutters>
-            {" "}
-            {/* Toolbar 좌우 패딩 제거 */}
-            <Typography
-              variant="h6"
-              component={RouterLink}
-              to="/"
-              sx={{ flexGrow: 1, color: "inherit", textDecoration: "none" }}
-            >
-              Project
-            </Typography>
-            <Button color="inherit" component={RouterLink} to="/products">
-              상품
-            </Button>
-            <Button color="inherit" component={RouterLink} to="/auctions">
-              경매
-            </Button>
-            {isAuthenticated ? (
-              <>
-                <Typography variant="body1" color="inherit" sx={{ mr: 2 }}>
-                  {user?.name}님 환영합니다!
-                </Typography>
-                <Button
-                  color="inherit"
-                  component={RouterLink}
-                  to="/seller/register"
-                >
-                  판매자 등록
-                </Button>
-                <Button color="inherit" onClick={handleLogout}>
-                  로그아웃
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button color="inherit" component={RouterLink} to="/login">
-                  로그인
-                </Button>
-                <Button color="inherit" component={RouterLink} to="/signup">
-                  회원가입
-                </Button>
-              </>
-            )}
+          <Toolbar disableGutters sx={{ justifyContent: "space-between" }}>
+            {/* 좌측: 로고 + 메뉴 */}
+            <Box display="flex" alignItems="center" gap={2}>
+              <Typography
+                variant="h6"
+                component={RouterLink}
+                to="/"
+                sx={{ color: "inherit", textDecoration: "none", mr: 5 }}
+              >
+                Project
+              </Typography>
+              <Button color="inherit" component={RouterLink} to="/products">
+                상품
+              </Button>
+              <Button color="inherit" component={RouterLink} to="/auctions">
+                경매
+              </Button>
+            </Box>
+
+            {/* 우측: 로그인/회원정보 */}
+            <Box display="flex" alignItems="center" gap={2}>
+              {isAuthenticated ? (
+                <>
+                  <Typography variant="body1" color="inherit">
+                    {user?.name}님 환영합니다!
+                  </Typography>
+                  <Button
+                    color="inherit"
+                    component={RouterLink}
+                    to="/seller/register"
+                  >
+                    판매자 등록
+                  </Button>
+                  <Button color="inherit" onClick={handleLogout}>
+                    로그아웃
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button color="inherit" component={RouterLink} to="/login">
+                    로그인
+                  </Button>
+                  <Button color="inherit" component={RouterLink} to="/signup">
+                    회원가입
+                  </Button>
+                </>
+              )}
+            </Box>
           </Toolbar>
         </Container>
       </AppBar>
