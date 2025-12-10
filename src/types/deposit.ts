@@ -1,0 +1,65 @@
+import type { PagedApiResponse } from "./common";
+
+export const DepositType = {
+  CHARGE: "CHARGE", // 경매 대기 (시작 전)
+  USAGE: "USAGE", // 경매 진행
+} as const;
+
+export type DepositType = (typeof DepositType)[keyof typeof DepositType];
+
+export const DepositOrderStatus = {
+  PENDING: "PENDING",
+  COMPLETED: "COMPLETED",
+  FAILED: "FAILED",
+  CANCELLED: "CANCELLED",
+} as const;
+
+export type DepositOrderStatus =
+  (typeof DepositOrderStatus)[keyof typeof DepositOrderStatus];
+
+export interface DepositInfo {
+  userId: string;
+  balance: number; //현재잔액
+}
+export interface DepositHstRequest {
+  userId?: string;
+  depositOrderId?: string;
+  type: DepositType;
+  amount: number;
+}
+
+export interface DepositOrderInfo {
+  orderId: string;
+  userId: String;
+  amount: number;
+  status: DepositOrderStatus;
+  createdAt: string;
+}
+/**
+ * /deposit/histories/me 응답 레코드 (DepositHistoryInfo)
+ */
+export interface DepositHistory {
+  id: number;
+  userId: string;
+  depositOrderId: string;
+  type: DepositType;
+  amount: number;
+  balance: number;
+  createdAt: string; // ISO 문자열로 직렬화된 LocalDateTime
+}
+
+export type PagedDepositHistoryResponse = PagedApiResponse<DepositHistory>;
+
+export interface PaymentSuccessReqeuest {
+  paymentKey: string;
+  orderId: string;
+  amount: number;
+}
+
+export interface PaymentFailReqeuest {
+  code?: string;
+  message?: string;
+  orderId?: string;
+  userId?: string;
+  depositPaymentId?: string;
+}

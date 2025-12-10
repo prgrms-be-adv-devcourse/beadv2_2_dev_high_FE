@@ -1,23 +1,42 @@
-import { createTheme } from '@mui/material/styles';
+import { createTheme, type ThemeOptions } from "@mui/material/styles";
 
-/**
- * Material-UI 커스텀 테마
- * 여기에 프로젝트 전체에 적용할 색상, 타이포그래피 등을 정의할 수 있습니다.
- * @see https://mui.com/customization/theming/
- */
-const theme = createTheme({
+const lightThemeOptions: ThemeOptions = {
   palette: {
+    mode: "light",
     primary: {
-      main: '#556cd6',
+      main: "#556cd6",
     },
     secondary: {
-      main: '#19857b',
+      main: "#19857b",
     },
     error: {
-      main: '#red',
+      main: "#ff1744",
+    },
+    background: {
+      default: "#fff",
+      paper: "#f5f5f5",
     },
   },
-  // 추가적인 테마 커스터마이징은 여기에 작성합니다.
-});
+};
 
-export default theme;
+const darkThemeOptions: ThemeOptions = {
+  palette: {
+    mode: "dark",
+    primary: {
+      main: "#7986cb",
+    },
+    secondary: {
+      main: "#4db6ac",
+    },
+    error: {
+      main: "#ff4569",
+    },
+    background: {
+      default: "#121212",
+      paper: "#1e1e1e",
+    },
+  },
+};
+
+export const getTheme = (mode: "light" | "dark") =>
+  createTheme(mode === "light" ? lightThemeOptions : darkThemeOptions);

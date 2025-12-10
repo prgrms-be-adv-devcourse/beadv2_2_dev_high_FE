@@ -1,10 +1,11 @@
 import { Button, Grid, Link as MuiLink, TextField } from "@mui/material";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
-import { userApi, type LoginParams } from "../apis/userApi"; // LoginParams import
+import { userApi } from "../apis/userApi"; // LoginParams import
 import FormContainer from "../components/FormContainer";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth } from "../contexts/AuthContext";
+import type { LoginParams, LoginResponse } from "../types/user";
 
 const Login: React.FC = () => {
   const {
@@ -17,22 +18,32 @@ const Login: React.FC = () => {
       password: "",
     },
   });
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const auth = useAuth(); // useAuth 훅 사용
   const onSubmit = async (data: LoginParams) => {
+    if (loading) return;
+    setLoading(true);
     try {
       const response = await userApi.login(data);
-      const { user, accessToken } = response.data;
+      const res = response.data;
 
-      auth.login(user, accessToken); // 로그인 상태 업데이트
+      auth.login(res as LoginResponse); // 로그인 상태 업데이트
 
       alert("로그인 성공!");
-      navigate("/");
     } catch (error) {
       console.error("로그인 실패:", error);
       alert("로그인 중 오류가 발생했습니다. 이메일과 비밀번호를 확인해주세요.");
+    } finally {
+      setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (auth.isAuthenticated) {
+      navigate("/", { replace: true });
+    }
+  }, [auth.isAuthenticated, navigate]);
 
   return (
     <FormContainer title="로그인" onSubmit={handleSubmit(onSubmit)}>
@@ -80,8 +91,14 @@ const Login: React.FC = () => {
         )}
       />
       {/* TODO: '로그인 유지' 체크박스 추가 */}
-      <Button type="submit" fullWidth variant="contained" sx={{ mt: 3, mb: 2 }}>
-        로그인
+      <Button
+        type="submit"
+        fullWidth
+        variant="contained"
+        sx={{ mt: 3, mb: 2 }}
+        disabled={loading}
+      >
+        {loading ? "로그인 중..." : "로그인"}
       </Button>
       <Grid container>
         <Grid component="div">{/* TODO: 비밀번호 찾기 링크 */}</Grid>

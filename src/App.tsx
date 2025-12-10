@@ -1,7 +1,8 @@
-import { AppBar, Button, Container, Toolbar, Typography } from "@mui/material";
+import { Box } from "@mui/material";
 import React from "react";
-import { Outlet, Link as RouterLink } from "react-router-dom";
-import { useAuth } from "./hooks/useAuth";
+import { Outlet } from "react-router-dom";
+import { AppHeader } from "./components/AppHeader";
+import Footer from "./components/Footer";
 
 /**
  * 애플리케이션의 메인 레이아웃 컴포넌트입니다.
@@ -9,79 +10,20 @@ import { useAuth } from "./hooks/useAuth";
  * 라우팅된 페이지 컨텐츠가 렌더링될 영역(Outlet)을 포함합니다.
  */
 function App() {
-  const { isAuthenticated, user, logout } = useAuth(); // useAuth 훅 사용
-
-  const handleLogout = () => {
-    logout();
-    alert("로그아웃 되었습니다.");
-  };
-
   return (
-    <React.Fragment>
-      <AppBar position="static">
-        <Container maxWidth="lg">
-          {" "}
-          {/* 툴바 콘텐츠 너비를 lg로 제한 */}
-          <Toolbar disableGutters>
-            {" "}
-            {/* Toolbar 좌우 패딩 제거 */}
-            <Typography
-              variant="h6"
-              component={RouterLink}
-              to="/"
-              sx={{ flexGrow: 1, color: "inherit", textDecoration: "none" }}
-            >
-              Project
-            </Typography>
-            <Button color="inherit" component={RouterLink} to="/products">
-              상품
-            </Button>
-            <Button color="inherit" component={RouterLink} to="/auctions">
-              경매
-            </Button>
-            {isAuthenticated ? (
-              <>
-                <Typography variant="body1" color="inherit" sx={{ mr: 2 }}>
-                  {user?.name}님 환영합니다!
-                </Typography>
-                <Button
-                  color="inherit"
-                  component={RouterLink}
-                  to="/seller/register"
-                >
-                  판매자 등록
-                </Button>
-                <Button color="inherit" onClick={handleLogout}>
-                  로그아웃
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button color="inherit" component={RouterLink} to="/login">
-                  로그인
-                </Button>
-                <Button color="inherit" component={RouterLink} to="/signup">
-                  회원가입
-                </Button>
-              </>
-            )}
-          </Toolbar>
-        </Container>
-      </AppBar>
-      {/* 메인 콘텐츠 영역 */}
-      <Container
-        component="main"
-        maxWidth="lg" // 메인 콘텐츠의 최대 너비를 lg로 설정
-        sx={{
-          mt: 4,
-          mb: 4,
-          // display, flexDirection, alignItems, justifyContent는 Outlet 콘텐츠에 직접 적용되지 않으므로 제거
-        }}
-      >
-        {/* 라우터에 의해 선택된 자식 컴포넌트가 이곳에 렌더링됩니다. */}
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        minHeight: "100vh",
+      }}
+    >
+      <AppHeader />
+      <Box component="main" sx={{ flexGrow: 1, my: 3 }}>
         <Outlet />
-      </Container>
-    </React.Fragment>
+      </Box>
+      <Footer />
+    </Box>
   );
 }
 
