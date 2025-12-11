@@ -22,7 +22,7 @@ import { useForm } from "react-hook-form";
 import { useNavigate, useParams } from "react-router-dom";
 import { auctionApi } from "../apis/auctionApi";
 import { productApi } from "../apis/productApi";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth } from "../contexts/AuthContext";
 import type { Auction, AuctionUpdateRequest } from "../types/auction";
 import { AuctionStatus } from "../types/auction";
 import type { Product } from "../types/product";

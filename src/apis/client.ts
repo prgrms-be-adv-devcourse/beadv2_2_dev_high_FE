@@ -1,4 +1,8 @@
 import axios from "axios";
+import {
+  updateAccessTokenOutsideReact,
+  useAuth,
+} from "../contexts/AuthContext";
 
 // API 서버의 기본 URL을 설정합니다.
 // 환경 변수를 통해 관리하는 것이 이상적이지만, 우선은 하드코딩합니다.
@@ -75,6 +79,7 @@ client.interceptors.request.use(
 
 // 응답 인터셉터: 응답을 받은 후 수행할 작업을 정의합니다.
 // 예를 들어, 특정 에러 코드에 대한 전역 처리를 할 수 있습니다.
+
 client.interceptors.response.use(
   (response) => {
     // 응답 데이터가 있는 경우 그대로 반환합니다.
@@ -88,14 +93,24 @@ client.interceptors.response.use(
     // 401 에러 && 아직 재시도 안함
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true; // 무한 루프 방지
+
+      // const { data } = await axios.get(`${API_BASE_URL}/auth/refresh/check`, {
+      //   withCredentials: true, // 쿠키 포함
+      // });
+
       try {
         const newToken = await refreshToken(); // 재발급 대기
+
         if (newToken) {
+          updateAccessTokenOutsideReact(newToken); // 상태 갱신
+
           originalRequest.headers["Authorization"] = `Bearer ${newToken}`;
           return client(originalRequest); // 재시도
         } else {
-          localStorage.removeItem("accessToken");
+          updateAccessTokenOutsideReact(null); // 상태 갱신
           localStorage.removeItem("refreshToken");
+          localStorage.removeItem("user");
+          // alert("로그아웃 되었습니다.");
 
           throw new Error("토큰 재발급 실패");
         }

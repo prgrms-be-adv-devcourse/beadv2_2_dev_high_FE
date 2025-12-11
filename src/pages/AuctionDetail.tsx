@@ -25,7 +25,7 @@ import InfiniteScroll from "react-infinite-scroll-component";
 import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import { auctionApi } from "../apis/auctionApi";
 import RemainingTime from "../components/RemainingTime";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth } from "../contexts/AuthContext";
 import { useStomp } from "../hooks/useStomp";
 import {
   type AuctionBidMessage,
@@ -458,11 +458,7 @@ const AuctionDetail: React.FC = () => {
             />
             <Chip
               label={
-                isConnected
-                  ? "실시간 연결 중"
-                  : isRetrying
-                  ? "재연결중"
-                  : "연결 끊김"
+                isConnected ? "연결완료" : isRetrying ? "연결중" : "연결 끊김"
               }
               color={isConnected ? "success" : isRetrying ? "warning" : "error"}
             />

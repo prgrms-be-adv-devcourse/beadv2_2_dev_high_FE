@@ -19,7 +19,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { categoryApi } from "../apis/categoryApi";
 import { fileApi } from "../apis/fileApi";
 import { productApi } from "../apis/productApi";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth } from "../contexts/AuthContext";
 import type {
   ProductCategory,
   ProductCreationRequest,

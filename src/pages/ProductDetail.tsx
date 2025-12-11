@@ -14,7 +14,7 @@ import { productApi } from "../apis/productApi";
 import { auctionApi } from "../apis/auctionApi";
 import type { Product } from "../types/product";
 import { AuctionStatus, type Auction } from "../types/auction";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth } from "../contexts/AuthContext";
 
 const auctionStatusMap: Record<AuctionStatus, string> = {
   READY: "대기 중",
