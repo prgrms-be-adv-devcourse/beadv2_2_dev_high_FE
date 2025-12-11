@@ -22,7 +22,7 @@ import { format } from "date-fns";
 import { ko } from "date-fns/locale";
 import React, { useCallback, useEffect, useState } from "react";
 import InfiniteScroll from "react-infinite-scroll-component";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import { auctionApi } from "../apis/auctionApi";
 import RemainingTime from "../components/RemainingTime";
 import { useAuth } from "../hooks/useAuth";
@@ -144,7 +144,7 @@ const AuctionParticipationStatus: React.FC<{
 const AuctionDetail: React.FC = () => {
   const { id: auctionId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { user, isAuthenticated } = useAuth();
 
   const [auctionDetail, setAuctionDetail] =
     useState<AuctionDetailResponse | null>(null);
@@ -223,7 +223,9 @@ const AuctionDetail: React.FC = () => {
   useEffect(() => {
     if (auctionId) {
       fetchAuctionDetail();
-      fetchAuctionParticipation();
+      if (isAuthenticated) {
+        fetchAuctionParticipation();
+      }
     }
   }, [auctionId, isAuthenticated]);
 
@@ -299,6 +301,10 @@ const AuctionDetail: React.FC = () => {
     event.preventDefault();
     if (!isAuthenticated) {
       setOpenLoginPrompt(true);
+      return;
+    }
+    if (user?.id === auctionDetail?.sellerId) {
+      alert("본인이 등록한 경매에는 입찰할 수 없습니다.");
       return;
     }
     if (participationStatus.isWithdrawn) {
@@ -385,6 +391,10 @@ const AuctionDetail: React.FC = () => {
 
   const isAuctionInProgress =
     auctionDetail.status === AuctionStatus.IN_PROGRESS;
+  const canEdit =
+    auctionDetail.status === AuctionStatus.READY &&
+    user &&
+    (user.role === "ADMIN" || user.id === auctionDetail.sellerId);
 
   return (
     <Container>
@@ -409,6 +419,17 @@ const AuctionDetail: React.FC = () => {
               label={isConnected ? "실시간 연결 중" : "연결 끊김"}
               color={isConnected ? "success" : "warning"}
             />
+            {canEdit && (
+              <Button
+                size="small"
+                variant="contained"
+                color="secondary"
+                component={RouterLink}
+                to={`/auction/edit/${auctionId}`}
+              >
+                수정
+              </Button>
+            )}
           </Box>
         </Box>
         <List dense>
@@ -423,7 +444,9 @@ const AuctionDetail: React.FC = () => {
               primary="최고 입찰가"
               secondary={
                 <Typography component="span" variant="h5" color="primary">
-                  {currentBidPrice.toLocaleString()}원
+                  {auctionDetail.status === AuctionStatus.READY
+                    ? "시작 전"
+                    : `${currentBidPrice.toLocaleString()}원`}
                 </Typography>
               }
             />
@@ -464,7 +487,11 @@ const AuctionDetail: React.FC = () => {
             <ListItemText
               primary="남은 시간"
               secondary={
-                <RemainingTime auctionEndAt={auctionDetail.auctionEndAt} />
+                <RemainingTime
+                  auctionEndAt={auctionDetail.auctionEndAt}
+                  auctionStartAt={auctionDetail.auctionStartAt}
+                  status={auctionDetail.status}
+                />
               }
             />
           </ListItem>

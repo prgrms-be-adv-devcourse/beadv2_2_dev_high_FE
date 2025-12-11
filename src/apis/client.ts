@@ -4,12 +4,44 @@ import axios from "axios";
 // 환경 변수를 통해 관리하는 것이 이상적이지만, 우선은 하드코딩합니다.
 // 예: http://localhost:8080/api
 const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api/v1";
+  (import.meta.env.VITE_API_BASE_URL || "http://localhost:8000") + "/api/v1";
 
 export interface ApiResponseDto<T> {
   code: string; // 예: "SUCCESS"
   message: string; // 예: "정상적으로 처리되었습니다."
   data: T; // 실제 페이로드
+}
+
+/**
+ * Spring Page<T> 응답에 대응하는 제네릭 인터페이스
+ */
+export interface PagedApiResponse<T> {
+  content: T[];
+  pageable: {
+    sort: {
+      sorted: boolean;
+      unsorted: boolean;
+      empty: boolean;
+    };
+    offset: number;
+    pageNumber: number;
+    pageSize: number;
+    paged: boolean;
+    unpaged: boolean;
+  };
+  last: boolean;
+  totalPages: number;
+  totalElements: number;
+  size: number;
+  number: number;
+  sort: {
+    sorted: boolean;
+    unsorted: boolean;
+    empty: boolean;
+  };
+  first: boolean;
+  numberOfElements: number;
+  empty: boolean;
 }
 
 /**
@@ -80,14 +112,13 @@ async function refreshToken() {
   try {
     const refreshToken = localStorage.getItem("refreshToken");
     if (!refreshToken) {
-      console.error("리프레시 토큰이 없습니다.");
-      return null;
+      return null; // 리프레시 토큰이 없으면 재발급 불가
     }
-
-    const response = await axios.post(`${API_BASE_URL}/auth/refresh/token`, {
-      // 필요 시 refresh token 전달
-      refreshToken,
-    });
+    const response = await axios.post(
+      `${API_BASE_URL}/auth/refresh/token`,
+      { refreshToken }
+      // { withCredentials: true }
+    );
     const data = response.data as ApiResponseDto<{ accessToken: string }>;
     const newAccessToken = data.data.accessToken;
     localStorage.setItem("accessToken", newAccessToken);

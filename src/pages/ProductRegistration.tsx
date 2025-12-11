@@ -15,11 +15,16 @@ import {
 } from "@mui/material";
 import React, { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { categoryApi } from "../apis/categoryApi";
 import { fileApi } from "../apis/fileApi";
 import { productApi } from "../apis/productApi";
-import type { ProductCategory, ProductCreationRequest } from "../types/product";
+import { useAuth } from "../hooks/useAuth";
+import type {
+  ProductCategory,
+  ProductCreationRequest,
+  ProductUpdateRequest,
+} from "../types/product";
 
 interface ProductFormData {
   name: string;
@@ -27,16 +32,21 @@ interface ProductFormData {
 }
 
 const ProductRegistration: React.FC = () => {
+  const { productId } = useParams<{ productId: string }>();
+  const isEditMode = !!productId;
   const navigate = useNavigate();
+  const { user } = useAuth();
   const {
     register,
     handleSubmit,
     formState: { errors },
+    reset,
   } = useForm<ProductFormData>();
 
   const [allCategories, setAllCategories] = useState<ProductCategory[]>([]);
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileId, setFileId] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,13 +61,54 @@ const ProductRegistration: React.FC = () => {
         setError("카테고리 목록을 불러오는 데 실패했습니다.");
       }
     };
+
+    const fetchProductData = async () => {
+      if (!productId) return;
+      setLoading(true);
+      try {
+        const response = await productApi.getProductByIdWithCategories(
+          productId
+        );
+        const product = response.data;
+
+        if (user?.role !== "ADMIN" && user?.id !== product.sellerId) {
+          alert("상품을 수정할 권한이 없습니다.");
+          navigate("/");
+          return;
+        }
+        reset({
+          name: product.name,
+          description: product.description,
+        });
+        const selectedCategoryIds: string[] =
+          product.categories?.map((cat) => {
+            // ProductCategory 타입인지 확인
+            if (typeof cat === "object" && "id" in cat) {
+              return (cat as ProductCategory).id;
+            }
+            return cat as string;
+          }) ?? [];
+
+        setSelectedCategoryIds(selectedCategoryIds);
+        // TODO: 기존 이미지 미리보기 설정
+      } catch (err) {
+        setError("상품 정보를 불러오는 데 실패했습니다.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
     fetchCategories();
-  }, []);
+    if (isEditMode) {
+      fetchProductData();
+    }
+  }, [productId, isEditMode, navigate, reset, user]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
       setSelectedFile(file);
+      setFileId(null);
       const previewUrl = URL.createObjectURL(file);
       setPreview(previewUrl);
     }
@@ -80,44 +131,64 @@ const ProductRegistration: React.FC = () => {
 
     setLoading(true);
     setError(null);
+    let uploadedFileId = fileId;
 
     try {
-      // 1. 이미지 업로드
-
-      let fileId;
       if (selectedFile) {
-        // 파일있으면 사진 업로드 하고 상품진행
-
         const fileUploadResponse = await fileApi.uploadFile(selectedFile);
-        fileId = fileUploadResponse.data.fileId;
-
-        if (!fileId) {
+        uploadedFileId = fileUploadResponse.data.id;
+        if (!uploadedFileId) {
           throw new Error("파일 ID를 받아오지 못했습니다.");
         }
       }
 
-      // 2. 상품 등록
-      const productData: ProductCreationRequest = {
-        ...data,
-        fileId,
-        categoryIds: selectedCategoryIds,
-      };
-
-      const productResponse = await productApi.createProduct(productData);
-      alert("상품이 성공적으로 등록되었습니다.");
-      navigate(`/products/${productResponse.data.id}`);
+      if (isEditMode && productId) {
+        const productData: ProductUpdateRequest = {
+          ...data,
+          fileId: uploadedFileId ?? undefined,
+          categoryIds: selectedCategoryIds,
+          sellerId: user?.id ?? "ADM00000001",
+        };
+        await productApi.updateProduct(productId, productData);
+        alert("상품이 성공적으로 수정되었습니다.");
+        navigate(`/products/${productId}`);
+      } else {
+        const productData: ProductCreationRequest = {
+          ...data,
+          fileId: uploadedFileId ?? undefined,
+          categoryIds: selectedCategoryIds,
+          sellerId: user?.id ?? "ADM00000001",
+        };
+        const productResponse = await productApi.createProduct(productData);
+        alert("상품이 성공적으로 등록되었습니다.");
+        navigate(`/products/${productResponse.data.id}`);
+      }
     } catch (err: any) {
-      console.error("상품 등록 실패:", err);
-      setError(err.response?.data?.message || "상품 등록에 실패했습니다.");
+      console.error("상품 처리 실패:", err);
+      setError(err.response?.data?.message || "요청에 실패했습니다.");
     } finally {
       setLoading(false);
     }
   };
 
+  if (user?.role !== "SELLER" && user?.role !== "ADMIN" && !isEditMode) {
+    return (
+      <Container maxWidth="md">
+        <Typography variant="h4" sx={{ my: 4 }}>
+          상품 등록
+        </Typography>
+        <Alert severity="error">
+          상품을 등록할 권한이 없습니다. 판매자 또는 관리자만 상품을 등록할 수
+          있습니다.
+        </Alert>
+      </Container>
+    );
+  }
+
   return (
     <Container maxWidth="md">
       <Typography variant="h4" sx={{ my: 4 }}>
-        상품 등록
+        {isEditMode ? "상품 수정" : "상품 등록"}
       </Typography>
       <Paper sx={{ p: 4 }}>
         <Box
@@ -162,6 +233,7 @@ const ProductRegistration: React.FC = () => {
                     <Checkbox
                       onChange={handleCategoryChange}
                       name={category.id}
+                      checked={selectedCategoryIds.includes(category.id)}
                     />
                   }
                   label={category.categoryName}
@@ -203,7 +275,13 @@ const ProductRegistration: React.FC = () => {
             sx={{ mt: 3, mb: 2, py: 1.5 }}
             disabled={loading}
           >
-            {loading ? <CircularProgress size={24} /> : "상품 등록하기"}
+            {loading ? (
+              <CircularProgress size={24} />
+            ) : isEditMode ? (
+              "상품 수정하기"
+            ) : (
+              "상품 등록하기"
+            )}
           </Button>
         </Box>
       </Paper>

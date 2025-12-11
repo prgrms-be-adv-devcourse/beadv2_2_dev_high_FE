@@ -1,7 +1,17 @@
-import { Button, Grid, Link as MuiLink, TextField } from "@mui/material";
-import React from "react";
+import {
+  Alert,
+  Box,
+  Button,
+  CircularProgress,
+  Dialog,
+  Link as MuiLink,
+  TextField,
+  Typography,
+} from "@mui/material";
+import React, { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
+import DaumPostcode from "react-daum-postcode";
 import { userApi, type SignupParams } from "../apis/userApi";
 import FormContainer from "../components/FormContainer";
 
@@ -16,6 +26,8 @@ const SignUp: React.FC = () => {
     control,
     watch,
     formState: { errors },
+    getValues,
+    setValue,
   } = useForm<SignUpFormValues>({
     // SignUpFormValues 타입 적용
     defaultValues: {
@@ -31,21 +43,113 @@ const SignUp: React.FC = () => {
       detail: "",
     },
   });
+
   const navigate = useNavigate();
   const password = watch("password");
 
-  const onSubmit = async (data: SignUpFormValues) => {
-    // data 타입 변경
-    try {
-      // API 호출 시 passwordConfirm 필드는 제외합니다.
-      const { ...apiData } = data; // passwordConfirm을 구조분해하여 제외
+  // 이메일 인증 상태 관리
+  const [loading, setLoading] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [isEmailSent, setIsEmailSent] = useState(false);
+  const [isEmailVerified, setIsEmailVerified] = useState(false);
+  const [verificationCode, setVerificationCode] = useState("");
+  const [timeLeft, setTimeLeft] = useState(0);
 
+  // 우편번호 검색 상태 관리
+  const [openAddressModal, setOpenAddressModal] = useState(false);
+
+  // 타이머 로직 (5분 = 300초)
+  useEffect(() => {
+    let interval: any;
+    if (isEmailSent && !isEmailVerified && timeLeft > 0) {
+      interval = setInterval(() => {
+        setTimeLeft((prev) => prev - 1);
+      }, 1000);
+    } else if (timeLeft === 0 && isEmailSent && !isEmailVerified) {
+      setIsEmailSent(false);
+      setVerificationCode("");
+    }
+    return () => clearInterval(interval);
+  }, [isEmailSent, isEmailVerified, timeLeft]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+  };
+
+  const handleSendCode = async () => {
+    setLoading(true);
+    setServerError(null);
+    try {
+      const email = getValues("email");
+      if (!email) {
+        setServerError("이메일을 입력해주세요.");
+        setLoading(false);
+        return;
+      }
+      await userApi.sendVerificationEmail(email);
+      setIsEmailSent(true);
+      setTimeLeft(300); // 5분 = 300초
+      setVerificationCode("");
+    } catch (error: any) {
+      setServerError(
+        error.response?.data?.message || "인증번호 발송에 실패했습니다."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyCode = async () => {
+    if (!verificationCode.trim()) {
+      setServerError("인증번호를 입력해주세요.");
+      return;
+    }
+    setLoading(true);
+    setServerError(null);
+    try {
+      const email = getValues("email");
+      await userApi.verifyEmailCode(email, verificationCode);
+      setIsEmailVerified(true);
+      setIsEmailSent(false);
+    } catch (error: any) {
+      setServerError(
+        error.response?.data?.message || "인증번호가 올바르지 않습니다."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddressComplete = (data: any) => {
+    setValue("zip_code", data.zonecode);
+    setValue("state", data.sido);
+    setValue("city", data.sigungu);
+    setValue("detail", data.roadname);
+    setOpenAddressModal(false);
+  };
+
+  const onSubmit = async (data: SignUpFormValues) => {
+    if (!isEmailVerified) {
+      setServerError("이메일 인증을 완료해주세요.");
+      return;
+    }
+    setLoading(true);
+    setServerError(null);
+    try {
+      // passwordConfirm 필드 제외
+      const { passwordConfirm, ...apiData } = data;
       await userApi.signup(apiData);
       alert("회원가입이 완료되었습니다. 로그인 페이지로 이동합니다.");
       navigate("/login");
-    } catch (error) {
+    } catch (error: any) {
       console.error("회원가입 실패:", error);
-      alert("회원가입 중 오류가 발생했습니다.");
+      setServerError(
+        error.response?.data?.message || "회원가입 중 오류가 발생했습니다."
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -55,38 +159,31 @@ const SignUp: React.FC = () => {
       onSubmit={handleSubmit(onSubmit)}
       maxWidth="sm"
     >
-      <Grid container spacing={2}>
-        <Controller
-          name="email"
-          control={control}
-          rules={{
-            required: "이메일은 필수 항목입니다.",
-            pattern: {
-              value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-              message: "유효한 이메일 주소를 입력해주세요.",
-            },
-          }}
-          render={({ field }) => (
-            <TextField
-              {...field}
-              required
-              fullWidth
-              label="이메일 주소"
-              autoComplete="email"
-              error={!!errors.email}
-              helperText={errors.email?.message}
-            />
-          )}
-        />
-        <Grid flexGrow={1}>
+      {/* 에러 메시지 */}
+      {serverError && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {serverError}
+        </Alert>
+      )}
+
+      {/* 이메일 인증 완료 메시지 */}
+      {isEmailVerified && (
+        <Alert severity="success" sx={{ mb: 2 }}>
+          ✓ 이메일 인증이 완료되었습니다.
+        </Alert>
+      )}
+
+      {/* 이메일 & 인증 섹션 */}
+      <Box sx={{ mb: 3 }}>
+        <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start", mb: 2 }}>
           <Controller
-            name="password"
+            name="email"
             control={control}
             rules={{
-              required: "비밀번호는 필수 항목입니다.",
-              minLength: {
-                value: 8,
-                message: "비밀번호는 8자 이상이어야 합니다.",
+              required: "이메일은 필수 항목입니다.",
+              pattern: {
+                value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                message: "유효한 이메일 주소를 입력해주세요.",
               },
             }}
             render={({ field }) => (
@@ -94,179 +191,290 @@ const SignUp: React.FC = () => {
                 {...field}
                 required
                 fullWidth
-                label="비밀번호"
-                type="password"
-                autoComplete="new-password"
-                error={!!errors.password}
-                helperText={errors.password?.message}
+                label="이메일 주소"
+                autoComplete="email"
+                error={!!errors.email}
+                helperText={errors.email?.message}
+                disabled={isEmailVerified}
+                inputProps={{ maxLength: 100 }}
               />
             )}
           />
-        </Grid>
-        <Grid flexGrow={1}>
-          <Controller
-            name="passwordConfirm"
-            control={control}
-            rules={{
-              required: "비밀번호 확인은 필수 항목입니다.",
-              validate: (value) =>
-                value === password || "비밀번호가 일치하지 않습니다.",
-            }}
-            render={({ field }) => (
-              <TextField
-                {...field}
-                required
-                fullWidth
-                label="비밀번호 확인"
-                type="password"
-                error={!!errors.passwordConfirm}
-                helperText={errors.passwordConfirm?.message}
-              />
-            )}
-          />
-        </Grid>
-        <Grid flexGrow={1}>
-          <Controller
-            name="name"
-            control={control}
-            rules={{ required: "이름은 필수 항목입니다." }}
-            render={({ field }) => (
-              <TextField
-                {...field}
-                required
-                fullWidth
-                label="이름"
-                autoComplete="name"
-                error={!!errors.name}
-                helperText={errors.name?.message}
-              />
-            )}
-          />
-        </Grid>
-        <Grid flexGrow={1}>
-          <Controller
-            name="nickname"
-            control={control}
-            rules={{ required: "닉네임은 필수 항목입니다." }}
-            render={({ field }) => (
-              <TextField
-                {...field}
-                required
-                fullWidth
-                label="닉네임"
-                autoComplete="nickname"
-                error={!!errors.nickname}
-                helperText={errors.nickname?.message}
-              />
-            )}
-          />
-        </Grid>
-        <Grid flexGrow={1}>
-          <Controller
-            name="phone_number"
-            control={control}
-            rules={{ required: "연락처는 필수 항목입니다." }}
-            render={({ field }) => (
-              <TextField
-                {...field}
-                required
-                fullWidth
-                label="연락처"
-                autoComplete="tel"
-                error={!!errors.phone_number}
-                helperText={errors.phone_number?.message}
-              />
-            )}
-          />
-        </Grid>
-        <Grid>
-          <Controller
-            name="zip_code"
-            control={control}
-            rules={{ required: "우편번호는 필수 항목입니다." }}
-            render={({ field }) => (
-              <TextField
-                {...field}
-                required
-                fullWidth
-                label="우편번호"
-                autoComplete="postal-code"
-                error={!!errors.zip_code}
-                helperText={errors.zip_code?.message}
-              />
-            )}
-          />
-        </Grid>
-        <Grid>
-          <Button type="submit" fullWidth variant="outlined">
-            검색
+          <Button
+            variant="contained"
+            onClick={handleSendCode}
+            disabled={!!errors.email || isEmailVerified || loading}
+            sx={{ py: 1.75, px: 2, whiteSpace: "nowrap" }}
+          >
+            {loading ? <CircularProgress size={20} /> : "인증 발송"}
           </Button>
-        </Grid>
-        <Grid flexGrow={1}>
-          <Controller
-            name="state"
-            control={control}
-            rules={{ required: "시/도는 필수 항목입니다." }}
-            render={({ field }) => (
+        </Box>
+
+        {/* 인증번호 입력 필드 */}
+        {isEmailSent && !isEmailVerified && (
+          <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
+            <Box sx={{ flex: 1 }}>
               <TextField
-                {...field}
-                required
                 fullWidth
-                label="시/도"
-                autoComplete="address-level1"
-                error={!!errors.state}
-                helperText={errors.state?.message}
+                label="인증번호"
+                value={verificationCode}
+                onChange={(e) => setVerificationCode(e.target.value)}
+                disabled={isEmailVerified || loading}
+                placeholder="6자리 인증번호"
+                inputProps={{ maxLength: 6 }}
               />
-            )}
-          />
-        </Grid>
-        <Grid flexGrow={1}>
-          <Controller
-            name="city"
-            control={control}
-            rules={{ required: "시/군/구는 필수 항목입니다." }}
-            render={({ field }) => (
-              <TextField
-                {...field}
-                required
-                fullWidth
-                label="시/군/구"
-                autoComplete="address-level2"
-                error={!!errors.city}
-                helperText={errors.city?.message}
-              />
-            )}
-          />
-        </Grid>
-        <Grid flexGrow={1}>
-          <Controller
-            name="detail"
-            control={control}
-            rules={{ required: "상세주소는 필수 항목입니다." }}
-            render={({ field }) => (
-              <TextField
-                {...field}
-                required
-                fullWidth
-                label="상세주소"
-                autoComplete="street-address"
-                error={!!errors.detail}
-                helperText={errors.detail?.message}
-              />
-            )}
-          />
-        </Grid>
-      </Grid>
-      <Button type="submit" fullWidth variant="contained" sx={{ mt: 3, mb: 2 }}>
-        회원가입
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ mt: 0.5, display: "block" }}
+              >
+                남은 시간: {formatTime(timeLeft)}
+              </Typography>
+            </Box>
+            <Button
+              variant="contained"
+              onClick={handleVerifyCode}
+              disabled={!verificationCode || isEmailVerified || loading}
+              sx={{ py: 1.75, px: 2, whiteSpace: "nowrap" }}
+            >
+              {loading ? <CircularProgress size={20} /> : "확인"}
+            </Button>
+          </Box>
+        )}
+      </Box>
+
+      {/* 비밀번호 필드 (2열) */}
+      <Box
+        sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, mb: 2 }}
+      >
+        <Controller
+          name="password"
+          control={control}
+          rules={{
+            required: "비밀번호는 필수 항목입니다.",
+            minLength: {
+              value: 8,
+              message: "비밀번호는 8자 이상이어야 합니다.",
+            },
+          }}
+          render={({ field }) => (
+            <TextField
+              {...field}
+              required
+              fullWidth
+              label="비밀번호"
+              type="password"
+              autoComplete="new-password"
+              error={!!errors.password}
+              helperText={errors.password?.message}
+              inputProps={{ maxLength: 100 }}
+            />
+          )}
+        />
+        <Controller
+          name="passwordConfirm"
+          control={control}
+          rules={{
+            required: "비밀번호 확인은 필수 항목입니다.",
+            validate: (value) =>
+              value === password || "비밀번호가 일치하지 않습니다.",
+          }}
+          render={({ field }) => (
+            <TextField
+              {...field}
+              required
+              fullWidth
+              label="비밀번호 확인"
+              type="password"
+              error={!!errors.passwordConfirm}
+              helperText={errors.passwordConfirm?.message}
+              inputProps={{ maxLength: 100 }}
+            />
+          )}
+        />
+      </Box>
+
+      {/* 이름 & 닉네임 (2열) */}
+      <Box
+        sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, mb: 2 }}
+      >
+        <Controller
+          name="name"
+          control={control}
+          rules={{ required: "이름은 필수 항목입니다." }}
+          render={({ field }) => (
+            <TextField
+              {...field}
+              required
+              fullWidth
+              label="이름"
+              autoComplete="name"
+              error={!!errors.name}
+              helperText={errors.name?.message}
+              inputProps={{ maxLength: 50 }}
+            />
+          )}
+        />
+        <Controller
+          name="nickname"
+          control={control}
+          rules={{ required: "닉네임은 필수 항목입니다." }}
+          render={({ field }) => (
+            <TextField
+              {...field}
+              required
+              fullWidth
+              label="닉네임"
+              autoComplete="username"
+              error={!!errors.nickname}
+              helperText={errors.nickname?.message}
+              inputProps={{ maxLength: 30 }}
+            />
+          )}
+        />
+      </Box>
+
+      {/* 연락처 (1열) */}
+      <Box sx={{ mb: 2 }}>
+        <Controller
+          name="phone_number"
+          control={control}
+          rules={{ required: "연락처는 필수 항목입니다." }}
+          render={({ field }) => (
+            <TextField
+              {...field}
+              required
+              fullWidth
+              label="연락처"
+              autoComplete="tel"
+              error={!!errors.phone_number}
+              helperText={errors.phone_number?.message}
+              inputProps={{ maxLength: 20 }}
+            />
+          )}
+        />
+      </Box>
+
+      {/* 우편번호 & 검색 버튼 (8:4 비율) */}
+      <Box
+        sx={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 2, mb: 2 }}
+      >
+        <Controller
+          name="zip_code"
+          control={control}
+          rules={{ required: "우편번호는 필수 항목입니다." }}
+          render={({ field }) => (
+            <TextField
+              {...field}
+              required
+              fullWidth
+              label="우편번호"
+              autoComplete="postal-code"
+              error={!!errors.zip_code}
+              helperText={errors.zip_code?.message}
+              inputProps={{ maxLength: 10 }}
+            />
+          )}
+        />
+        <Button
+          type="button"
+          fullWidth
+          variant="outlined"
+          sx={{ py: 1 }}
+          onClick={() => setOpenAddressModal(true)}
+        >
+          검색
+        </Button>
+      </Box>
+
+      {/* 시/도 & 시/군/구 (1:1) */}
+      <Box
+        sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, mb: 2 }}
+      >
+        <Controller
+          name="state"
+          control={control}
+          rules={{ required: "시/도는 필수 항목입니다." }}
+          render={({ field }) => (
+            <TextField
+              {...field}
+              required
+              fullWidth
+              label="시/도"
+              autoComplete="address-level1"
+              error={!!errors.state}
+              helperText={errors.state?.message}
+              inputProps={{ maxLength: 30 }}
+            />
+          )}
+        />
+        <Controller
+          name="city"
+          control={control}
+          rules={{ required: "시/군/구는 필수 항목입니다." }}
+          render={({ field }) => (
+            <TextField
+              {...field}
+              required
+              fullWidth
+              label="시/군/구"
+              autoComplete="address-level2"
+              error={!!errors.city}
+              helperText={errors.city?.message}
+              inputProps={{ maxLength: 30 }}
+            />
+          )}
+        />
+      </Box>
+
+      {/* 상세주소 (1열) */}
+      <Box sx={{ mb: 3 }}>
+        <Controller
+          name="detail"
+          control={control}
+          rules={{ required: "상세주소는 필수 항목입니다." }}
+          render={({ field }) => (
+            <TextField
+              {...field}
+              required
+              fullWidth
+              label="상세주소"
+              autoComplete="street-address"
+              error={!!errors.detail}
+              helperText={errors.detail?.message}
+              inputProps={{ maxLength: 100 }}
+            />
+          )}
+        />
+      </Box>
+
+      {/* 회원가입 버튼 */}
+      <Button
+        type="submit"
+        fullWidth
+        variant="contained"
+        sx={{ mt: 1, mb: 2, py: 1.5 }}
+        disabled={!isEmailVerified || loading}
+      >
+        {loading ? <CircularProgress size={24} /> : "회원가입"}
       </Button>
-      <Grid container justifyContent="flex-end">
-        <Grid component="div">
-          <MuiLink component={RouterLink} to="/login" variant="body2">
-            이미 계정이 있으신가요? 로그인
-          </MuiLink>
-        </Grid>
-      </Grid>
+
+      {/* 로그인 링크 */}
+      <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+        <MuiLink component={RouterLink} to="/login" variant="body2">
+          이미 계정이 있으신가요? 로그인
+        </MuiLink>
+      </Box>
+
+      {/* 우편번호 검색 다이얼로그 */}
+      <Dialog
+        open={openAddressModal}
+        onClose={() => setOpenAddressModal(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DaumPostcode onComplete={handleAddressComplete} />
+      </Dialog>
     </FormContainer>
   );
 };

@@ -16,6 +16,7 @@ import AuctionRegistration from "../pages/AuctionRegistration";
  * React Router v6.4+의 createBrowserRouter를 사용한 라우터 설정입니다.
  * App 컴포넌트가 전체 레이아웃을 감싸고, children으로 각 페이지가 렌더링됩니다.
  */
+
 export const router = createBrowserRouter([
   {
     path: "/",
@@ -48,7 +49,15 @@ export const router = createBrowserRouter([
             element: <ProductRegistration />,
           },
           {
+            path: "product/edit/:productId",
+            element: <ProductRegistration />,
+          },
+          {
             path: "auction/new",
+            element: <AuctionRegistration />,
+          },
+          {
+            path: "auction/edit/:auctionId",
             element: <AuctionRegistration />,
           },
         ],

@@ -38,7 +38,12 @@ export const useStomp = ({ topic, onMessage }: UseStompProps) => {
     }
 
     const client = new Client({
-      webSocketFactory: () => new SockJS("http://localhost:8000/ws-auction"),
+      webSocketFactory: () =>
+        new SockJS(
+          `${
+            import.meta.env.VITE_API_BASE_URL || "http://localhost:8000"
+          }/ws-auction`
+        ),
       reconnectDelay: 5000,
       heartbeatIncoming: 10000,
       heartbeatOutgoing: 10000,

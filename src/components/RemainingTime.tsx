@@ -1,11 +1,18 @@
 import React, { useEffect, useState } from "react";
 import { parseISO, isValid } from "date-fns";
+import type { AuctionStatus } from "../types/auction";
 
 interface RemainingTimeProps {
+  auctionStartAt?: string;
   auctionEndAt?: string;
+  status?: AuctionStatus;
 }
 
-const RemainingTime: React.FC<RemainingTimeProps> = ({ auctionEndAt }) => {
+const RemainingTime: React.FC<RemainingTimeProps> = ({
+  auctionStartAt,
+  auctionEndAt,
+  status,
+}) => {
   const [timeString, setTimeString] = useState("로딩 중...");
 
   useEffect(() => {
@@ -19,11 +26,19 @@ const RemainingTime: React.FC<RemainingTimeProps> = ({ auctionEndAt }) => {
 
     const update = () => {
       const now = new Date();
+      const startTime = auctionStartAt ? parseISO(auctionStartAt) : now;
+
       const diff = endTime.getTime() - now.getTime();
       if (diff <= 0) {
         setTimeString("경매 종료");
         return;
       }
+
+      if (status === "READY" && now < startTime) {
+        setTimeString("경매 시작 전");
+        return;
+      }
+
       const days = Math.floor(diff / (1000 * 60 * 60 * 24));
       const hours = Math.floor(
         (diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)

@@ -9,6 +9,7 @@ import {
 import React from "react";
 import { Outlet, Link as RouterLink } from "react-router-dom";
 import { useAuth } from "./hooks/useAuth";
+import { UserRole } from "./contexts/AuthContext";
 
 /**
  * 애플리케이션의 메인 레이아웃 컴포넌트입니다.
@@ -51,15 +52,17 @@ function App() {
               {isAuthenticated ? (
                 <>
                   <Typography variant="body1" color="inherit">
-                    {user?.name}님 환영합니다!
+                    {user?.nickname}님 환영합니다!
                   </Typography>
-                  <Button
-                    color="inherit"
-                    component={RouterLink}
-                    to="/seller/register"
-                  >
-                    판매자 등록
-                  </Button>
+                  {user?.role === UserRole.USER && (
+                    <Button
+                      color="inherit"
+                      component={RouterLink}
+                      to="/seller/register"
+                    >
+                      판매자 등록
+                    </Button>
+                  )}
                   <Button color="inherit" onClick={handleLogout}>
                     로그아웃
                   </Button>

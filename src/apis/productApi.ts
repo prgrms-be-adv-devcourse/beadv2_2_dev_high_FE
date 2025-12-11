@@ -1,7 +1,9 @@
 import type {
+  PagedProductResponse,
   Product,
   ProductCreationRequest,
   ProductStatus,
+  ProductUpdateRequest,
 } from "../types/product";
 import { client, type ApiResponseDto } from "./client";
 
@@ -23,7 +25,7 @@ export const productApi = {
    */
   getProducts: async (
     params?: ProductQueryParams
-  ): Promise<ApiResponseDto<Product[]>> => {
+  ): Promise<ApiResponseDto<PagedProductResponse>> => {
     console.log("상품 목록 조회 API 호출:", params);
     const response = await client.get("/products", { params });
     return response.data;
@@ -42,6 +44,17 @@ export const productApi = {
   },
 
   /**
+   * 특정 ID의 상품 상세 정보를 조회합니다.
+   * @param productId - 조회할 상품의 ID
+   */
+  getProductByIdWithCategories: async (
+    productId: string
+  ): Promise<ApiResponseDto<Product>> => {
+    console.log(`상품 상세 조회 API 호출 (ID: ${productId})`);
+    const response = await client.get(`/products/${productId}/categories`);
+    return response.data;
+  },
+  /**
    * 새로운 상품을 등록합니다.
    * @param productData - 생성할 상품의 데이터
    */
@@ -54,6 +67,20 @@ export const productApi = {
   },
 
   /**
+   * 상품을 수정합니다.
+   * @param productId - 수정할 상품의 ID
+   * @param productData - 수정할 상품의 데이터
+   */
+  updateProduct: async (
+    productId: string,
+    productData: ProductUpdateRequest
+  ): Promise<ApiResponseDto<Product>> => {
+    console.log(`상품 수정 API 호출 (ID: ${productId}):`, productData);
+    const response = await client.put(`/products/${productId}`, productData);
+    return response.data;
+  },
+
+  /**
    * 인증된 사용자의 상품 목록을 조회합니다.
    * @param params - 필터링 등을 위한 쿼리 파라미터
    */
@@ -61,7 +88,7 @@ export const productApi = {
     params?: ProductQueryParams
   ): Promise<ApiResponseDto<Product[]>> => {
     console.log("내 상품 목록 조회 API 호출:", params);
-    const response = await client.get("/my/products", { params });
+    const response = await client.get("/products/my", { params });
     return response.data;
   },
 };

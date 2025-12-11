@@ -4,6 +4,7 @@ import type {
   AuctionDetailResponse,
   AuctionParticipationResponse,
   AuctionStatus,
+  AuctionUpdateRequest,
   PagedBidHistoryResponse,
 } from "../types/auction";
 import type { AuctionBidMessage } from "../types/auction"; // Auction 타입 임포트
@@ -48,6 +49,16 @@ export const auctionApi = {
   ): Promise<ApiResponseDto<Auction>> => {
     console.log("경매 생성 API 호출:", auctionData);
     const response = await client.post("/auctions", auctionData);
+    return response.data;
+  },
+
+  // 경매 수정
+  updateAuction: async (
+    auctionId: string,
+    auctionData: AuctionUpdateRequest
+  ): Promise<ApiResponseDto<Auction>> => {
+    console.log(`경매 수정 API 호출: ${auctionId}`, auctionData);
+    const response = await client.put(`/auctions/${auctionId}`, auctionData);
     return response.data;
   },
 
@@ -120,7 +131,7 @@ export const auctionApi = {
     productId: string
   ): Promise<ApiResponseDto<any>> => {
     console.log(`상품 관련 경매 내역 조회 API 호출 (ProductID: ${productId})`);
-    const response = await client.get(`/products/${productId}/auctions`); // 예시 API 엔드포인트
+    const response = await client.get(`/auctions/product/${productId}`); // 예시 API 엔드포인트
 
     return response.data;
   },

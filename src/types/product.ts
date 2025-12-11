@@ -1,3 +1,5 @@
+import type { PagedApiResponse } from "../apis/client";
+
 /**
  
  */
@@ -27,7 +29,8 @@ export interface Product {
   createdBy?: string;
   updatedAt?: string;
   updatedBy?: string;
-  categories?: ProductCategory[]; // 상품-카테고리 관계
+  imageUrl?: string; // 임시 이미지 URL 필드
+  categories?: ProductCategory[] | string[]; // 상품-카테고리 관계
 }
 
 /**
@@ -55,4 +58,18 @@ export interface ProductCreationRequest {
   description: string;
   fileId?: string;
   categoryIds: string[];
+  sellerId?: string;
 }
+
+/**
+ * 상품 수정을 위한 요청 데이터 인터페이스
+ */
+export interface ProductUpdateRequest {
+  name: string;
+  description: string;
+  fileId?: string;
+  categoryIds: string[];
+  sellerId?: string;
+}
+
+export type PagedProductResponse = PagedApiResponse<Product>;

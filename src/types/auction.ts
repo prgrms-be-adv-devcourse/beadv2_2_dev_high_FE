@@ -1,3 +1,5 @@
+import type { PagedApiResponse } from "../apis/client";
+
 /**
  * 경매 상태 (백엔드 enum과 동일)
  */
@@ -82,6 +84,7 @@ export interface AuctionLiveStateResponse {
  */
 export interface AuctionDetailResponse {
   id: string;
+  productId: string; // 상품 ID 추가
   status: AuctionStatus;
   startBid: number; // BigDecimal → number
   currentBid: number; // BigDecimal → number
@@ -106,38 +109,6 @@ export interface AuctionParticipationResponse {
 }
 
 /**
- * Spring Page<T> 응답에 대응하는 제네릭 인터페이스
- */
-export interface PagedApiResponse<T> {
-  content: T[];
-  pageable: {
-    sort: {
-      sorted: boolean;
-      unsorted: boolean;
-      empty: boolean;
-    };
-    offset: number;
-    pageNumber: number;
-    pageSize: number;
-    paged: boolean;
-    unpaged: boolean;
-  };
-  last: boolean;
-  totalPages: number;
-  totalElements: number;
-  size: number;
-  number: number;
-  sort: {
-    sorted: boolean;
-    unsorted: boolean;
-    empty: boolean;
-  };
-  first: boolean;
-  numberOfElements: number;
-  empty: boolean;
-}
-
-/**
  * 입찰 내역 페이지네이션 응답 타입
  */
 export type PagedBidHistoryResponse = PagedApiResponse<AuctionBidMessage>;
@@ -147,6 +118,15 @@ export type PagedBidHistoryResponse = PagedApiResponse<AuctionBidMessage>;
  */
 export interface AuctionCreationRequest {
   productId: string;
+  startBid: number;
+  auctionStartAt: string;
+  auctionEndAt: string;
+}
+
+/**
+ * 경매 수정을 위한 요청 데이터 인터페이스
+ */
+export interface AuctionUpdateRequest {
   startBid: number;
   auctionStartAt: string;
   auctionEndAt: string;

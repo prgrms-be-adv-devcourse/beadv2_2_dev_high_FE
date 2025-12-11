@@ -2,9 +2,10 @@ import { Button, Grid, Link as MuiLink, TextField } from "@mui/material";
 import React from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
-import { userApi, type LoginParams } from "../apis/userApi"; // LoginParams import
+import { userApi, type LoginParams, type LoginResponse } from "../apis/userApi"; // LoginParams import
 import FormContainer from "../components/FormContainer";
 import { useAuth } from "../hooks/useAuth";
+import type { User } from "../contexts/AuthContext";
 
 const Login: React.FC = () => {
   const {
@@ -22,9 +23,9 @@ const Login: React.FC = () => {
   const onSubmit = async (data: LoginParams) => {
     try {
       const response = await userApi.login(data);
-      const { user, accessToken, refreshToken } = response.data;
+      const res = response.data;
 
-      auth.login(accessToken, refreshToken, user as any); // 로그인 상태 업데이트
+      auth.login(res as LoginResponse); // 로그인 상태 업데이트
 
       alert("로그인 성공!");
       navigate("/");
@@ -33,6 +34,10 @@ const Login: React.FC = () => {
       alert("로그인 중 오류가 발생했습니다. 이메일과 비밀번호를 확인해주세요.");
     }
   };
+
+  if (auth.isAuthenticated) {
+    navigate("/");
+  }
 
   return (
     <FormContainer title="로그인" onSubmit={handleSubmit(onSubmit)}>
