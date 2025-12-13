@@ -375,7 +375,8 @@ const AuctionDetail: React.FC = () => {
     try {
       setOpenDepositPrompt(false);
 
-      const balance = 0;
+      /* 임시 */
+      const balance = 1000;
 
       if (balance < Number(auctionDetail?.depositAmount ?? 0)) {
         alert("보증금이 부족합니다.");
@@ -389,11 +390,6 @@ const AuctionDetail: React.FC = () => {
         type: DepositType.USAGE,
       });
 
-      if (!depositRes.balance) {
-        alert("보증금 기록 생성에 실패했습니다.");
-        return;
-      }
-
       // 3. 경매 참여 생성 --이부분은 보증금 차감이 완료되면 서버단에서 처리하기
       // const participationRes = await auctionApi.createParticipation(
       //   auctionId!,
@@ -402,7 +398,7 @@ const AuctionDetail: React.FC = () => {
       //   }
       // );
 
-      // setParticipationStatus(participationRes.data);
+      setParticipationStatus({ ...participationStatus, isParticipated: true });
       alert("보증금 결제가 완료되었습니다. 이제 입찰할 수 있습니다.");
     } catch (error) {
       // error핸들 > 예치금 부족 ,서버 error등
