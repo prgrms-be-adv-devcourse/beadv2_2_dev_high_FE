@@ -1,3 +1,5 @@
+import type { PagedApiResponse } from "./common";
+
 export const SettlementStatus = {
   PENDING: "PENDING",
   COMPLETED: "COMPLETED",
@@ -22,3 +24,15 @@ export interface SettlementResponse {
   lastUpdateDate: string;
 }
 
+export interface SettlementSummary {
+  sellerId: string;
+  totalWinningAmount: number;
+  totalCharge: number;
+  totalFinalAmount: number;
+  date?: string;
+  count: number;
+}
+
+export type PagedSettlementResponse = PagedApiResponse<SettlementResponse>;
+
+export type PagedSettlementSummary = PagedApiResponse<SettlementSummary>;

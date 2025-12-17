@@ -148,8 +148,13 @@ export const auctionApi = {
     keyword?: string;
     categories?: string[];
     status?: string;
+    minStartPrice?: number;
+    maxStartPrice?: number;
+    startFrom?: string;
+    startTo?: string;
     page?: number;
     size?: number;
+    sort?: string[];
   }): Promise<ApiResponseDto<PagedAuctionDocument>> => {
     const res = await client.get("/search", {
       params,

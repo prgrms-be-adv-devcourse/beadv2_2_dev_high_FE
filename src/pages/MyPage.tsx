@@ -4,7 +4,6 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { depositApi } from "../apis/depositApi";
 import { orderApi } from "../apis/orderApi";
 import { productApi } from "../apis/productApi";
-import { settlementApi } from "../apis/settlementApi";
 import { userApi } from "../apis/userApi";
 import { DepositChargeDialog } from "../components/mypage/DepositChargeDialog";
 import { DepositHistoryTab } from "../components/mypage/DepositHistoryTab";
@@ -18,7 +17,6 @@ import { useAuth } from "../contexts/AuthContext";
 import type { DepositHistory, DepositInfo } from "../types/deposit";
 import type { OrderResponse } from "../types/order";
 import type { ProductAndAuction } from "../types/product";
-import type { SettlementResponse } from "../types/settlement";
 import { UserRole, type User } from "../types/user";
 
 const MyPage: React.FC = () => {
@@ -29,9 +27,6 @@ const MyPage: React.FC = () => {
     bankName?: string;
     bankAccount?: string;
   } | null>(null);
-  const [settlementHistory, setSettlementHistory] = useState<
-    SettlementResponse[]
-  >([]);
   const [depositHistory, setDepositHistory] = useState<DepositHistory[]>([]);
   const [soldOrders, setSoldOrders] = useState<OrderResponse[]>([]);
   const [boughtOrders, setBoughtOrders] = useState<OrderResponse[]>([]);
@@ -48,8 +43,6 @@ const MyPage: React.FC = () => {
   const [sellerInfoLoaded, setSellerInfoLoaded] = useState(false);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError] = useState<string | null>(null);
-  const [settlementLoading, setSettlementLoading] = useState(false);
-  const [settlementError, setSettlementError] = useState<string | null>(null);
   const [myProductsLoading, setMyProductsLoading] = useState(false);
   const [myProductsError, setMyProductsError] = useState<string | null>(null);
   const [sellerInfoLoading, setSellerInfoLoading] = useState(false);
@@ -69,7 +62,6 @@ const MyPage: React.FC = () => {
   const [depositInfoLoaded, setDepositInfoLoaded] = useState(false);
   const [depositHistoryLoaded, setDepositHistoryLoaded] = useState(false);
   const [ordersLoaded, setOrdersLoaded] = useState(false);
-  const [settlementLoaded, setSettlementLoaded] = useState(false);
   const [myProductsLoaded, setMyProductsLoaded] = useState(false);
 
   const params = new URLSearchParams(location.search);
@@ -101,11 +93,9 @@ const MyPage: React.FC = () => {
       loadSellerInfo();
     } else if (
       tabValue === 4 &&
-      user?.role !== UserRole.USER &&
-      !settlementLoaded
+      user?.role !== UserRole.USER
     ) {
-      // 정산 내역 탭
-      loadSettlementHistory();
+      // 정산 내역 탭 (SettlementTab 내부에서 조회)
     } else if (
       tabValue === 5 &&
       user?.role !== UserRole.USER &&
@@ -121,7 +111,6 @@ const MyPage: React.FC = () => {
     depositInfoLoaded,
     depositHistoryLoaded,
     ordersLoaded,
-    settlementLoaded,
     myProductsLoaded,
     sellerInfoLoaded,
   ]);
@@ -169,25 +158,6 @@ const MyPage: React.FC = () => {
     } finally {
       setDepositInfoLoading(false);
       setDepositInfoLoaded(true);
-    }
-  };
-
-  const loadSettlementHistory = async () => {
-    setSettlementLoading(true);
-    setSettlementError(null);
-    try {
-      if (!user?.userId) {
-        setSettlementHistory([]);
-        return;
-      }
-      const res = await settlementApi.getSettlementHistory();
-      setSettlementHistory(res.data);
-    } catch (err: any) {
-      setSettlementError("정산 내역을 불러오는데 실패했습니다.");
-      console.error("정산 내역 조회 실패:", err);
-    } finally {
-      setSettlementLoading(false);
-      setSettlementLoaded(true);
     }
   };
 
@@ -343,11 +313,7 @@ const MyPage: React.FC = () => {
           />
         )}
         {tabValue === 4 && user?.role !== "USER" && (
-          <SettlementTab
-            loading={settlementLoading}
-            error={settlementError}
-            settlementHistory={settlementHistory}
-          />
+          <SettlementTab />
         )}
         {tabValue === 5 && user?.role !== "USER" && (
           <MyProductsTab

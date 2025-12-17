@@ -12,50 +12,47 @@ import {
   Stack,
   Skeleton,
 } from "@mui/material";
-import React, { useEffect, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { productApi } from "../apis/productApi";
 import {
   ProductStatus,
-  type PagedProductAndAuctionResponse,
   type Product,
   type ProductAndAuction,
 } from "../types/product";
 import { getCommonStatusText } from "../utils/statusText";
 import { getPrimaryProductImageUrl } from "../utils/images";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 // 경매 목록 API 응답 타입 정의 (페이징 포함)
 const Products: React.FC = () => {
-  const [productData, setProductData] =
-    useState<PagedProductAndAuctionResponse | null>(null);
-
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<ProductStatus | "">("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchProducts();
-  }, [page, statusFilter]);
-
-  const fetchProducts = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+  const productsQuery = useQuery({
+    queryKey: ["products", page, statusFilter],
+    queryFn: async () => {
       const response = await productApi.getProducts({
         page: page - 1,
-        size: 20,
+        size: 8,
         status: statusFilter || undefined,
       });
+      return response.data;
+    },
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
+    placeholderData: keepPreviousData,
+  });
 
-      setProductData(response.data);
-    } catch (error) {
-      console.error(error);
-      setError("상품 목록을 불러오는데 실패했습니다.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const productData = productsQuery.data ?? null;
+  const errorMessage = useMemo(() => {
+    if (!productsQuery.isError) return null;
+    const err: any = productsQuery.error;
+    return (
+      err?.data?.message ??
+      err?.message ??
+      "상품 목록을 불러오는데 실패했습니다."
+    );
+  }, [productsQuery.error, productsQuery.isError]);
 
   const handlePageChange = (
     event: React.ChangeEvent<unknown>,
@@ -167,11 +164,19 @@ const Products: React.FC = () => {
       </Box>
 
       <Box sx={{ mt: 3 }}>
-        {error && (
+        {errorMessage && (
           <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
+            {errorMessage}
           </Alert>
         )}
+
+        {!errorMessage &&
+          !productsQuery.isLoading &&
+          productsForDisplay.length === 0 && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              조건에 맞는 상품이 없습니다.
+            </Alert>
+          )}
 
         <Box
           sx={{
@@ -185,7 +190,7 @@ const Products: React.FC = () => {
             gap: 4,
           }}
         >
-          {loading && productsForDisplay.length === 0
+          {productsQuery.isLoading && productsForDisplay.length === 0
             ? // 로딩 중 + 데이터 아직 없을 때 카드 스켈레톤
               Array.from({ length: 8 }).map((_, i) => (
                 <Card
@@ -348,12 +353,14 @@ const Products: React.FC = () => {
         </Box>
       </Box>
 
-      <Pagination
-        count={productData?.totalPages ?? 0}
-        page={page}
-        onChange={handlePageChange}
-        sx={{ display: "flex", justifyContent: "center", mt: 4 }}
-      />
+      {(productData?.totalPages ?? 0) > 1 && (
+        <Pagination
+          count={productData?.totalPages ?? 0}
+          page={page}
+          onChange={handlePageChange}
+          sx={{ display: "flex", justifyContent: "center", mt: 4 }}
+        />
+      )}
     </Container>
   );
 };
