@@ -266,7 +266,7 @@ const AuctionDetail: React.FC = () => {
     [setBidHistory]
   );
 
-  const { isConnected, isRetrying } = useStomp({
+  const { isConnected, isRetrying, connectionState } = useStomp({
     topic: auctionId ? `/topic/auction.${auctionId}` : "",
     onMessage: handleNewMessage,
   });
@@ -332,7 +332,9 @@ const AuctionDetail: React.FC = () => {
         lastBidPrice: bid,
       }));
 
-      if (!isConnected) {
+      const shouldFallbackRefetch =
+        connectionState === "disconnected" || connectionState === "failed";
+      if (shouldFallbackRefetch) {
         await fetchAuctionDetail();
         await refreshBidHistoryFirstPage();
       }
