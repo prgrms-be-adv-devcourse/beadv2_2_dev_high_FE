@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
   Button,
@@ -37,6 +37,10 @@ const ProductDetail: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isWish, setIsWish] = useState(false);
   const [wishLoading, setWishLoading] = useState(false);
+  const wishActionSeqRef = useRef(0);
+  const wishInFlightRef = useRef(false);
+  const wishDesiredRef = useRef(false);
+  const wishServerRef = useRef(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deletingAuctionId, setDeletingAuctionId] = useState<string | null>(
     null
@@ -251,15 +255,25 @@ const ProductDetail: React.FC = () => {
 
   useEffect(() => {
     const fetchWishlistStatus = async () => {
-      if (!productId || !user) return;
+      if (!productId) return;
+      if (!user) {
+        setIsWish(false);
+        wishDesiredRef.current = false;
+        wishServerRef.current = false;
+        return;
+      }
       try {
+        const seqAtStart = wishActionSeqRef.current;
         const res = await wishlistApi.getMyWishlist({
           page: 0,
           size: 100,
         });
         const items = res.data?.content ?? [];
         const exists = items.some((item) => item.productId === productId);
+        if (wishActionSeqRef.current !== seqAtStart) return;
         setIsWish(exists);
+        wishDesiredRef.current = exists;
+        wishServerRef.current = exists;
       } catch (e) {
         console.error("찜 상태 조회 실패:", e);
       }
@@ -470,27 +484,47 @@ const ProductDetail: React.FC = () => {
                         navigate("/login");
                         return;
                       }
-                      if (!product || wishLoading) return;
+                      if (!product) return;
+
+                      // Optimistic: disable 없이 즉시 UI 반영 + 연타 시 마지막 의도만 서버에 반영
+                      wishActionSeqRef.current += 1;
+                      const seqAtClick = wishActionSeqRef.current;
+
+                      const nextDesired = !wishDesiredRef.current;
+                      wishDesiredRef.current = nextDesired;
+                      setIsWish(nextDesired);
+
+                      if (wishInFlightRef.current) return;
+                      wishInFlightRef.current = true;
+                      setWishLoading(true);
+
                       try {
-                        setWishLoading(true);
-                        if (isWish) {
-                          await wishlistApi.remove(product.id);
-                          setIsWish(false);
-                        } else {
-                          await wishlistApi.add(product.id);
-                          setIsWish(true);
+                        while (wishServerRef.current !== wishDesiredRef.current) {
+                          const target = wishDesiredRef.current;
+                          if (target) {
+                            await wishlistApi.add(product.id);
+                          } else {
+                            await wishlistApi.remove(product.id);
+                          }
+                          wishServerRef.current = target;
                         }
                       } catch (err: any) {
                         console.error("찜 토글 실패:", err);
+                        if (wishActionSeqRef.current === seqAtClick) {
+                          wishDesiredRef.current = wishServerRef.current;
+                          setIsWish(wishServerRef.current);
+                        }
                         alert(
                           err?.response?.data?.message ??
                             "찜하기 처리 중 오류가 발생했습니다."
                         );
                       } finally {
-                        setWishLoading(false);
+                        wishInFlightRef.current = false;
+                        if (wishActionSeqRef.current === seqAtClick) {
+                          setWishLoading(false);
+                        }
                       }
                     }}
-                    disabled={wishLoading}
                   >
                     {isWish ? (
                       <FavoriteIcon color="error" fontSize="small" />

@@ -708,6 +708,11 @@ const ProductRegistration: React.FC = () => {
           noValidate
           sx={{ mt: 1 }}
         >
+          <Box
+            component="fieldset"
+            disabled={loading}
+            sx={{ border: 0, p: 0, m: 0, minInlineSize: 0 }}
+          >
           {/* 상품 정보 섹션 */}
           <Typography
             variant="h6"
@@ -1185,6 +1190,7 @@ const ProductRegistration: React.FC = () => {
               "상품 및 경매 등록하기"
             )}
           </Button>
+          </Box>
         </Box>
       </Paper>
 

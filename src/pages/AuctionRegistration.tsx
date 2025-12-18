@@ -397,6 +397,11 @@ const AuctionRegistration: React.FC = () => {
               noValidate
               sx={{ mt: 1 }}
             >
+              <Box
+                component="fieldset"
+                disabled={loading}
+                sx={{ border: 0, p: 0, m: 0, minInlineSize: 0 }}
+              >
               <Controller
                 name="startBid"
                 control={control}
@@ -529,6 +534,7 @@ const AuctionRegistration: React.FC = () => {
                     "경매 등록하기"
                   )}
                 </Button>
+              </Box>
               </Box>
             </Box>
           </Paper>

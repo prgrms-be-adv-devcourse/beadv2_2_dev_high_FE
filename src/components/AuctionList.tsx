@@ -241,7 +241,11 @@ const AuctionList: React.FC<AuctionListProps> = ({
                   }
                   sx={{ m: 1 }}
                 >
-                  자세히 보기
+                  {linkDestination === "product"
+                    ? "상품 상세보기"
+                    : auction.status === AuctionStatus.IN_PROGRESS
+                      ? "경매 참여하기"
+                      : "경매 상세보기"}
                 </Button>
               </Card>
             );
