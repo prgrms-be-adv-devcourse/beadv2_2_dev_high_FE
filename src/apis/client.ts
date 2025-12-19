@@ -3,12 +3,11 @@ import { updateAccessTokenOutsideReact } from "../contexts/AuthContext";
 import type { ApiResponseDto } from "../types/common";
 
 // API 서버의 기본 URL
-// - 로컬 개발: VITE_API_BASE_URL 미설정 시 http://localhost:8000/api/v1 사용
-// - Vercel 배포: VITE_API_BASE_URL=/api/v1 로 설정 (프록시 경로)
-const API_BASE_URL =
-  import.meta.env.MODE === "development"
-    ? "http://localhost:8000/api/v1"
-    : (import.meta.env.VITE_API_BASE_URL as string | undefined) || "/api/v1";
+// - VITE_API_BASE_URL 없으면 http://localhost:8000
+// - /api/v1은 공통으로 붙음
+const API_ORIGIN = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000")
+  .replace(/\/$/, "");
+const API_BASE_URL = `${API_ORIGIN}/api/v1`;
 
 /**
  * 기본 axios 인스턴스입니다.

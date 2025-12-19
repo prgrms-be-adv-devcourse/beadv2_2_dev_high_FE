@@ -54,14 +54,11 @@ export const useStomp = ({ topic, onMessage }: UseStompProps) => {
   }, []);
 
   const connect = useCallback(() => {
-    // 개발(로컬) 환경에서는 로컬 백엔드로 직접 연결,
-    // 배포(Vercel) 환경에서는 기본값으로 동일 출처 경로(/ws-auction)를 사용하되,
-    // 필요 시 VITE_WS_BASE_URL(예: https://gateway.example.com/ws-auction)로 우회 연결한다.
-    const WS_URL =
-      import.meta.env.MODE === "development"
-        ? "http://localhost:8000/ws-auction"
-        : (import.meta.env.VITE_WS_BASE_URL as string | undefined) ||
-          "/ws-auction";
+    // - VITE_WS_BASE_URL 없으면 http://localhost:8000
+    // - /ws-auction은 공통으로 붙음
+    const WS_ORIGIN = (import.meta.env.VITE_WS_BASE_URL ??
+      "http://localhost:8000")!.replace(/\/$/, "");
+    const WS_URL = `${WS_ORIGIN}/ws-auction`;
 
     const client = new Client({
       webSocketFactory: () => new SockJS(WS_URL),
