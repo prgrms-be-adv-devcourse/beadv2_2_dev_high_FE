@@ -1,7 +1,8 @@
 import { Button, Grid, Link as MuiLink, TextField } from "@mui/material";
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
+import { useMutation } from "@tanstack/react-query";
 import { userApi } from "../apis/userApi"; // LoginParams import
 import FormContainer from "../components/FormContainer";
 import { useAuth } from "../contexts/AuthContext";
@@ -18,25 +19,25 @@ const Login: React.FC = () => {
       password: "",
     },
   });
-  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const auth = useAuth(); // useAuth 훅 사용
-  const onSubmit = async (data: LoginParams) => {
-    if (loading) return;
-    setLoading(true);
-    try {
-      const response = await userApi.login(data);
+
+  const loginMutation = useMutation({
+    mutationFn: (payload: LoginParams) => userApi.login(payload),
+    onSuccess: (response) => {
       const res = response.data;
-
-      auth.login(res as LoginResponse); // 로그인 상태 업데이트
-
+      auth.login(res as LoginResponse);
       alert("로그인 성공!");
-    } catch (error) {
+    },
+    onError: (error) => {
       console.error("로그인 실패:", error);
       alert("로그인 중 오류가 발생했습니다. 이메일과 비밀번호를 확인해주세요.");
-    } finally {
-      setLoading(false);
-    }
+    },
+  });
+
+  const onSubmit = async (data: LoginParams) => {
+    if (loginMutation.isPending) return;
+    await loginMutation.mutateAsync(data);
   };
 
   useEffect(() => {
@@ -96,9 +97,9 @@ const Login: React.FC = () => {
         fullWidth
         variant="contained"
         sx={{ mt: 3, mb: 2 }}
-        disabled={loading}
+        disabled={loginMutation.isPending}
       >
-        {loading ? "로그인 중..." : "로그인"}
+        {loginMutation.isPending ? "로그인 중..." : "로그인"}
       </Button>
       <Grid container>
         <Grid component="div">{/* TODO: 비밀번호 찾기 링크 */}</Grid>

@@ -7,7 +7,8 @@ import React, {
   type ReactNode,
 } from "react";
 import { CircularProgress } from "@mui/material";
-import type { LoginResponse, User } from "../types/user";
+import { useQueryClient } from "@tanstack/react-query";
+import { UserRole, type LoginResponse, type User } from "../types/user";
 
 export interface AuthContextType {
   isAuthenticated: boolean;
@@ -34,9 +35,16 @@ let updateAccessTokenExternal: ((newToken: string | null) => void) | null =
   null;
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+  const queryClient = useQueryClient();
+  const normalizeUser = (nextUser: User | null): User | null => {
+    if (!nextUser) return null;
+    if (nextUser.role !== UserRole.ADMIN) return nextUser;
+    return { ...nextUser, role: UserRole.SELLER };
+  };
+
   const [user, setUser] = useState<User | null>(
     localStorage.getItem("user")
-      ? JSON.parse(localStorage.getItem("user")!)
+      ? normalizeUser(JSON.parse(localStorage.getItem("user")!))
       : null
   );
   const [token, setToken] = useState<string | null>(
@@ -54,7 +62,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // 실제로는 로그아웃된 상태로 간주하고 정리한다.
     if (storedToken && storedUser) {
       setToken(storedToken);
-      setUser(JSON.parse(storedUser));
+      setUser(normalizeUser(JSON.parse(storedUser)));
     } else if (storedToken && !storedUser) {
       localStorage.removeItem("accessToken");
       localStorage.removeItem("refreshToken");
@@ -70,11 +78,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = (data: LoginResponse) => {
     const { accessToken, refreshToken, ...rest } = data;
+    const normalizedUser = normalizeUser(rest);
     localStorage.setItem("accessToken", accessToken);
     localStorage.setItem("refreshToken", refreshToken as string);
-    localStorage.setItem("user", JSON.stringify(rest));
+    localStorage.setItem("user", JSON.stringify(normalizedUser));
     setToken(accessToken);
-    setUser(rest);
+    setUser(normalizedUser);
   };
 
   const logout = () => {
@@ -82,16 +91,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     localStorage.removeItem("accessToken");
     localStorage.removeItem("refreshToken");
     localStorage.removeItem("sessionExpired");
+    localStorage.removeItem("depositBalance");
     setToken(null);
     setUser(null);
+    queryClient.clear();
   };
   const updateAccessToken = (newToken: string | null) => {
     if (!newToken) {
       localStorage.removeItem("accessToken");
       localStorage.removeItem("refreshToken");
       localStorage.removeItem("user");
+      localStorage.removeItem("depositBalance");
       setToken(null);
       setUser(null);
+      queryClient.clear();
       return;
     }
     localStorage.setItem("accessToken", newToken);

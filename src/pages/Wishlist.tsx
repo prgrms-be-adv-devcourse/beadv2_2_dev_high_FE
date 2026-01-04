@@ -11,94 +11,91 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import React, { useEffect, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { wishlistApi } from "../apis/wishlistApi";
 import { productApi } from "../apis/productApi";
 import type { Product } from "../types/product";
 import { useAuth } from "../contexts/AuthContext";
 import CloseIcon from "@mui/icons-material/Close";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 const Wishlist: React.FC = () => {
   const { isAuthenticated, user } = useAuth();
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    const load = async () => {
-      if (!isAuthenticated || !user?.userId) {
-        setProducts([]);
-        return;
-      }
+  const wishlistQuery = useQuery({
+    queryKey: ["wishlist", user?.userId],
+    queryFn: async () => {
+      const data = await wishlistApi.getMyWishlist({
+        page: 0,
+        size: 20,
+      });
+      const page = data.data;
+      const entries = page?.content ?? [];
 
-      setLoading(true);
-      setError(null);
-      try {
-        // 기본 첫 페이지만 조회 (필요 시 페이징 확장)
-        const data = await wishlistApi.getMyWishlist({
-          page: 0,
-          size: 20,
-        });
-        const page = data.data;
-        const entries = page?.content ?? [];
+      if (entries.length === 0) return [];
 
-        if (entries.length === 0) {
-          setProducts([]);
-          return;
-        }
+      const uniqueProductIds = Array.from(
+        new Set(entries.map((e) => e.productId))
+      );
 
-        const uniqueProductIds = Array.from(
-          new Set(entries.map((e) => e.productId))
-        );
+      const productResults = await Promise.all(
+        uniqueProductIds.map(async (productId) => {
+          try {
+            const res = await productApi.getProductById(productId);
+            return res.data;
+          } catch (err) {
+            console.error("상품 조회 실패:", productId, err);
+            return null;
+          }
+        })
+      );
 
-        const productResults = await Promise.all(
-          uniqueProductIds.map(async (productId) => {
-            try {
-              const res = await productApi.getProductById(productId);
-              return res.data;
-            } catch (err) {
-              console.error("상품 조회 실패:", productId, err);
-              return null;
-            }
-          })
-        );
+      return productResults
+        .map((result) => {
+          if (!result?.product) return null;
+          const latestAuction = result.auctions?.[0];
+          const mergedProduct: Product = {
+            ...result.product,
+            startBid: result.product.startBid ?? latestAuction?.startBid,
+            currentBid:
+              result.product.currentBid ??
+              latestAuction?.currentBid ??
+              result.product.startBid ??
+              latestAuction?.startBid,
+          };
+          return mergedProduct;
+        })
+        .filter((p): p is Product => p !== null);
+    },
+    enabled: isAuthenticated && !!user?.userId,
+    staleTime: 30_000,
+  });
 
-        const hydratedProducts = productResults
-          .map((result) => {
-            if (!result?.product) return null;
-            const latestAuction = result.auctions?.[0];
-            const mergedProduct: Product = {
-              ...result.product,
-              startBid: result.product.startBid ?? latestAuction?.startBid,
-              currentBid:
-                result.product.currentBid ??
-                latestAuction?.currentBid ??
-                result.product.startBid ??
-                latestAuction?.startBid,
-            };
-            return mergedProduct;
-          })
-          .filter((p): p is Product => p !== null);
+  const errorMessage = useMemo(() => {
+    if (!wishlistQuery.isError) return null;
+    const err: any = wishlistQuery.error;
+    return err?.data?.message ?? err?.message ?? "찜 목록을 불러오는데 실패했습니다.";
+  }, [wishlistQuery.error, wishlistQuery.isError]);
 
-        setProducts(hydratedProducts);
-      } catch (err) {
-        console.error("찜 목록 조회 실패:", err);
-        setError("찜 목록을 불러오는데 실패했습니다.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-  }, [isAuthenticated, user]);
+  const removeMutation = useMutation({
+    mutationFn: (productId: string) => wishlistApi.remove(productId),
+    onSuccess: (_, productId) => {
+      queryClient.setQueryData(
+        ["wishlist", user?.userId],
+        (prev: Product[] | undefined) =>
+          (prev ?? []).filter((product) => product.id !== productId)
+      );
+    },
+  });
 
   const handleRemoveWishlist = async (productId: string) => {
     if (removingId) return;
     try {
       setRemovingId(productId);
-      await wishlistApi.remove(productId);
-      setProducts((prev) => prev.filter((product) => product.id !== productId));
+      await removeMutation.mutateAsync(productId);
     } catch (err) {
       console.error("찜 삭제 실패:", err);
       alert("찜 삭제에 실패했습니다. 잠시 후 다시 시도해 주세요.");
@@ -124,6 +121,8 @@ const Wishlist: React.FC = () => {
     );
   }
 
+  const products = wishlistQuery.data ?? [];
+
   return (
     <Container maxWidth="md">
       <Box sx={{ my: 4 }}>
@@ -131,7 +130,7 @@ const Wishlist: React.FC = () => {
           찜 목록 (Wishlist)
         </Typography>
         <Paper sx={{ p: 2 }}>
-          {loading && products.length === 0 && !error && (
+          {wishlistQuery.isLoading && products.length === 0 && !errorMessage && (
             <List>
               {Array.from({ length: 5 }).map((_, idx) => (
                 <ListItem key={idx} divider>
@@ -144,13 +143,15 @@ const Wishlist: React.FC = () => {
             </List>
           )}
 
-          {!loading && error && <Alert severity="error">{error}</Alert>}
-          {!loading && !error && products.length === 0 && (
+          {!wishlistQuery.isLoading && errorMessage && (
+            <Alert severity="error">{errorMessage}</Alert>
+          )}
+          {!wishlistQuery.isLoading && !errorMessage && products.length === 0 && (
             <Alert severity="info">
               찜한 상품이 없습니다. 마음에 드는 상품을 찜해보세요.
             </Alert>
           )}
-          {!loading && !error && products.length > 0 && (
+          {!wishlistQuery.isLoading && !errorMessage && products.length > 0 && (
             <List>
               {products.map((product) => (
                 <ListItem

@@ -12,6 +12,7 @@ import React, { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import DaumPostcode from "react-daum-postcode";
+import { useMutation } from "@tanstack/react-query";
 import { userApi } from "../apis/userApi";
 import FormContainer from "../components/FormContainer";
 import type { SignupParams } from "../types/user";
@@ -49,7 +50,6 @@ const SignUp: React.FC = () => {
   const password = watch("password");
 
   // 이메일 인증 상태 관리
-  const [loading, setLoading] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [isEmailSent, setIsEmailSent] = useState(false);
   const [isEmailVerified, setIsEmailVerified] = useState(false);
@@ -63,6 +63,24 @@ const SignUp: React.FC = () => {
 
   // 우편번호 검색 상태 관리
   const [openAddressModal, setOpenAddressModal] = useState(false);
+
+  const sendCodeMutation = useMutation({
+    mutationFn: (email: string) => userApi.sendVerificationEmail(email),
+  });
+
+  const verifyCodeMutation = useMutation({
+    mutationFn: (payload: { email: string; code: string }) =>
+      userApi.verifyEmailCode(payload.email, payload.code),
+  });
+
+  const signupMutation = useMutation({
+    mutationFn: (payload: SignupParams) => userApi.signup(payload),
+  });
+
+  const loading =
+    sendCodeMutation.isPending ||
+    verifyCodeMutation.isPending ||
+    signupMutation.isPending;
 
   // 타이머 로직 (5분 = 300초)
   useEffect(() => {
@@ -123,21 +141,18 @@ const SignUp: React.FC = () => {
     }
   };
   const handleSendCode = async () => {
-    setLoading(true);
     setServerError(null);
     try {
       const email = getValues("email");
       if (!email) {
         setServerError("이메일을 입력해주세요.");
-        setLoading(false);
         return;
       }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         setServerError("유효한 이메일 주소를 입력해주세요.");
-        setLoading(false);
         return;
       }
-      await userApi.sendVerificationEmail(email);
+      await sendCodeMutation.mutateAsync(email);
       setIsEmailSent(true);
       setTimeLeft(300); // 5분 = 300초
       setVerificationCode("");
@@ -148,8 +163,6 @@ const SignUp: React.FC = () => {
       setServerError(
         error.response?.data?.message || "인증번호 발송에 실패했습니다."
       );
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -158,19 +171,16 @@ const SignUp: React.FC = () => {
       setServerError("인증번호를 입력해주세요.");
       return;
     }
-    setLoading(true);
     setServerError(null);
     try {
       const email = getValues("email");
-      await userApi.verifyEmailCode(email, verificationCode);
+      await verifyCodeMutation.mutateAsync({ email, code: verificationCode });
       setIsEmailVerified(true);
       setIsEmailSent(false);
     } catch (error: any) {
       setServerError(
         error.response?.data?.message || "인증번호가 올바르지 않습니다."
       );
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -188,12 +198,11 @@ const SignUp: React.FC = () => {
       setServerError("이메일 인증을 완료해주세요.");
       return;
     }
-    setLoading(true);
     setServerError(null);
     try {
       // passwordConfirm 필드 제외
       const { passwordConfirm, ...apiData } = data;
-      await userApi.signup(apiData);
+      await signupMutation.mutateAsync(apiData);
       alert("회원가입이 완료되었습니다. 로그인 페이지로 이동합니다.");
       navigate("/login");
     } catch (error: any) {
@@ -201,8 +210,6 @@ const SignUp: React.FC = () => {
       setServerError(
         error.response?.data?.message || "회원가입 중 오류가 발생했습니다."
       );
-    } finally {
-      setLoading(false);
     }
   };
 

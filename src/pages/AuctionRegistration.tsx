@@ -18,9 +18,10 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { useNavigate, useParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { auctionApi } from "../apis/auctionApi";
 import { productApi } from "../apis/productApi";
 import { useAuth } from "../contexts/AuthContext";
@@ -63,124 +64,43 @@ const AuctionRegistration: React.FC = () => {
     reset,
   } = useForm<AuctionFormData>();
 
-  const [products, setProducts] = useState<ProductAndAuction[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMessage, setDialogMessage] = useState("");
 
-  useEffect(() => {
-    const fetchProducts = async () => {
-      setLoading(true);
-      try {
-        if (user?.role === UserRole.SELLER) {
-          const response = await productApi.getMyProducts();
-          setProducts(response.data);
-        } else {
-          const response = await productApi.getProducts();
-          setProducts(response.data.content);
-        }
-      } catch (err) {
-        setError("상품 목록을 불러오는 데 실패했습니다.");
-      } finally {
-        setLoading(false);
+  const productsQuery = useQuery({
+    queryKey: ["products", "auctionRegistration", user?.role, user?.userId],
+    queryFn: async () => {
+      if (user?.role === UserRole.SELLER) {
+        const response = await productApi.getMyProducts();
+        return response.data as ProductAndAuction[];
       }
-    };
+      const response = await productApi.getProducts();
+      return response.data.content as ProductAndAuction[];
+    },
+    enabled: !isEditMode && !isReregisterMode,
+    staleTime: 30_000,
+  });
 
-    const fetchAuctionData = async () => {
-      if (!auctionId) return;
-      setLoading(true);
-      try {
-        const response = await auctionApi.getAuctionDetail(auctionId);
-        const auction = response.data;
+  const auctionDetailQuery = useQuery({
+    queryKey: ["auctions", "detail", auctionId],
+    queryFn: () => auctionApi.getAuctionDetail(auctionId as string),
+    enabled: isEditMode && !!auctionId,
+    staleTime: 30_000,
+  });
 
-        if (user?.role === UserRole.USER) {
-          alert("경매를 수정할 권한이 없습니다.");
-          navigate("/");
-          return;
-        }
+  const productForReregisterQuery = useQuery({
+    queryKey: ["products", "detail", productId],
+    queryFn: () => productApi.getProductById(productId as string),
+    enabled: isReregisterMode && !!productId,
+    staleTime: 30_000,
+  });
 
-        if (auction.status !== AuctionStatus.READY) {
-          alert("대기 중인 경매만 수정할 수 있습니다.");
-          navigate(`/auctions/${auctionId}`);
-          return;
-        }
-
-        setSelectedProduct({
-          id: auction.productId,
-          name: auction.productName,
-          sellerId: auction.sellerId,
-          description: auction.description,
-          status: "READY",
-          deletedYn: "N",
-        });
-
-        reset({
-          startBid: auction.startBid,
-          auctionStartAt: auction.auctionStartAt.slice(0, 16),
-          auctionEndAt: auction.auctionEndAt.slice(0, 16),
-        });
-      } catch (err) {
-        setError("경매 정보를 불러오는 데 실패했습니다.");
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    const fetchProductForReregister = async () => {
-      if (!productId) return;
-      setLoading(true);
-      try {
-        const productResponse = await productApi.getProductById(productId);
-        const { product, auctions = [] } = productResponse.data;
-
-        if (!product) {
-          setError("상품 정보를 찾을 수 없습니다.");
-          navigate("/");
-          return;
-        }
-
-        if (user?.role !== UserRole.ADMIN && user?.role !== UserRole.SELLER) {
-          alert("경매를 재등록할 권한이 없습니다.");
-          navigate("/");
-          return;
-        }
-
-        if (
-          product.sellerId &&
-          user?.userId !== product.sellerId &&
-          user.role !== UserRole.ADMIN
-        ) {
-          alert("본인이 등록한 상품만 경매를 재등록할 수 있습니다.");
-          navigate("/");
-          return;
-        }
-
-        const hasActive = (Array.isArray(auctions) ? auctions : []).some(
-          (auction: Auction) =>
-            auction.status === AuctionStatus.IN_PROGRESS ||
-            auction.status === AuctionStatus.READY
-        );
-
-        if (hasActive) {
-          alert("진행 중 또는 대기 중인 경매가 있어 재등록할 수 없습니다.");
-          navigate(`/products/${productId}`);
-          return;
-        }
-
-        setSelectedProduct(product);
-      } catch (err) {
-        console.error(err);
-        setError("상품 정보를 불러오는 데 실패했습니다.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    const initTimes = () => {
+  const initTimes = useMemo(
+    () => () => {
       const nextHour = setMilliseconds(
         setSeconds(setMinutes(addHours(new Date(), 1), 0), 0),
         0
@@ -194,29 +114,106 @@ const AuctionRegistration: React.FC = () => {
           { locale: ko }
         ),
       });
-    };
+    },
+    [reset]
+  );
 
-    if (isEditMode) {
-      fetchAuctionData();
-    } else if (isReregisterMode && productId) {
+  useEffect(() => {
+    if (!isEditMode) {
       initTimes();
-      fetchProductForReregister();
-    } else {
-      initTimes();
-      fetchProducts();
     }
+  }, [initTimes, isEditMode, isReregisterMode]);
+
+  useEffect(() => {
+    const auction = auctionDetailQuery.data?.data;
+    if (!auction) return;
+
+    if (user?.role === UserRole.USER) {
+      alert("경매를 수정할 권한이 없습니다.");
+      navigate("/");
+      return;
+    }
+
+    if (auction.status !== AuctionStatus.READY) {
+      alert("대기 중인 경매만 수정할 수 있습니다.");
+      navigate(`/auctions/${auctionId}`);
+      return;
+    }
+
+    setSelectedProduct({
+      id: auction.productId,
+      name: auction.productName,
+      sellerId: auction.sellerId,
+      description: auction.description,
+      status: "READY",
+      deletedYn: "N",
+    });
+
+    reset({
+      startBid: auction.startBid,
+      auctionStartAt: auction.auctionStartAt.slice(0, 16),
+      auctionEndAt: auction.auctionEndAt.slice(0, 16),
+    });
+  }, [auctionDetailQuery.data, auctionId, navigate, reset, user?.role]);
+
+  useEffect(() => {
+    const productResponse = productForReregisterQuery.data?.data;
+    if (!productResponse) return;
+    const { product, auctions = [] } = productResponse;
+
+    if (!product) {
+      setSubmitError("상품 정보를 찾을 수 없습니다.");
+      navigate("/");
+      return;
+    }
+
+    if (user?.role !== UserRole.SELLER) {
+      alert("경매를 재등록할 권한이 없습니다.");
+      navigate("/");
+      return;
+    }
+
+    if (product.sellerId && user?.userId !== product.sellerId) {
+      alert("본인이 등록한 상품만 경매를 재등록할 수 있습니다.");
+      navigate("/");
+      return;
+    }
+
+    const hasActive = (Array.isArray(auctions) ? auctions : []).some(
+      (auction: Auction) =>
+        auction.status === AuctionStatus.IN_PROGRESS ||
+        auction.status === AuctionStatus.READY
+    );
+
+    if (hasActive) {
+      alert("진행 중 또는 대기 중인 경매가 있어 재등록할 수 없습니다.");
+      navigate(`/products/${productId}`);
+      return;
+    }
+
+    setSelectedProduct(product);
+  }, [navigate, productForReregisterQuery.data, productId, user?.role, user?.userId]);
+
+  const products = productsQuery.data ?? [];
+  const isInitialLoading =
+    productsQuery.isLoading ||
+    auctionDetailQuery.isLoading ||
+    productForReregisterQuery.isLoading;
+  const queryError = useMemo(() => {
+    const err: any =
+      auctionDetailQuery.error ??
+      productForReregisterQuery.error ??
+      productsQuery.error;
+    if (!err) return null;
+    return err?.data?.message ?? err?.message ?? "데이터를 불러오는데 실패했습니다.";
   }, [
-    auctionId,
-    productId,
-    isEditMode,
-    isReregisterMode,
-    navigate,
-    reset,
-    user,
+    auctionDetailQuery.error,
+    productForReregisterQuery.error,
+    productsQuery.error,
   ]);
 
   const handleProductSelect = async (data: ProductAndAuction) => {
-    setLoading(true);
+    setActionLoading(true);
     const { product, auctions } = data;
     try {
       const conflictingStatuses: AuctionStatus[] = [
@@ -240,14 +237,14 @@ const AuctionRegistration: React.FC = () => {
     } catch (err) {
       setSelectedProduct(product);
     } finally {
-      setLoading(false);
+      setActionLoading(false);
     }
   };
 
   const onSubmit = async (data: AuctionFormData) => {
-    if (loading) return;
-    setLoading(true);
-    setError(null);
+    if (actionLoading) return;
+    setActionLoading(true);
+    setSubmitError(null);
 
     const auctionStart = format(data.auctionStartAt, "yyyy-MM-dd HH:mm:00", {
       locale: ko,
@@ -280,9 +277,9 @@ const AuctionRegistration: React.FC = () => {
       }
     } catch (err: any) {
       console.error("경매 처리 실패:", err);
-      setError(err.response?.data?.message || "요청에 실패했습니다.");
+      setSubmitError(err.response?.data?.message || "요청에 실패했습니다.");
     } finally {
-      setLoading(false);
+      setActionLoading(false);
     }
   };
 
@@ -297,14 +294,13 @@ const AuctionRegistration: React.FC = () => {
           경매 등록
         </Typography>
         <Alert severity="error">
-          경매를 등록할 권한이 없습니다. 판매자 또는 관리자만 경매를 등록할 수
-          있습니다.
+          경매를 등록할 권한이 없습니다. 판매자만 경매를 등록할 수 있습니다.
         </Alert>
       </Container>
     );
   }
 
-  if (loading && !selectedProduct) {
+  if (isInitialLoading && !selectedProduct) {
     return (
       <Container maxWidth="md">
         <Typography variant="h4" sx={{ my: 4 }}>
@@ -342,7 +338,9 @@ const AuctionRegistration: React.FC = () => {
           <Typography variant="h4" sx={{ my: 4 }}>
             경매에 등록할 상품 선택
           </Typography>
-          {error && <Alert severity="warning">{error}</Alert>}
+          {(queryError || submitError) && (
+            <Alert severity="warning">{queryError ?? submitError}</Alert>
+          )}
           <Paper>
             <List>
               {products.length > 0 ? (
@@ -352,16 +350,16 @@ const AuctionRegistration: React.FC = () => {
                     <React.Fragment key={product.id}>
                       <ListItem
                         secondaryAction={
-                          <Button
-                            variant="contained"
-                            onClick={() => handleProductSelect(data)}
-                            disabled={loading}
-                          >
-                            {loading ? (
-                              <CircularProgress size={24} color="inherit" />
-                            ) : (
-                              "선택"
-                            )}
+                        <Button
+                          variant="contained"
+                          onClick={() => handleProductSelect(data)}
+                          disabled={actionLoading}
+                        >
+                          {actionLoading ? (
+                            <CircularProgress size={24} color="inherit" />
+                          ) : (
+                            "선택"
+                          )}
                           </Button>
                         }
                       >
@@ -399,7 +397,7 @@ const AuctionRegistration: React.FC = () => {
             >
               <Box
                 component="fieldset"
-                disabled={loading}
+                disabled={actionLoading}
                 sx={{ border: 0, p: 0, m: 0, minInlineSize: 0 }}
               >
               <Controller
@@ -502,9 +500,9 @@ const AuctionRegistration: React.FC = () => {
                 }}
               />
 
-              {error && (
+              {submitError && (
                 <Alert severity="error" sx={{ mt: 2 }}>
-                  {error}
+                  {submitError}
                 </Alert>
               )}
 
@@ -514,7 +512,7 @@ const AuctionRegistration: React.FC = () => {
                     fullWidth
                     variant="outlined"
                     onClick={() => setSelectedProduct(null)}
-                    disabled={loading}
+                    disabled={actionLoading}
                   >
                     상품 다시 선택
                   </Button>
@@ -523,10 +521,10 @@ const AuctionRegistration: React.FC = () => {
                   type="submit"
                   fullWidth
                   variant="contained"
-                  disabled={loading}
+                  disabled={actionLoading}
                   sx={{ py: 1.5 }}
                 >
-                  {loading ? (
+                  {actionLoading ? (
                     <CircularProgress size={24} color="inherit" />
                   ) : isEditMode ? (
                     "경매 수정하기"

@@ -1,5 +1,5 @@
 // pages/payment/PaymentSuccess.tsx
-import { use, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CheckCircleOutline, ErrorOutline } from "@mui/icons-material";
 import {
@@ -10,6 +10,7 @@ import {
   Paper,
   Typography,
 } from "@mui/material";
+import { useQueryClient } from "@tanstack/react-query";
 import { auctionApi } from "../../apis/auctionApi";
 import { depositApi } from "../../apis/depositApi";
 import { useAuth } from "../../contexts/AuthContext";
@@ -28,6 +29,30 @@ export default function PaymentSuccess() {
     label: "마이페이지로 바로가기",
     path: "/mypage?tab=1",
   });
+  const queryClient = useQueryClient();
+
+  const setDepositBalanceCache = useCallback((next: number) => {
+    queryClient.setQueryData(["deposit", "balance"], next);
+    localStorage.setItem("depositBalance", String(next));
+  }, [queryClient]);
+
+  const incrementDepositBalance = useCallback((amount: number) => {
+    queryClient.setQueryData(["deposit", "balance"], (prev: number | undefined) => {
+      const base = typeof prev === "number" ? prev : 0;
+      const next = Math.max(base + amount, 0);
+      localStorage.setItem("depositBalance", String(next));
+      return next;
+    });
+  }, [queryClient]);
+
+  const decrementDepositBalance = useCallback((amount: number) => {
+    queryClient.setQueryData(["deposit", "balance"], (prev: number | undefined) => {
+      const base = typeof prev === "number" ? prev : 0;
+      const next = Math.max(base - amount, 0);
+      localStorage.setItem("depositBalance", String(next));
+      return next;
+    });
+  }, [queryClient]);
 
   useEffect(() => {
     const approvePayment = async () => {
@@ -49,9 +74,7 @@ export default function PaymentSuccess() {
 
       try {
         await depositApi.paymentSuccess({ paymentKey, orderId, amount });
-        window.dispatchEvent(
-          new CustomEvent("deposit:increment", { detail: amount })
-        );
+        incrementDepositBalance(amount);
 
         const autoPurchaseRaw = sessionStorage.getItem(
           "autoPurchaseAfterCharge"
@@ -74,20 +97,18 @@ export default function PaymentSuccess() {
                   userId: user?.userId,
                 });
                 if (typeof info?.balance === "number") {
-                  window.dispatchEvent(
-                    new CustomEvent("deposit:set", { detail: info.balance })
-                  );
+                  setDepositBalanceCache(info.balance);
                 } else {
-                  window.dispatchEvent(
-                    new CustomEvent("deposit:decrement", {
-                      detail: purchaseAmount,
-                    })
-                  );
+                  decrementDepositBalance(purchaseAmount);
                 }
-                window.dispatchEvent(
-                  new CustomEvent("orders:pending-decrement", { detail: 1 })
+                queryClient.setQueryData(
+                  ["orders", "pendingCount"],
+                  (prev: number | undefined) =>
+                    Math.max((typeof prev === "number" ? prev : 0) - 1, 0)
                 );
-                window.dispatchEvent(new Event("orders:refresh"));
+                await queryClient.invalidateQueries({
+                  queryKey: ["orders", "pendingCount"],
+                });
                 redirectPath = "/orders";
                 setStatus("success");
                 setTitle("충전과 구매가 완료되었어요");
@@ -163,22 +184,12 @@ export default function PaymentSuccess() {
                 try {
                   const account = await depositApi.getAccount();
                   if (typeof account?.balance === "number") {
-                    window.dispatchEvent(
-                      new CustomEvent("deposit:set", { detail: account.balance })
-                    );
+                    setDepositBalanceCache(account.balance);
                   } else {
-                    window.dispatchEvent(
-                      new CustomEvent("deposit:decrement", {
-                        detail: targetDepositAmount,
-                      })
-                    );
+                    decrementDepositBalance(targetDepositAmount);
                   }
                 } catch {
-                  window.dispatchEvent(
-                    new CustomEvent("deposit:decrement", {
-                      detail: targetDepositAmount,
-                    })
-                  );
+                  decrementDepositBalance(targetDepositAmount);
                 }
 
                 redirectPath = `/auctions/${targetAuctionId}`;
@@ -234,7 +245,14 @@ export default function PaymentSuccess() {
     };
 
     approvePayment();
-  }, [navigate]);
+  }, [
+    decrementDepositBalance,
+    incrementDepositBalance,
+    navigate,
+    queryClient,
+    setDepositBalanceCache,
+    user?.userId,
+  ]);
 
   const handleGo = () => {
     navigate(action.path, { replace: true });

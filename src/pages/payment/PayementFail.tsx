@@ -9,15 +9,20 @@ import {
   Paper,
   Typography,
 } from "@mui/material";
+import { useMutation } from "@tanstack/react-query";
 import { depositApi } from "../../apis/depositApi";
 
 export default function PaymentFail() {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState("결제가 실패했어요");
   const [description, setDescription] = useState(
     "결제가 취소되었거나 실패했습니다. 예치금 잔액에 변동이 없는지 마이페이지에서 확인해 주세요."
   );
+  const paymentFailMutation = useMutation({
+    mutationFn: (payload: { orderId?: string; message?: string; code?: string }) =>
+      depositApi.paymentFail(payload),
+  });
+  const loading = paymentFailMutation.isPending;
 
   useEffect(() => {
     const handleFail = async () => {
@@ -27,7 +32,7 @@ export default function PaymentFail() {
       const orderId = params.get("orderId") ?? undefined;
 
       try {
-        await depositApi.paymentFail({ orderId, message: msg, code });
+        await paymentFailMutation.mutateAsync({ orderId, message: msg, code });
       } catch (err) {
         console.error("결제 실패 처리 중 오류:", err);
       } finally {
@@ -38,7 +43,6 @@ export default function PaymentFail() {
           msg ||
             "결제가 취소되었거나 실패했습니다. 예치금 잔액에 변동이 없는지 마이페이지에서 확인해 주세요."
         );
-        setLoading(false);
       }
 
       setTimeout(() => {
@@ -47,7 +51,7 @@ export default function PaymentFail() {
     };
 
     handleFail();
-  }, []);
+  }, [navigate, paymentFailMutation]);
 
   const handleGoMyPage = () => {
     navigate("/mypage?tab=1", { replace: true });

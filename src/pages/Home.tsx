@@ -19,7 +19,7 @@ const Home: React.FC = () => {
   const theme = useTheme();
   const { isAuthenticated, user } = useAuth();
 
-  const isSellerOrAdmin = user?.role === "SELLER" || user?.role === "ADMIN";
+  const isSeller = user?.role === "SELLER";
 
   let secondaryLabel = "판매자 등록하기";
   let secondaryTo: string = "/seller/register";
@@ -27,7 +27,7 @@ const Home: React.FC = () => {
   if (!isAuthenticated) {
     secondaryLabel = "판매자 등록 안내";
     secondaryTo = "/login";
-  } else if (isSellerOrAdmin) {
+  } else if (isSeller) {
     secondaryLabel = "상품 등록하기";
     secondaryTo = "/products/new";
   }

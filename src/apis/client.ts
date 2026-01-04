@@ -75,7 +75,7 @@ client.interceptors.response.use(
         return Promise.reject(err); // 재발급 실패
       }
     }
-    return Promise.reject(error.response);
+    return Promise.reject(error.response ?? error);
   }
 );
 

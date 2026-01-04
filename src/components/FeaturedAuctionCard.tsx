@@ -10,8 +10,9 @@ import {
   Stack,
   Typography,
 } from "@mui/material";
-import React, { useEffect, useState } from "react";
+import React, { useMemo } from "react";
 import { Link as RouterLink } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { auctionApi } from "../apis/auctionApi";
 import { AuctionStatus, type PagedAuctionResponse } from "../types/auction";
 import { getAuctionStatusText } from "../utils/statusText";
@@ -23,34 +24,27 @@ import { formatWon } from "../utils/money";
  * - 진행 중(IN_PROGRESS) 경매 중 최고입찰가가 가장 높은 1개를 보여줍니다.
  */
 const FeaturedAuctionCard: React.FC = () => {
-  const [data, setData] = useState<PagedAuctionResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const topAuctionQuery = useQuery({
+    queryKey: ["auctions", "featured", AuctionStatus.IN_PROGRESS],
+    queryFn: async () => {
+      const res = await auctionApi.getAuctions({
+        page: 0,
+        size: 1,
+        status: [AuctionStatus.IN_PROGRESS],
+        sort: ["currentBid,DESC"],
+      });
+      return res.data as PagedAuctionResponse;
+    },
+    staleTime: 30_000,
+  });
 
-  useEffect(() => {
-    const fetchTopAuction = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const res = await auctionApi.getAuctions({
-          page: 0,
-          size: 1,
-          status: [AuctionStatus.IN_PROGRESS],
-          sort: ["currentBid,DESC"],
-        });
-        setData(res.data);
-      } catch (err) {
-        console.error("인기 경매 조회 실패:", err);
-        setError("인기 경매를 불러오지 못했습니다.");
-      } finally {
-        setLoading(false);
-      }
-    };
+  const errorMessage = useMemo(() => {
+    if (!topAuctionQuery.isError) return null;
+    const err: any = topAuctionQuery.error;
+    return err?.data?.message ?? err?.message ?? "인기 경매를 불러오지 못했습니다.";
+  }, [topAuctionQuery.error, topAuctionQuery.isError]);
 
-    fetchTopAuction();
-  }, []);
-
-  const auction = data?.content?.[0];
+  const auction = topAuctionQuery.data?.content?.[0];
   const hasBid = (auction?.currentBid ?? 0) > 0;
   const highestBidPrice = hasBid ? (auction?.currentBid as number) : null;
 
@@ -64,7 +58,7 @@ const FeaturedAuctionCard: React.FC = () => {
         overflow: "hidden",
       }}
     >
-      {loading ? (
+      {topAuctionQuery.isLoading ? (
         <Skeleton variant="rectangular" height={220} />
       ) : (
         <CardMedia
@@ -76,8 +70,8 @@ const FeaturedAuctionCard: React.FC = () => {
         />
       )}
       <CardContent sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-        {error && <Alert severity="error">{error}</Alert>}
-        {!error && (
+        {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
+        {!errorMessage && (
           <>
             <Stack direction="row" alignItems="center" spacing={1}>
               <Chip label="오늘의 인기" color="secondary" size="small" />
@@ -91,7 +85,7 @@ const FeaturedAuctionCard: React.FC = () => {
               )}
             </Stack>
             <Typography variant="h6" sx={{ fontWeight: 700 }}>
-              {loading
+              {topAuctionQuery.isLoading
                 ? "인기 경매를 불러오는 중..."
                 : auction?.productName ?? "진행 중인 인기 경매가 없습니다."}
             </Typography>
@@ -126,7 +120,7 @@ const FeaturedAuctionCard: React.FC = () => {
                 </Box>
               </>
             ) : (
-              !loading && (
+              !topAuctionQuery.isLoading && (
                 <Typography variant="body2" color="text.secondary">
                   현재 진행 중인 인기 경매가 없습니다. 곧 새로운 경매가 시작될
                   예정이에요.

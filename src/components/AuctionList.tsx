@@ -8,8 +8,9 @@ import {
   Skeleton,
   Typography,
 } from "@mui/material";
-import React, { useEffect, useState } from "react";
+import React, { useMemo } from "react";
 import { Link as RouterLink } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { auctionApi } from "../apis/auctionApi";
 import {
   type AuctionQueryParams,
@@ -51,37 +52,30 @@ const AuctionList: React.FC<AuctionListProps> = ({
   limit = 4,
   linkDestination = "auction",
 }) => {
-  const [auctionData, setAuctionData] = useState<PagedAuctionResponse | null>(
-    null
-  );
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const statusKey = Array.isArray(status) ? status.join(",") : "";
 
-  useEffect(() => {
-    const fetchAuctions = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const params: AuctionQueryParams = {
-          page: 0,
-          size: limit,
-          status,
-          sort: sortMap[sortOption],
-        };
-        const response = await auctionApi.getAuctions(params);
+  const auctionQuery = useQuery({
+    queryKey: ["auctions", "list", statusKey, sortOption, limit],
+    queryFn: async () => {
+      const params: AuctionQueryParams = {
+        page: 0,
+        size: limit,
+        status,
+        sort: sortMap[sortOption],
+      };
+      const response = await auctionApi.getAuctions(params);
+      return response.data as PagedAuctionResponse;
+    },
+    staleTime: 30_000,
+  });
 
-        setAuctionData(response.data);
-      } catch (error) {
-        console.error("경매 목록 조회 실패:", error);
-        setError("경매 목록을 불러오는데 실패했습니다.");
-      } finally {
-        setLoading(false);
-      }
-    };
+  const errorMessage = useMemo(() => {
+    if (!auctionQuery.isError) return null;
+    const err: any = auctionQuery.error;
+    return err?.data?.message ?? err?.message ?? "경매 목록을 불러오는데 실패했습니다.";
+  }, [auctionQuery.error, auctionQuery.isError]);
 
-    fetchAuctions();
-  }, []);
+  const auctionData = auctionQuery.data ?? null;
 
   return (
     <Box
@@ -96,13 +90,15 @@ const AuctionList: React.FC<AuctionListProps> = ({
         gap: 4,
       }}
     >
-      {error && !loading && (auctionData?.content?.length ?? 0) === 0 && (
+      {errorMessage &&
+        !auctionQuery.isLoading &&
+        (auctionData?.content?.length ?? 0) === 0 && (
         <Alert severity="error" sx={{ gridColumn: "1 / -1" }}>
-          {error}
+          {errorMessage}
         </Alert>
       )}
 
-      {loading && (auctionData?.content?.length ?? 0) === 0
+      {auctionQuery.isLoading && (auctionData?.content?.length ?? 0) === 0
         ? Array.from({ length: limit }).map((_, i) => (
             <Card
               key={i}

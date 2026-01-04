@@ -120,7 +120,7 @@ export const DepositHistoryTab: React.FC<DepositHistoryTabProps> = ({
               예치금 잔액을 불러오지 못했습니다.
             </Alert>
           )}
-          {!balanceLoading && !balanceInfo && (
+          {!balanceLoading && !balanceInfo && !balanceError && (
             <Alert
               severity="info"
               action={

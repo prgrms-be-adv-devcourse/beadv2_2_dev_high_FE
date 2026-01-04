@@ -17,6 +17,7 @@ import {
 import { Search as SearchIcon } from "@mui/icons-material";
 import React, { useEffect, useMemo, useState } from "react";
 import { Link as RouterLink, useLocation, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { auctionApi } from "../apis/auctionApi";
 import type { AuctionDocument } from "../types/search";
 import { type ProductCategory } from "../types/product";
@@ -74,45 +75,37 @@ const SearchPage: React.FC = () => {
   const [startTo, setStartTo] = useState(initialStartTo);
   const [page, setPage] = useState(initialPage >= 0 ? initialPage : 0);
 
-  const [categories, setCategories] = useState<ProductCategory[]>([]);
-  const [categoriesLoading, setCategoriesLoading] = useState(false);
-  const [result, setResult] = useState<{
-    totalPages: number;
-    content: AuctionDocument[];
-  }>({
-    totalPages: 0,
-    content: [],
-  });
-  const [loading, setLoading] = useState(false);
-
-  // 카테고리 목록 로드
-  useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        setCategoriesLoading(true);
-        const res = await categoryApi.getCategories();
-        setCategories(res.data);
-      } catch (err) {
-        console.error("카테고리 조회 실패:", err);
-      } finally {
-        setCategoriesLoading(false);
-      }
-    };
-
-    fetchCategories();
-  }, []);
-
-  // 적용된 검색 조건이 바뀔 때 URL 동기화
-  useEffect(() => {
-    const hasFilter =
+  const hasFilter = useMemo(
+    () =>
       !!keyword ||
       !!status ||
       selectedCategoryIds.length > 0 ||
       !!minStartPrice ||
       !!maxStartPrice ||
       !!startFrom ||
-      !!startTo;
+      !!startTo,
+    [
+      keyword,
+      status,
+      selectedCategoryIds.length,
+      minStartPrice,
+      maxStartPrice,
+      startFrom,
+      startTo,
+    ]
+  );
 
+  const categoriesQuery = useQuery({
+    queryKey: ["categories"],
+    queryFn: async () => {
+      const res = await categoryApi.getCategories();
+      return res.data as ProductCategory[];
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  // 적용된 검색 조건이 바뀔 때 URL 동기화
+  useEffect(() => {
     const newParams = new URLSearchParams();
     if (keyword) newParams.set("keyword", keyword);
     if (status) newParams.set("status", status);
@@ -143,75 +136,70 @@ const SearchPage: React.FC = () => {
     navigate,
   ]);
 
-  // 적용된 검색 조건이 바뀔 때마다 검색 실행
-  useEffect(() => {
-    const normalizeDateTimeLocal = (value: string) => {
-      const trimmed = value.trim();
-      if (!trimmed) return undefined;
-      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(trimmed)) {
-        return `${trimmed}:00`;
+  const searchQuery = useQuery({
+    queryKey: [
+      "search",
+      keyword,
+      status,
+      selectedCategoryIds.join(","),
+      minStartPrice,
+      maxStartPrice,
+      startFrom,
+      startTo,
+      page,
+    ],
+    queryFn: async () => {
+      const normalizeDateTimeLocal = (value: string) => {
+        const trimmed = value.trim();
+        if (!trimmed) return undefined;
+        if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(trimmed)) {
+          return `${trimmed}:00`;
+        }
+        return trimmed;
+      };
+
+      const parseOptionalNumber = (value: string) => {
+        const trimmed = value.trim();
+        if (!trimmed) return undefined;
+        const num = Number(trimmed);
+        return Number.isFinite(num) ? num : undefined;
+      };
+
+      if (!hasFilter) {
+        return { totalPages: 0, content: [] as AuctionDocument[] };
       }
-      return trimmed;
-    };
 
-    const parseOptionalNumber = (value: string) => {
-      const trimmed = value.trim();
-      if (!trimmed) return undefined;
-      const num = Number(trimmed);
-      return Number.isFinite(num) ? num : undefined;
-    };
+      const data = await auctionApi.searchAuctions({
+        keyword: keyword || undefined,
+        status: status || undefined,
+        categories:
+          selectedCategoryIds.length > 0 ? selectedCategoryIds : undefined,
+        minStartPrice: parseOptionalNumber(minStartPrice),
+        maxStartPrice: parseOptionalNumber(maxStartPrice),
+        startFrom: normalizeDateTimeLocal(startFrom),
+        startTo: normalizeDateTimeLocal(startTo),
+        page,
+        size: 20,
+      });
 
-    const fetchSearch = async () => {
-      // 아무 조건이 없으면 검색하지 않음
-      if (
-        !keyword &&
-        !status &&
-        selectedCategoryIds.length === 0 &&
-        !minStartPrice &&
-        !maxStartPrice &&
-        !startFrom &&
-        !startTo
-      ) {
-        setResult({ totalPages: 0, content: [] });
-        return;
-      }
+      return {
+        totalPages: data.data.totalPages ?? 0,
+        content: data.data.content ?? [],
+      };
+    },
+    enabled: hasFilter,
+    staleTime: 30_000,
+  });
 
-      setLoading(true);
-      try {
-        const data = await auctionApi.searchAuctions({
-          keyword: keyword || undefined,
-          status: status || undefined,
-          categories:
-            selectedCategoryIds.length > 0 ? selectedCategoryIds : undefined,
-          minStartPrice: parseOptionalNumber(minStartPrice),
-          maxStartPrice: parseOptionalNumber(maxStartPrice),
-          startFrom: normalizeDateTimeLocal(startFrom),
-          startTo: normalizeDateTimeLocal(startTo),
-          page,
-          size: 20,
-        });
-        setResult({
-          totalPages: data.data.totalPages,
-          content: data.data.content,
-        });
-      } catch (error) {
-        console.error("검색 실패:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchSearch();
-  }, [
-    keyword,
-    status,
-    selectedCategoryIds,
-    minStartPrice,
-    maxStartPrice,
-    startFrom,
-    startTo,
-    page,
-  ]);
+  const categories = categoriesQuery.data ?? [];
+  const categoriesLoading = categoriesQuery.isLoading;
+  const result = searchQuery.data ?? { totalPages: 0, content: [] };
+  const loading = searchQuery.isLoading;
+  const searchErrorMessage = useMemo(() => {
+    if (!searchQuery.isError) return null;
+    const err: any = searchQuery.error;
+    return err?.data?.message ?? err?.message ?? "검색 결과를 불러오는데 실패했습니다.";
+  }, [searchQuery.error, searchQuery.isError]);
 
   // 입력 핸들러들 (아직 검색 조건에는 적용하지 않음)
   const handleInputKeywordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -396,16 +384,12 @@ const SearchPage: React.FC = () => {
       </Stack>
 
       {/* 결과 영역 */}
-      {!keyword &&
-      !status &&
-      selectedCategoryIds.length === 0 &&
-      !minStartPrice &&
-      !maxStartPrice &&
-      !startFrom &&
-      !startTo ? (
+      {!hasFilter ? (
         <Typography color="text.secondary">
           검색어를 입력하거나 상태/카테고리를 선택한 뒤 검색 버튼을 눌러주세요.
         </Typography>
+      ) : searchErrorMessage ? (
+        <Typography color="text.secondary">{searchErrorMessage}</Typography>
       ) : loading ? (
         <Box
           sx={{

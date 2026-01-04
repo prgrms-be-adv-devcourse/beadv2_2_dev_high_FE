@@ -21,45 +21,45 @@ import { formatWon } from "../../utils/money";
 export type OrderFilter = "BOUGHT" | "SOLD";
 
 interface OrdersTabProps {
-  loading: boolean;
-  error: string | null;
+  boughtLoading: boolean;
+  soldLoading: boolean;
+  boughtError: string | null;
+  soldError: string | null;
   sold: OrderResponse[];
   bought: OrderResponse[];
+  filter?: OrderFilter;
   initialFilter?: OrderFilter;
   onFilterChange?: (filter: OrderFilter) => void;
 }
 
 export const OrdersTab: React.FC<OrdersTabProps> = ({
-  loading,
-  error,
+  boughtLoading,
+  soldLoading,
+  boughtError,
+  soldError,
   sold,
   bought,
+  filter,
   initialFilter,
   onFilterChange,
 }) => {
   const { user } = useAuth();
-  const [filter, setFilter] = useState<OrderFilter>(initialFilter ?? "BOUGHT");
+  const [internalFilter, setInternalFilter] = useState<OrderFilter>(
+    initialFilter ?? "BOUGHT"
+  );
+
+  const activeFilter = filter ?? internalFilter;
 
   const { label, list } = useMemo(() => {
-    if (filter === "SOLD") {
+    if (activeFilter === "SOLD") {
       return { label: "판매 내역", list: sold };
     }
     return { label: "구매 내역", list: bought };
-  }, [filter, bought, sold]);
+  }, [activeFilter, bought, sold]);
 
-  const showSkeleton = loading && !error && list.length === 0;
-
-  // 에러가 있는 경우에는 목록 대신 에러만 표시
-  if (error) {
-    return (
-      <Paper sx={{ p: 2 }}>
-        <Typography variant="h6" sx={{ mb: 2 }}>
-          주문 내역
-        </Typography>
-        <Alert severity="error">{error}</Alert>
-      </Paper>
-    );
-  }
+  const currentError = activeFilter === "SOLD" ? soldError : boughtError;
+  const currentLoading = activeFilter === "SOLD" ? soldLoading : boughtLoading;
+  const showSkeleton = currentLoading && !currentError && list.length === 0;
 
   return (
     <Paper sx={{ p: 2 }}>
@@ -70,11 +70,13 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
       <ToggleButtonGroup
         size="small"
         color="primary"
-        value={filter}
+        value={activeFilter}
         exclusive
         onChange={(_, v: OrderFilter | null) => {
           if (!v) return;
-          setFilter(v);
+          if (filter == null) {
+            setInternalFilter(v);
+          }
           onFilterChange?.(v);
         }}
         sx={{ mb: 2 }}
@@ -85,7 +87,9 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
         )}
       </ToggleButtonGroup>
 
-      {showSkeleton ? (
+      {currentError ? (
+        <Alert severity="error">{currentError}</Alert>
+      ) : showSkeleton ? (
         <List sx={{ maxHeight: "60vh", overflowY: "auto" }}>
           {Array.from({ length: 3 }).map((_, idx) => (
             <React.Fragment key={idx}>

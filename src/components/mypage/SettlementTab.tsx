@@ -74,10 +74,23 @@ export const SettlementTab: React.FC = () => {
   });
 
   const errorMessage = useMemo(() => {
-    const err: any = summaryQuery.error ?? historyQuery.error;
-    if (!err) return null;
-    return err?.data?.message ?? err?.message ?? "정산 내역 조회에 실패했습니다.";
-  }, [historyQuery.error, summaryQuery.error]);
+    const activeQuery = view === "SUMMARY" ? summaryQuery : historyQuery;
+    if (!activeQuery.isError) return null;
+    const err: any = activeQuery.error;
+    const isNetworkError =
+      err?.code === "ERR_NETWORK" || err?.message === "Network Error";
+    return (
+      err?.data?.message ??
+      (!isNetworkError ? err?.message : null) ??
+      "정산 내역을 불러오는데 실패했습니다."
+    );
+  }, [
+    historyQuery.error,
+    historyQuery.isError,
+    summaryQuery.error,
+    summaryQuery.isError,
+    view,
+  ]);
 
   const renderSkeletonList = () => (
     <List>
@@ -101,7 +114,8 @@ export const SettlementTab: React.FC = () => {
 
     if (summaryQuery.isLoading && list.length === 0) return renderSkeletonList();
     if (list.length === 0) {
-      return <Alert severity="info">합산 정산 기록이 없습니다.</Alert>;
+      if (summaryQuery.isError) return null;
+      return <Alert severity="info">정산 내역이 없습니다.</Alert>;
     }
 
     return (
@@ -147,7 +161,8 @@ export const SettlementTab: React.FC = () => {
 
     if (historyQuery.isLoading && list.length === 0) return renderSkeletonList();
     if (list.length === 0) {
-      return <Alert severity="info">단건 정산 기록이 없습니다.</Alert>;
+      if (historyQuery.isError) return null;
+      return <Alert severity="info">정산 내역이 없습니다.</Alert>;
     }
 
     return (
@@ -221,11 +236,13 @@ export const SettlementTab: React.FC = () => {
         </ToggleButtonGroup>
       </Stack>
 
-      {errorMessage ? (
-        <Alert severity="error">{errorMessage}</Alert>
-      ) : (
-        <Box>{view === "SUMMARY" ? renderSummary() : renderHistory()}</Box>
+      {errorMessage && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {errorMessage}
+        </Alert>
       )}
+
+      <Box>{view === "SUMMARY" ? renderSummary() : renderHistory()}</Box>
     </Paper>
   );
 };

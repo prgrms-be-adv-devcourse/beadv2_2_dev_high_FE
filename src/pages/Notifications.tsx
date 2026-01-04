@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Container,
   Typography,
@@ -15,9 +15,18 @@ import {
   CircularProgress,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
+import {
+  type InfiniteData,
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
 import { notificationApi } from "../apis/notificationApi";
-import type { NotificationInfo } from "../types/notification";
+import type {
+  NotificationInfo,
+  PagedNotificationResponse,
+} from "../types/notification";
 
 const sortNotifications = (items: NotificationInfo[]) => {
   return [...items].sort((a, b) => {
@@ -34,89 +43,74 @@ const Notifications: React.FC = () => {
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
-  const [notifications, setNotifications] = useState<NotificationInfo[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedNotification, setSelectedNotification] =
     useState<NotificationInfo | null>(null);
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    const fetchNotifications = async () => {
-      if (!isAuthenticated || !user?.userId) {
-        setNotifications([]);
-        setPage(0);
-        setHasMore(true);
-        return;
-      }
-
-      setLoading(true);
-      setError(null);
-      try {
-        // 기본: 첫 페이지 20개만 조회
-        const pageRes = await notificationApi.getNotifications({
-          userId: user.userId,
-          page: 0,
-          size: 20,
-        });
-        setNotifications(sortNotifications(pageRes.content || []));
-        setPage(0);
-        setHasMore(!pageRes.last);
-      } catch (err) {
-        console.error("알림 조회 실패:", err);
-        setError("알림을 불러오는데 실패했습니다.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchNotifications();
-  }, [isAuthenticated, user]);
-
-  const loadMore = async () => {
-    if (!isAuthenticated || !user?.userId) return;
-    if (!hasMore || loading || loadingMore) return;
-
-    const nextPage = page + 1;
-    setLoadingMore(true);
-    setError(null);
-    try {
-      const pageRes = await notificationApi.getNotifications({
-        userId: user.userId,
-        page: nextPage,
+  const notificationsQuery = useInfiniteQuery<
+    PagedNotificationResponse,
+    Error,
+    InfiniteData<PagedNotificationResponse, number>,
+    (string | undefined)[],
+    number
+  >({
+    queryKey: ["notifications", "list", user?.userId],
+    queryFn: async ({ pageParam = 0 }) =>
+      notificationApi.getNotifications({
+        userId: user?.userId,
+        page: pageParam,
         size: 20,
-      });
-      const next = pageRes.content || [];
-      setNotifications((prev) => {
-        const existingIds = new Set(prev.map((n) => n.id));
-        const merged = [...prev, ...next.filter((n) => !existingIds.has(n.id))];
-        return sortNotifications(merged);
-      });
-      setPage(nextPage);
-      setHasMore(!pageRes.last);
-    } catch (err) {
-      console.error("알림 추가 조회 실패:", err);
-      setError("알림을 더 불러오지 못했습니다.");
-    } finally {
-      setLoadingMore(false);
-    }
-  };
+      }),
+    initialPageParam: 0,
+    enabled: isAuthenticated && !!user?.userId,
+    getNextPageParam: (lastPage) =>
+      lastPage?.last ? undefined : (lastPage?.number ?? 0) + 1,
+    staleTime: 30_000,
+  });
+
+  const notifications = useMemo(() => {
+    const pages = notificationsQuery.data?.pages ?? [];
+    const merged = pages.flatMap((page) => page?.content ?? []);
+    return sortNotifications(merged);
+  }, [notificationsQuery.data?.pages]);
+
+  const errorMessage = useMemo(() => {
+    if (!notificationsQuery.isError) return null;
+    const err: any = notificationsQuery.error;
+    return err?.data?.message ?? err?.message ?? "알림을 불러오는데 실패했습니다.";
+  }, [notificationsQuery.error, notificationsQuery.isError]);
+
+  const markAsReadMutation = useMutation({
+    mutationFn: (notificationId: string) => notificationApi.getNotifi(notificationId),
+    onSuccess: (_, notificationId) => {
+      queryClient.setQueryData(
+        ["notifications", "list", user?.userId],
+        (oldData: any) => {
+          if (!oldData?.pages) return oldData;
+          return {
+            ...oldData,
+            pages: oldData.pages.map((page: any) => ({
+              ...page,
+              content: (page.content ?? []).map((n: NotificationInfo) =>
+                n.id === notificationId ? { ...n, readYn: true } : n
+              ),
+            })),
+          };
+        }
+      );
+      queryClient.setQueryData(
+        ["notifications", "unreadCount"],
+        (prev: number | undefined) =>
+          Math.max((typeof prev === "number" ? prev : 0) - 1, 0)
+      );
+    },
+  });
 
   const markAsRead = async (notification: NotificationInfo) => {
     if (!notification.id || notification.readYn) return false;
     try {
-      await notificationApi.getNotifi(notification.id);
-      setNotifications((prev) =>
-        sortNotifications(
-          prev.map((n) =>
-            n.id === notification.id ? { ...n, readYn: true } : n
-          )
-        )
-      );
-      window.dispatchEvent(new CustomEvent("notification:read"));
+      await markAsReadMutation.mutateAsync(notification.id);
       return true;
     } catch (err) {
       console.error("알림 읽음 처리 실패:", err);
@@ -149,7 +143,10 @@ const Notifications: React.FC = () => {
   };
 
   const showSkeleton =
-    (loading || loadingMore) && notifications.length === 0 && !error;
+    (notificationsQuery.isLoading ||
+      notificationsQuery.isFetchingNextPage) &&
+    notifications.length === 0 &&
+    !errorMessage;
 
   return (
     <Container maxWidth="md">
@@ -158,12 +155,12 @@ const Notifications: React.FC = () => {
           알림
         </Typography>
         <Paper sx={{ p: 2 }}>
-          {!showSkeleton && error && (
+          {!showSkeleton && errorMessage && (
             <Alert severity="error" sx={{ width: "100%" }}>
-              {error}
+              {errorMessage}
             </Alert>
           )}
-          {!showSkeleton && !error && notifications.length === 0 && (
+          {!showSkeleton && !errorMessage && notifications.length === 0 && (
             <Alert severity="info" sx={{ width: "100%" }}>
               새로운 알림이 없습니다.
             </Alert>
@@ -186,7 +183,7 @@ const Notifications: React.FC = () => {
               ))}
 
             {!showSkeleton &&
-              !error &&
+              !errorMessage &&
               notifications.map((notification, index) => (
                 <Box
                   key={notification.id ?? index}
@@ -239,14 +236,21 @@ const Notifications: React.FC = () => {
                 </Box>
               ))}
 
-            {!showSkeleton && !error && notifications.length > 0 && hasMore && (
+            {!showSkeleton &&
+              !errorMessage &&
+              notifications.length > 0 &&
+              notificationsQuery.hasNextPage && (
               <Box sx={{ display: "flex", justifyContent: "center", py: 1 }}>
                 <Button
                   variant="outlined"
-                  onClick={loadMore}
-                  disabled={loadingMore}
+                  onClick={() => notificationsQuery.fetchNextPage()}
+                  disabled={notificationsQuery.isFetchingNextPage}
                 >
-                  {loadingMore ? <CircularProgress size={18} /> : "더 보기"}
+                  {notificationsQuery.isFetchingNextPage ? (
+                    <CircularProgress size={18} />
+                  ) : (
+                    "더 보기"
+                  )}
                 </Button>
               </Box>
             )}

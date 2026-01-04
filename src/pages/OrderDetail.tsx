@@ -9,8 +9,9 @@ import {
   Typography,
   Button,
 } from "@mui/material";
-import React, { useEffect, useState } from "react";
+import React, { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { orderApi } from "../apis/orderApi";
 import { getOrderStatusLabel, type OrderResponse } from "../types/order";
 import { formatWon } from "../utils/money";
@@ -18,31 +19,25 @@ import { formatWon } from "../utils/money";
 const OrderDetail: React.FC = () => {
   const { orderId } = useParams<{ orderId: string }>();
   const navigate = useNavigate();
-  const [order, setOrder] = useState<OrderResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const orderQuery = useQuery({
+    queryKey: ["orders", "detail", orderId],
+    queryFn: async () => {
+      if (!orderId) throw new Error("주문 ID가 올바르지 않습니다.");
+      const res = await orderApi.getOrderDetail(orderId);
+      return res.data as OrderResponse;
+    },
+    enabled: !!orderId,
+    staleTime: 30_000,
+  });
 
-  useEffect(() => {
-    const fetchOrder = async () => {
-      if (!orderId) {
-        setError("주문 ID가 올바르지 않습니다.");
-        return;
-      }
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await orderApi.getOrderDetail(orderId);
-        setOrder(res.data);
-      } catch (err) {
-        console.error("주문 상세 조회 실패:", err);
-        setError("주문 정보를 불러오지 못했습니다.");
-      } finally {
-        setLoading(false);
-      }
-    };
+  const errorMessage = useMemo(() => {
+    if (!orderId) return "주문 ID가 올바르지 않습니다.";
+    if (!orderQuery.isError) return null;
+    const err: any = orderQuery.error;
+    return err?.data?.message ?? err?.message ?? "주문 정보를 불러오지 못했습니다.";
+  }, [orderId, orderQuery.error, orderQuery.isError]);
 
-    fetchOrder();
-  }, [orderId]);
+  const order = orderQuery.data ?? null;
 
   const renderInfo = (label: string, value?: React.ReactNode) => (
     <Box sx={{ py: 1 }}>
@@ -60,14 +55,14 @@ const OrderDetail: React.FC = () => {
         <Button onClick={() => navigate(-1)}>목록으로</Button>
       </Stack>
       <Paper sx={{ mt: 3, p: 3 }}>
-        {loading ? (
+        {orderQuery.isLoading ? (
           <Stack spacing={1}>
             <Skeleton variant="text" width="60%" />
             <Skeleton variant="text" width="40%" />
             <Skeleton variant="rectangular" height={200} />
           </Stack>
-        ) : error ? (
-          <Alert severity="error">{error}</Alert>
+        ) : errorMessage ? (
+          <Alert severity="error">{errorMessage}</Alert>
         ) : order ? (
           <>
             <Typography variant="h6" sx={{ mb: 2 }}>

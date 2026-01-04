@@ -18,10 +18,16 @@ import {
   Typography,
 } from "@mui/material";
 import type { IMessage } from "@stomp/stompjs";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { auctionApi } from "../apis/auctionApi";
 import { depositApi } from "../apis/depositApi";
+import {
+  type InfiniteData,
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import AuctionParticipationStatus from "../components/auctions/AuctiobParticipationStatus";
 import AuctionBiddingPanel from "../components/auctions/AuctionBiddingPanel";
 import AuctionBidForm from "../components/auctions/AuctionBidForm";
@@ -38,6 +44,7 @@ import {
   type AuctionBidMessage,
   type AuctionDetailResponse,
   type AuctionParticipationResponse,
+  type PagedBidHistoryResponse,
   AuctionStatus,
 } from "../types/auction";
 import { DepositType } from "../types/deposit";
@@ -48,13 +55,6 @@ const AuctionDetail: React.FC = () => {
   const { user, isAuthenticated } = useAuth();
   const [productDrawerOpen, setProductDrawerOpen] = useState(false);
 
-  const [auctionDetail, setAuctionDetail] =
-    useState<AuctionDetailResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const [currentBidPrice, setCurrentBidPrice] = useState<number>(0);
-  const [hasAnyBid, setHasAnyBid] = useState(false);
   const [highestBidderInfo, setHighestBidderInfo] = useState<{
     id?: string;
     username?: string;
@@ -66,20 +66,10 @@ const AuctionDetail: React.FC = () => {
   const [openDepositPrompt, setOpenDepositPrompt] = useState(false);
   const [openWithdrawnPopup, setOpenWithdrawnPopup] = useState(false);
 
-  const [participationStatus, setParticipationStatus] =
-    useState<AuctionParticipationResponse>({
-      isParticipated: false,
-      isWithdrawn: false,
-      isRefund: false,
-    });
-
-  // 입찰 내역 상태
-  const [bidHistory, setBidHistory] = useState<AuctionBidMessage[]>([]);
-  const [bidHistoryPage, setBidHistoryPage] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
   const [bidLoading, setBidLoading] = useState(false);
   const [withdrawLoading, setWithdrawLoading] = useState(false);
   const [depositLoading, setDepositLoading] = useState(false);
+  const queryClient = useQueryClient();
   const [insufficientDepositOpen, setInsufficientDepositOpen] = useState(false);
   const [insufficientDepositInfo, setInsufficientDepositInfo] = useState<{
     balance: number;
@@ -91,6 +81,33 @@ const AuctionDetail: React.FC = () => {
   const [chargeLoading, setChargeLoading] = useState(false);
   const [chargeAmount, setChargeAmount] = useState("");
   const [chargeError, setChargeError] = useState<string | null>(null);
+
+  const auctionDetailQuery = useQuery({
+    queryKey: ["auctions", "detail", auctionId],
+    queryFn: async () => {
+      const res = await auctionApi.getAuctionDetail(auctionId as string);
+      return res.data as AuctionDetailResponse;
+    },
+    enabled: !!auctionId,
+    staleTime: 30_000,
+  });
+
+  const participationQuery = useQuery({
+    queryKey: ["auctions", "participation", auctionId],
+    queryFn: async () => {
+      const res = await auctionApi.checkParticipationStatus(auctionId as string);
+      return res.data as AuctionParticipationResponse;
+    },
+    enabled: !!auctionId && isAuthenticated,
+    staleTime: 30_000,
+  });
+
+  const auctionDetail = auctionDetailQuery.data ?? null;
+  const participationStatus = participationQuery.data ?? {
+    isParticipated: false,
+    isWithdrawn: false,
+    isRefund: false,
+  };
 
   const getProductImageUrls = useCallback(() => {
     const raw: unknown = (auctionDetail as any)?.files;
@@ -147,79 +164,77 @@ const AuctionDetail: React.FC = () => {
     return [trimmed];
   }, [auctionDetail?.files]);
 
-  const fetchAuctionDetail = async () => {
-    try {
-      const data: AuctionDetailResponse = await auctionApi
-        .getAuctionDetail(auctionId as string)
-        .then((res) => res.data);
-      setAuctionDetail(data);
-      setHasAnyBid(data.currentBid > 0);
-      setCurrentBidPrice(data.currentBid > 0 ? data.currentBid : data.startBid);
-      if (data.highestUserId) {
-        setHighestBidderInfo({ id: data.highestUserId, username: "" });
-      }
-    } catch (err) {
-      console.error("경매 상세 정보 로딩 실패:", err);
-      setError("경매 상세 정보를 불러오는 데 실패했습니다.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const bidHistoryQuery = useInfiniteQuery<
+    PagedBidHistoryResponse,
+    Error,
+    InfiniteData<PagedBidHistoryResponse, number>,
+    (string | undefined)[],
+    number
+  >({
+    queryKey: ["auctions", "bidHistory", auctionId],
+    queryFn: async ({ pageParam = 0 }) => {
+      const response = await auctionApi.getAuctionBidHistory(auctionId as string, {
+        page: pageParam,
+        size: 20,
+      });
+      return response.data;
+    },
+    initialPageParam: 0,
+    enabled: !!auctionId,
+    getNextPageParam: (lastPage) =>
+      lastPage.last ? undefined : (lastPage.number ?? 0) + 1,
+    staleTime: 30_000,
+  });
+
+  const bidHistory = useMemo(() => {
+    const pages = bidHistoryQuery.data?.pages ?? [];
+    const merged = pages.flatMap((page) => page?.content ?? []);
+    return merged;
+  }, [bidHistoryQuery.data?.pages]);
 
   const refreshBidHistoryFirstPage = useCallback(async () => {
-    if (!auctionId) return;
-    try {
-      const response = await auctionApi.getAuctionBidHistory(auctionId, {
-        page: 0,
-        size: 20,
-      });
-      const data = response.data;
-      setBidHistory(data.content);
-      setHasMore(!data.last);
-      setBidHistoryPage(1);
-    } catch (err) {
-      console.error("입찰 내역 새로고침 실패:", err);
-    }
-  }, [auctionId]);
+    await queryClient.invalidateQueries({
+      queryKey: ["auctions", "bidHistory", auctionId],
+    });
+  }, [auctionId, queryClient]);
 
-  const fetchAuctionParticipation = async () => {
-    try {
-      const res = await auctionApi.checkParticipationStatus(
-        auctionId as string
-      );
-      setParticipationStatus(res?.data);
-    } catch (err) {
-      console.error("경매 참여 정보 로딩 실패:", err);
-    }
-  };
+  const errorMessage = useMemo(() => {
+    if (!auctionDetailQuery.isError) return null;
+    const err: any = auctionDetailQuery.error;
+    return (
+      err?.data?.message ??
+      err?.message ??
+      "경매 상세 정보를 불러오는 데 실패했습니다."
+    );
+  }, [auctionDetailQuery.error, auctionDetailQuery.isError]);
 
-  const fetchMoreHistory = async () => {
-    if (!auctionId) return;
-    try {
-      const response = await auctionApi.getAuctionBidHistory(auctionId, {
-        page: bidHistoryPage,
-        size: 20,
-      });
+  const participationErrorMessage = useMemo(() => {
+    if (!participationQuery.isError) return null;
+    const err: any = participationQuery.error;
+    return (
+      err?.data?.message ??
+      err?.message ??
+      "참여 내역을 불러오지 못했습니다."
+    );
+  }, [participationQuery.error, participationQuery.isError]);
 
-      const data = response.data;
-
-      setBidHistory((prev) => [...prev, ...data.content]);
-      setHasMore(!data.last);
-      setBidHistoryPage((prev) => prev + 1);
-    } catch (err) {
-      console.error("입찰 내역 추가 로딩 실패:", err);
-    }
-  };
+  const bidHistoryErrorMessage = useMemo(() => {
+    if (!bidHistoryQuery.isError) return null;
+    const err: any = bidHistoryQuery.error;
+    return (
+      err?.data?.message ??
+      err?.message ??
+      "실시간 입찰 내역을 불러오지 못했습니다."
+    );
+  }, [bidHistoryQuery.error, bidHistoryQuery.isError]);
 
   useEffect(() => {
-    if (auctionId) {
-      fetchAuctionDetail();
-      fetchMoreHistory();
-      if (isAuthenticated) {
-        fetchAuctionParticipation();
-      }
-    }
-  }, [auctionId, isAuthenticated]);
+    const highestUserId = auctionDetail?.highestUserId ?? undefined;
+    if (!highestUserId) return;
+    setHighestBidderInfo((prev) =>
+      prev?.id === highestUserId ? prev : { id: highestUserId, username: "" }
+    );
+  }, [auctionDetail?.highestUserId]);
 
   const handleNewMessage = useCallback(
     (message: IMessage) => {
@@ -232,29 +247,55 @@ const AuctionDetail: React.FC = () => {
             break;
           case "BID_SUCCESS":
             console.log("입찰 성공 메시지 처리:", payload);
-            setHasAnyBid(true);
-            setCurrentBidPrice(payload.bidPrice);
             setHighestBidderInfo({
               id: payload.highestUserId,
               username: payload.highestUsername,
             });
             setCurrentUserCount(payload.currentUsers);
-            setBidHistory((prev) => {
-              const newBid: AuctionBidMessage = {
-                bidSrno: payload.bidSrno,
-                highestUserId: payload.highestUserId!,
-                highestUsername: payload.highestUsername! ?? "-",
-                bidPrice: payload.bidPrice,
-                bidAt: payload.bidAt,
-                type: "BID_SUCCESS",
-                auctionId: payload.auctionId,
-                currentUsers: payload.currentUsers,
-              };
-              if (prev.some((bid) => bid.bidSrno === newBid.bidSrno)) {
-                return prev;
+            queryClient.setQueryData(
+              ["auctions", "detail", auctionId],
+              (prev: AuctionDetailResponse | undefined) => {
+                if (!prev) return prev;
+                return {
+                  ...prev,
+                  currentBid: payload.bidPrice,
+                  highestUserId: payload.highestUserId ?? prev.highestUserId,
+                };
               }
-              return [newBid, ...prev];
-            });
+            );
+            queryClient.setQueryData(
+              ["auctions", "bidHistory", auctionId],
+              (
+                prev:
+                  | InfiniteData<PagedBidHistoryResponse, number>
+                  | undefined
+              ) => {
+                if (!prev?.pages) return prev;
+                const newBid: AuctionBidMessage = {
+                  bidSrno: payload.bidSrno,
+                  highestUserId: payload.highestUserId!,
+                  highestUsername: payload.highestUsername! ?? "-",
+                  bidPrice: payload.bidPrice,
+                  bidAt: payload.bidAt,
+                  type: "BID_SUCCESS",
+                  auctionId: payload.auctionId,
+                  currentUsers: payload.currentUsers,
+                };
+                const firstPage = prev.pages[0];
+                if (!firstPage) return prev;
+                const firstContent = firstPage?.content ?? [];
+                if (firstContent.some((bid) => bid.bidSrno === newBid.bidSrno)) {
+                  return prev;
+                }
+                return {
+                  ...prev,
+                  pages: [
+                    { ...firstPage, content: [newBid, ...firstContent] },
+                    ...prev.pages.slice(1),
+                  ],
+                };
+              }
+            );
             break;
           default:
             break;
@@ -263,7 +304,7 @@ const AuctionDetail: React.FC = () => {
         console.error("메시지 파싱 오류:", e);
       }
     },
-    [setBidHistory]
+    [auctionId, queryClient]
   );
 
   const { isConnected, isRetrying, connectionState } = useStomp({
@@ -271,6 +312,13 @@ const AuctionDetail: React.FC = () => {
     onMessage: handleNewMessage,
   });
 
+  const hasAnyBid = (auctionDetail?.currentBid ?? 0) > 0;
+  const currentBidPrice =
+    auctionDetail == null
+      ? 0
+      : hasAnyBid
+      ? auctionDetail.currentBid
+      : auctionDetail.startBid;
   const minBidPrice =
     auctionDetail == null
       ? 0
@@ -327,15 +375,24 @@ const AuctionDetail: React.FC = () => {
       await auctionApi.placeBid(auctionId!, bid);
       setNewBidAmount("");
 
-      setParticipationStatus((prev) => ({
-        ...prev,
-        lastBidPrice: bid,
-      }));
+      queryClient.setQueryData(
+        ["auctions", "participation", auctionId],
+        (prev: AuctionParticipationResponse | undefined) => ({
+          ...(prev ?? {
+            isParticipated: true,
+            isWithdrawn: false,
+            isRefund: false,
+          }),
+          lastBidPrice: bid,
+        })
+      );
 
       const shouldFallbackRefetch =
         connectionState === "disconnected" || connectionState === "failed";
       if (shouldFallbackRefetch) {
-        await fetchAuctionDetail();
+        await queryClient.invalidateQueries({
+          queryKey: ["auctions", "detail", auctionId],
+        });
         await refreshBidHistoryFirstPage();
       }
       alert("입찰이 성공적으로 접수되었습니다.");
@@ -353,7 +410,10 @@ const AuctionDetail: React.FC = () => {
       const res = await auctionApi.withdrawnParticipation(auctionId!);
       setNewBidAmount("");
 
-      setParticipationStatus(res.data);
+      queryClient.setQueryData(
+        ["auctions", "participation", auctionId],
+        res.data
+      );
       setOpenWithdrawnPopup(false);
       alert("경매 참여가 포기되었습니다.");
     } catch (err: any) {
@@ -406,11 +466,20 @@ const AuctionDetail: React.FC = () => {
         depositAmount,
       });
 
-      window.dispatchEvent(
-        new CustomEvent("deposit:decrement", { detail: depositAmount })
+      queryClient.setQueryData(
+        ["deposit", "balance"],
+        (prev: number | undefined) => {
+          const base = typeof prev === "number" ? prev : 0;
+          const next = Math.max(base - depositAmount, 0);
+          localStorage.setItem("depositBalance", String(next));
+          return next;
+        }
       );
 
-      setParticipationStatus(res.data);
+      queryClient.setQueryData(
+        ["auctions", "participation", auctionId],
+        res.data
+      );
       setOpenDepositPrompt(false);
       alert("보증금 결제가 완료되었습니다. 이제 입찰할 수 있습니다.");
     } catch (error: any) {
@@ -420,7 +489,7 @@ const AuctionDetail: React.FC = () => {
     }
   };
 
-  if (loading)
+  if (auctionDetailQuery.isLoading)
     return (
       <Container
         maxWidth={false}
@@ -478,26 +547,15 @@ const AuctionDetail: React.FC = () => {
         </Grid>
       </Container>
     );
-  if (error)
-    return (
-      <Container sx={{ mt: 5 }}>
-        <Alert severity="error">{error}</Alert>
-      </Container>
-    );
-  if (!auctionDetail)
-    return (
-      <Container sx={{ mt: 5 }}>
-        <Alert severity="warning">경매 정보를 찾을 수 없습니다.</Alert>
-      </Container>
-    );
+  const canRenderDetail = !!auctionDetail;
 
   const isAuctionInProgress =
-    auctionDetail.status === AuctionStatus.IN_PROGRESS;
-  const isAuctionInReday = auctionDetail.status === AuctionStatus.READY;
+    auctionDetail?.status === AuctionStatus.IN_PROGRESS;
+  const isAuctionInReday = auctionDetail?.status === AuctionStatus.READY;
   const canEdit =
-    auctionDetail.status === AuctionStatus.READY &&
+    auctionDetail?.status === AuctionStatus.READY &&
     user &&
-    (user.role === "ADMIN" || user?.userId === auctionDetail.sellerId);
+    user?.userId === auctionDetail.sellerId;
 
   return (
     <>
@@ -531,25 +589,37 @@ const AuctionDetail: React.FC = () => {
                     overflow: "auto",
                   }}
                 >
-                  <BidHistory
-                    isAuthenticated={isAuthenticated}
-                    bidHistory={bidHistory}
-                    fetchMoreHistory={fetchMoreHistory}
-                    hasMore={hasMore}
-                  />
+                  {bidHistoryErrorMessage ? (
+                    <Alert severity="error">{bidHistoryErrorMessage}</Alert>
+                  ) : (
+                    <BidHistory
+                      isAuthenticated={isAuthenticated}
+                      bidHistory={bidHistory}
+                      fetchMoreHistory={() => bidHistoryQuery.fetchNextPage()}
+                      hasMore={!!bidHistoryQuery.hasNextPage}
+                    />
+                  )}
                 </CardContent>
               </Card>
               <Card>
                 <CardHeader title="참여 현황" />
 
                 <CardContent>
-                  <AuctionParticipationStatus
-                    participationStatus={participationStatus}
-                    depositAmount={auctionDetail.depositAmount}
-                    auctionStatus={auctionDetail.status}
-                    setOpenPopup={() => setOpenWithdrawnPopup(true)}
-                    refundRequest={refundRequest}
-                  />
+                  {participationErrorMessage ? (
+                    <Alert severity="error">{participationErrorMessage}</Alert>
+                  ) : canRenderDetail ? (
+                    <AuctionParticipationStatus
+                      participationStatus={participationStatus}
+                      depositAmount={auctionDetail.depositAmount}
+                      auctionStatus={auctionDetail.status}
+                      setOpenPopup={() => setOpenWithdrawnPopup(true)}
+                      refundRequest={refundRequest}
+                    />
+                  ) : (
+                    <Alert severity="error">
+                      경매 정보를 불러오지 못했습니다.
+                    </Alert>
+                  )}
                 </CardContent>
               </Card>
             </Stack>
@@ -564,6 +634,7 @@ const AuctionDetail: React.FC = () => {
                   size="small"
                   variant="outlined"
                   onClick={() => setProductDrawerOpen(true)}
+                  disabled={!canRenderDetail}
                 >
                   상품 정보
                 </Button>
@@ -571,41 +642,59 @@ const AuctionDetail: React.FC = () => {
             />
             <CardContent>
               <Stack spacing={2}>
-                <AuctionInfoPanel
-                  productName={auctionDetail.productName}
-                  status={auctionDetail.status}
-                  isAuctionInProgress={isAuctionInProgress}
-                  isConnected={isConnected}
-                  isRetrying={isRetrying}
-                  canEdit={canEdit || false}
-                  auctionId={auctionId!}
-                />
+                {errorMessage ? (
+                  <Alert severity="error">{errorMessage}</Alert>
+                ) : canRenderDetail ? (
+                  <AuctionInfoPanel
+                    productName={auctionDetail.productName}
+                    status={auctionDetail.status}
+                    isAuctionInProgress={isAuctionInProgress}
+                    isConnected={isConnected}
+                    isRetrying={isRetrying}
+                    canEdit={canEdit || false}
+                    auctionId={auctionId!}
+                  />
+                ) : (
+                  <Alert severity="error">경매 정보를 불러오지 못했습니다.</Alert>
+                )}
                 <Divider />
-                <AuctionBiddingPanel
-                  status={auctionDetail.status}
-                  currentBidPrice={currentBidPrice}
-                  hasAnyBid={hasAnyBid}
-                  highestBidderInfo={highestBidderInfo}
-                  currentUserCount={currentUserCount}
-                  auctionEndAt={auctionDetail.auctionEndAt}
-                  auctionStartAt={auctionDetail.auctionStartAt}
-                  startBid={auctionDetail.startBid}
-                />
+                {canRenderDetail ? (
+                  <AuctionBiddingPanel
+                    status={auctionDetail.status}
+                    currentBidPrice={currentBidPrice}
+                    hasAnyBid={hasAnyBid}
+                    highestBidderInfo={highestBidderInfo}
+                    currentUserCount={currentUserCount}
+                    auctionEndAt={auctionDetail.auctionEndAt}
+                    auctionStartAt={auctionDetail.auctionStartAt}
+                    startBid={auctionDetail.startBid}
+                  />
+                ) : (
+                  <Alert severity="info">
+                    경매 정보를 불러오는 중입니다.
+                  </Alert>
+                )}
                 <Divider />
-                <AuctionBidForm
-                  isAuctionInReady={isAuctionInReday}
-                  isAuctionInProgress={isAuctionInProgress}
-                  currentBidPrice={currentBidPrice}
-                  minBidPrice={minBidPrice}
-                  hasAnyBid={hasAnyBid}
-                  newBidAmount={newBidAmount}
-                  setNewBidAmount={setNewBidAmount}
-                  handleBidSubmit={handleBidSubmit}
-                  bidLoading={bidLoading}
-                  isConnected={isConnected}
-                  isWithdrawn={participationStatus.isWithdrawn}
-                  isAuthenticated={isAuthenticated}
-                />
+                {canRenderDetail ? (
+                  <AuctionBidForm
+                    isAuctionInReady={isAuctionInReday}
+                    isAuctionInProgress={isAuctionInProgress}
+                    currentBidPrice={currentBidPrice}
+                    minBidPrice={minBidPrice}
+                    hasAnyBid={hasAnyBid}
+                    newBidAmount={newBidAmount}
+                    setNewBidAmount={setNewBidAmount}
+                    handleBidSubmit={handleBidSubmit}
+                    bidLoading={bidLoading}
+                    isConnected={isConnected}
+                    isWithdrawn={participationStatus.isWithdrawn}
+                    isAuthenticated={isAuthenticated}
+                  />
+                ) : (
+                  <Alert severity="info">
+                    경매 정보를 불러오면 입찰할 수 있습니다.
+                  </Alert>
+                )}
               </Stack>
             </CardContent>
           </Card>
@@ -619,7 +708,7 @@ const AuctionDetail: React.FC = () => {
         openDepositPrompt={openDepositPrompt}
         setOpenDepositPrompt={setOpenDepositPrompt}
         handleCloseDepositPrompt={handleCloseDepositPrompt}
-        depositAmount={auctionDetail.depositAmount}
+        depositAmount={auctionDetail?.depositAmount ?? 0}
         openWithdrawnPopup={openWithdrawnPopup}
         setOpenWithdrawnPopup={setOpenWithdrawnPopup}
         handleWithdraw={handleWithdraw}
@@ -733,15 +822,19 @@ const AuctionDetail: React.FC = () => {
             </Button>
             <Button
               variant="contained"
-              onClick={() => navigate(`/products/${auctionDetail.productId}`)}
+              onClick={() =>
+                auctionDetail &&
+                navigate(`/products/${auctionDetail.productId}`)
+              }
+              disabled={!auctionDetail}
             >
               상품 상세보기
             </Button>
           </Stack>
           <ProductInfo
             imageUrls={getProductImageUrls()}
-            productName={auctionDetail.productName}
-            description={auctionDetail.description}
+            productName={auctionDetail?.productName ?? ""}
+            description={auctionDetail?.description ?? ""}
           />
         </Stack>
       </Drawer>

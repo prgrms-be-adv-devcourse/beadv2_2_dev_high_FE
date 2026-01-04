@@ -16,7 +16,7 @@ import {
   Typography,
 } from "@mui/material";
 import { format } from "date-fns";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { Link as RouterLink, useLocation, useNavigate } from "react-router-dom";
 import { depositApi } from "../apis/depositApi";
 import { orderApi } from "../apis/orderApi";
@@ -24,6 +24,7 @@ import { DepositChargeDialog } from "../components/mypage/DepositChargeDialog";
 import { OrdersTab, type OrderFilter } from "../components/mypage/OrdersTab";
 import { requestTossPayment } from "../components/tossPay/requestTossPayment";
 import { useAuth } from "../contexts/AuthContext";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { OrderStatus, type OrderResponse } from "../types/order";
 import { formatWon } from "../utils/money";
 
@@ -47,17 +48,9 @@ const PendingOrders: React.FC = () => {
   const [historyFilter, setHistoryFilter] =
     useState<OrderFilter>(initialHistoryFilter);
 
-  const [orders, setOrders] = useState<OrderResponse[]>([]);
-  const [loading, setLoading] = useState(false);
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
+  const queryClient = useQueryClient();
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyError, setHistoryError] = useState<string | null>(null);
-  const [soldOrders, setSoldOrders] = useState<OrderResponse[]>([]);
-  const [boughtOrders, setBoughtOrders] = useState<OrderResponse[]>([]);
-  const [historyLoaded, setHistoryLoaded] = useState(false);
 
   const [insufficientOpen, setInsufficientOpen] = useState(false);
   const [insufficientInfo, setInsufficientInfo] = useState<{
@@ -85,47 +78,87 @@ const PendingOrders: React.FC = () => {
     [location.search, navigate]
   );
 
-  const loadPendingOrders = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
+  const pendingQuery = useQuery({
+    queryKey: ["orders", "pending", user?.userId],
+    queryFn: async () => {
       const res = await orderApi.getOrderByStatus("bought", OrderStatus.UNPAID);
-      const list = Array.isArray(res.data) ? res.data : [];
-      // 구매 내역 중 상태가 UNPAID인 주문만 필터링
-      setOrders(list);
-    } catch (err) {
-      console.error("구매 대기 주문 조회 실패:", err);
-      setError("구매 대기 주문을 불러오는 데 실패했습니다.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+      return Array.isArray(res.data) ? res.data : [];
+    },
+    enabled: isAuthenticated,
+    staleTime: 30_000,
+  });
 
-  const loadOrderHistory = useCallback(async () => {
-    if (historyLoading) return;
-    setHistoryLoading(true);
-    setHistoryError(null);
-    try {
-      const boughtRes = await orderApi.getOrderByStatus("bought");
-      const bought = Array.isArray(boughtRes.data) ? boughtRes.data : [];
-      setBoughtOrders(bought);
+  const pendingErrorMessage = useMemo(() => {
+    if (!pendingQuery.isError) return null;
+    const err: any = pendingQuery.error;
+    return (
+      err?.data?.message ?? err?.message ?? "구매 대기 주문을 불러오는 데 실패했습니다."
+    );
+  }, [pendingQuery.error, pendingQuery.isError]);
 
-      if (user?.role !== "USER") {
-        const soldRes = await orderApi.getOrderByStatus("sold");
-        const sold = Array.isArray(soldRes.data) ? soldRes.data : [];
-        setSoldOrders(sold);
-      } else {
-        setSoldOrders([]);
-      }
+  const orders = pendingQuery.data ?? [];
+  const boughtHistoryQuery = useQuery({
+    queryKey: ["orders", "history", "bought", user?.userId],
+    queryFn: async () => {
+      const res = await orderApi.getOrderByStatus("bought");
+      return Array.isArray(res.data) ? res.data : [];
+    },
+    enabled:
+      isAuthenticated && viewMode === "HISTORY" && historyFilter === "BOUGHT",
+    staleTime: 30_000,
+  });
 
-      setHistoryLoaded(true);
-    } catch (err) {
-      console.error("주문 내역 조회 실패:", err);
-      setHistoryError("주문 내역을 불러오는 데 실패했습니다.");
-    } finally {
-      setHistoryLoading(false);
-    }
-  }, [historyLoading, user?.role]);
+  const soldHistoryQuery = useQuery({
+    queryKey: ["orders", "history", "sold", user?.userId],
+    queryFn: async () => {
+      const res = await orderApi.getOrderByStatus("sold");
+      return Array.isArray(res.data) ? res.data : [];
+    },
+    enabled:
+      isAuthenticated &&
+      viewMode === "HISTORY" &&
+      historyFilter === "SOLD" &&
+      user?.role !== "USER",
+    staleTime: 30_000,
+  });
+
+  const boughtHistoryError = useMemo(() => {
+    if (!boughtHistoryQuery.isError) return null;
+    const err: any = boughtHistoryQuery.error;
+    return err?.data?.message ?? err?.message ?? "구매 내역을 불러오는데 실패했습니다.";
+  }, [boughtHistoryQuery.error, boughtHistoryQuery.isError]);
+
+  const soldHistoryError = useMemo(() => {
+    if (!soldHistoryQuery.isError) return null;
+    const err: any = soldHistoryQuery.error;
+    return err?.data?.message ?? err?.message ?? "판매 내역을 불러오는데 실패했습니다.";
+  }, [soldHistoryQuery.error, soldHistoryQuery.isError]);
+
+  const historyBought = boughtHistoryQuery.data ?? [];
+  const historySold = soldHistoryQuery.data ?? [];
+
+  const setDepositBalanceCache = useCallback(
+    (next: number) => {
+      queryClient.setQueryData(["deposit", "balance"], next);
+      localStorage.setItem("depositBalance", String(next));
+    },
+    [queryClient]
+  );
+
+  const decrementDepositBalance = useCallback(
+    (amount: number) => {
+      queryClient.setQueryData(
+        ["deposit", "balance"],
+        (prev: number | undefined) => {
+          const base = typeof prev === "number" ? prev : 0;
+          const next = Math.max(base - amount, 0);
+          localStorage.setItem("depositBalance", String(next));
+          return next;
+        }
+      );
+    },
+    [queryClient]
+  );
 
   const handleCompleteByDeposit = async (orderId: string) => {
     if (actionLoadingId) return;
@@ -146,21 +179,26 @@ const PendingOrders: React.FC = () => {
         userId: user?.userId,
       });
       alert("구매가 완료되었습니다.");
-      window.dispatchEvent(new CustomEvent("orders:pending-decrement", { detail: 1 }));
       if (typeof info?.balance === "number") {
-        window.dispatchEvent(
-          new CustomEvent("deposit:set", { detail: info.balance })
-        );
+        setDepositBalanceCache(info.balance);
       } else {
-        window.dispatchEvent(
-          new CustomEvent("deposit:decrement", { detail: payableAmount })
-        );
+        decrementDepositBalance(payableAmount);
       }
-      window.dispatchEvent(new Event("orders:refresh"));
-      loadPendingOrders();
-      if (historyLoaded) {
-        loadOrderHistory();
-      }
+      queryClient.setQueryData(
+        ["orders", "pendingCount"],
+        (prev: number | undefined) =>
+          Math.max((typeof prev === "number" ? prev : 0) - 1, 0)
+      );
+      queryClient.setQueryData(
+        ["orders", "pending", user?.userId],
+        (prev: OrderResponse[] | undefined) =>
+          (prev ?? []).filter((item) => item.id !== orderId)
+      );
+      await queryClient.invalidateQueries({ queryKey: ["orders", "pending"] });
+      await queryClient.invalidateQueries({ queryKey: ["orders", "history"] });
+      await queryClient.invalidateQueries({
+        queryKey: ["orders", "pendingCount"],
+      });
     } catch (err: any) {
       console.error("구매 실패:", err);
       if (err.status === 400) {
@@ -191,16 +229,6 @@ const PendingOrders: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    loadPendingOrders();
-  }, [loadPendingOrders]);
-
-  useEffect(() => {
-    if (viewMode === "HISTORY" && !historyLoaded) {
-      loadOrderHistory();
-    }
-  }, [historyLoaded, loadOrderHistory, viewMode]);
-
   return (
     <Container maxWidth="md">
       <Box sx={{ my: 4 }}>
@@ -217,9 +245,6 @@ const PendingOrders: React.FC = () => {
             if (!v) return;
             setViewMode(v);
             updateUrlState({ view: v });
-            if (v === "HISTORY" && !historyLoaded) {
-              loadOrderHistory();
-            }
           }}
           sx={{ mb: 2 }}
         >
@@ -229,10 +254,13 @@ const PendingOrders: React.FC = () => {
 
         {viewMode === "HISTORY" ? (
           <OrdersTab
-            loading={historyLoading}
-            error={historyError}
-            sold={soldOrders}
-            bought={boughtOrders}
+            boughtLoading={boughtHistoryQuery.isLoading}
+            soldLoading={soldHistoryQuery.isLoading}
+            boughtError={boughtHistoryError}
+            soldError={soldHistoryError}
+            sold={historySold}
+            bought={historyBought}
+            filter={historyFilter}
             initialFilter={historyFilter}
             onFilterChange={(next) => {
               setHistoryFilter(next);
@@ -240,11 +268,11 @@ const PendingOrders: React.FC = () => {
             }}
           />
         ) : (
-        <Paper sx={{ p: 2 }}>
-            {loading ? (
+          <Paper sx={{ p: 2 }}>
+            {pendingQuery.isLoading ? (
               <Typography>로딩 중...</Typography>
-            ) : error ? (
-              <Alert severity="error">{error}</Alert>
+            ) : pendingErrorMessage ? (
+              <Alert severity="error">{pendingErrorMessage}</Alert>
             ) : orders.length === 0 ? (
               <Alert severity="info">구매 대기 중인 주문이 없습니다.</Alert>
             ) : (

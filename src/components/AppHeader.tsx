@@ -23,180 +23,60 @@ import {
 import { Link as RouterLink } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useThemeContext } from "../contexts/ThemeProvider";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { notificationApi } from "../apis/notificationApi";
-import { depositApi } from "../apis/depositApi";
 import { orderApi } from "../apis/orderApi";
+import { depositApi } from "../apis/depositApi";
 import { OrderStatus } from "../types/order";
 import { formatWon } from "../utils/money";
 
 export const AppHeader: React.FC = () => {
   const { isAuthenticated, user, logout } = useAuth();
   const { mode, toggleColorMode } = useThemeContext();
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [depositBalance, setDepositBalance] = useState<number | null>(null);
-  const [pendingOrderCount, setPendingOrderCount] = useState(0);
+  const storedBalance = useMemo(() => {
+    const raw = localStorage.getItem("depositBalance");
+    const parsed = raw != null ? Number(raw) : NaN;
+    return Number.isFinite(parsed) ? parsed : null;
+  }, []);
 
   // 로그인된 경우에만 미확인 알림 개수 조회
-  useEffect(() => {
-    let cancelled = false;
+  const unreadQuery = useQuery({
+    queryKey: ["notifications", "unreadCount"],
+    queryFn: notificationApi.getUnreadCount,
+    enabled: isAuthenticated,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+  });
 
-    const fetchUnreadCount = async () => {
-      if (!isAuthenticated || !user?.userId) {
-        setUnreadCount(0);
-        return;
-      }
+  const depositQuery = useQuery({
+    queryKey: ["deposit", "balance"],
+    queryFn: async () => {
+      const info = await depositApi.getAccount();
+      return info?.balance ?? 0;
+    },
+    enabled: isAuthenticated,
+    staleTime: 30_000,
+    gcTime: 10 * 60_000,
+    placeholderData: storedBalance ?? undefined,
+  });
 
-      try {
-        const pageRes = await notificationApi.getNotifications({
-          userId: user.userId,
-          page: 0,
-          size: 50,
-        });
-        if (cancelled) return;
-        const count =
-          pageRes.content?.filter((n) => n && n.readYn === false).length ?? 0;
-        setUnreadCount(count);
-      } catch (err) {
-        if (!cancelled) {
-          console.error("미확인 알림 개수 조회 실패:", err);
-          setUnreadCount(0);
-        }
-      }
-    };
-
-    fetchUnreadCount();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isAuthenticated, user?.userId]);
+  const pendingQuery = useQuery({
+    queryKey: ["orders", "pendingCount"],
+    queryFn: async () => {
+      const res = await orderApi.getStatusCount(OrderStatus.UNPAID);
+      return typeof res.data === "number" ? res.data : 0;
+    },
+    enabled: isAuthenticated,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+  });
 
   useEffect(() => {
-    const handleNotificationRead = () => {
-      setUnreadCount((prev) => Math.max(prev - 1, 0));
-    };
-    window.addEventListener("notification:read", handleNotificationRead);
-    return () => {
-      window.removeEventListener("notification:read", handleNotificationRead);
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    const fetchBalance = async () => {
-      if (!isAuthenticated || !user?.userId) {
-        setDepositBalance(null);
-        return;
-      }
-      try {
-        const info = await depositApi.getAccount();
-        if (!cancelled) {
-          setDepositBalance(info?.balance ?? 0);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          console.error("예치금 잔액 조회 실패:", err);
-          setDepositBalance(null);
-        }
-      }
-    };
-    fetchBalance();
-    return () => {
-      cancelled = true;
-    };
-  }, [isAuthenticated, user?.userId]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const fetchPendingOrderCount = async () => {
-      if (!isAuthenticated || !user?.userId) {
-        setPendingOrderCount(0);
-        return;
-      }
-      try {
-        const res = await orderApi.getStatusCount(OrderStatus.UNPAID);
-        if (cancelled) return;
-        setPendingOrderCount(typeof res.data === "number" ? res.data : 0);
-      } catch (err) {
-        if (!cancelled) {
-          console.error("구매 대기 주문 카운트 조회 실패:", err);
-          setPendingOrderCount(0);
-        }
-      }
-    };
-
-    fetchPendingOrderCount();
-
-    const handleRefresh = () => fetchPendingOrderCount();
-    window.addEventListener("orders:refresh", handleRefresh);
-    const handlePendingDecrement = (event: Event) => {
-      const delta = (event as CustomEvent<number>).detail ?? 1;
-      if (typeof delta !== "number" || Number.isNaN(delta)) return;
-      setPendingOrderCount((prev) => Math.max(prev - delta, 0));
-    };
-    window.addEventListener(
-      "orders:pending-decrement",
-      handlePendingDecrement as EventListener
-    );
-    return () => {
-      cancelled = true;
-      window.removeEventListener("orders:refresh", handleRefresh);
-      window.removeEventListener(
-        "orders:pending-decrement",
-        handlePendingDecrement as EventListener
-      );
-    };
-  }, [isAuthenticated, user?.userId]);
-
-  useEffect(() => {
-    const applyDelta = (delta: number) => {
-      setDepositBalance((prev) => {
-        const base = typeof prev === "number" ? prev : 0;
-        return Math.max(base + delta, 0);
-      });
-    };
-
-    const handleIncrement = (event: Event) => {
-      const delta = (event as CustomEvent<number>).detail ?? 0;
-      if (typeof delta !== "number" || Number.isNaN(delta)) return;
-      applyDelta(delta);
-    };
-
-    const handleDecrement = (event: Event) => {
-      const delta = (event as CustomEvent<number>).detail ?? 0;
-      if (typeof delta !== "number" || Number.isNaN(delta)) return;
-      applyDelta(-delta);
-    };
-
-    const handleSet = (event: Event) => {
-      const nextBalance = (event as CustomEvent<number>).detail;
-      if (typeof nextBalance !== "number" || Number.isNaN(nextBalance)) return;
-      setDepositBalance(Math.max(nextBalance, 0));
-    };
-
-    window.addEventListener(
-      "deposit:increment",
-      handleIncrement as EventListener
-    );
-    window.addEventListener(
-      "deposit:decrement",
-      handleDecrement as EventListener
-    );
-    window.addEventListener("deposit:set", handleSet as EventListener);
-    return () => {
-      window.removeEventListener(
-        "deposit:increment",
-        handleIncrement as EventListener
-      );
-      window.removeEventListener(
-        "deposit:decrement",
-        handleDecrement as EventListener
-      );
-      window.removeEventListener("deposit:set", handleSet as EventListener);
-    };
-  }, []);
+    if (!isAuthenticated) return;
+    if (depositQuery.data == null) return;
+    localStorage.setItem("depositBalance", String(depositQuery.data));
+  }, [depositQuery.data, isAuthenticated]);
 
   const handleLogout = () => {
     logout();
@@ -261,7 +141,11 @@ export const AppHeader: React.FC = () => {
                 }}
               >
                 예치금{" "}
-                {depositBalance != null ? formatWon(depositBalance) : "0원"}
+                {depositQuery.data != null
+                  ? formatWon(depositQuery.data)
+                  : depositQuery.isLoading
+                  ? "불러오는 중"
+                  : "-"}
               </Typography>
             )}
 
@@ -297,9 +181,9 @@ export const AppHeader: React.FC = () => {
                     color="inherit"
                   >
                     <Badge
-                      badgeContent={pendingOrderCount}
+                      badgeContent={pendingQuery.data ?? 0}
                       color="error"
-                      invisible={pendingOrderCount === 0}
+                      invisible={(pendingQuery.data ?? 0) === 0}
                     >
                       <ReceiptIcon />
                     </Badge>
@@ -313,9 +197,9 @@ export const AppHeader: React.FC = () => {
                     color="inherit"
                   >
                     <Badge
-                      badgeContent={unreadCount}
+                      badgeContent={unreadQuery.data ?? 0}
                       color="error"
-                      invisible={unreadCount === 0}
+                      invisible={(unreadQuery.data ?? 0) === 0}
                     >
                       <NotificationsIcon />
                     </Badge>

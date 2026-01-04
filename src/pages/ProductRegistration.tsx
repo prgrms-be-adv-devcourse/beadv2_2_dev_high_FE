@@ -50,6 +50,7 @@ import {
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { auctionApi } from "../apis/auctionApi";
 import { categoryApi } from "../apis/categoryApi";
 import { fileApi } from "../apis/fileApi";
@@ -66,7 +67,6 @@ import type {
 import { ProductStatus } from "../types/product";
 
 import { ko } from "date-fns/locale";
-import { UserRole } from "../types/user";
 import { getProductImageUrls } from "../utils/images";
 import { MoneyInput } from "../components/inputs/MoneyInput";
 
@@ -186,12 +186,10 @@ const ProductRegistration: React.FC = () => {
     reset,
   } = useForm<ProductAuctionFormData>();
 
-  const [allCategories, setAllCategories] = useState<ProductCategory[]>([]);
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
   const [localImages, setLocalImages] = useState<LocalImage[]>([]);
   const [useExistingImages, setUseExistingImages] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMessage, setDialogMessage] = useState("");
@@ -224,6 +222,32 @@ const ProductRegistration: React.FC = () => {
       );
     };
   }, []);
+
+  const categoriesQuery = useQuery({
+    queryKey: ["categories"],
+    queryFn: async () => {
+      const response = await categoryApi.getCategories();
+      return response.data as ProductCategory[];
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  const productDetailQuery = useQuery({
+    queryKey: ["products", "detail", productId],
+    queryFn: () => productApi.getProductById(productId as string),
+    enabled: !!productId,
+    staleTime: 30_000,
+  });
+
+  const categories = categoriesQuery.data ?? [];
+  const categoriesLoading = categoriesQuery.isLoading;
+  const dataError = useMemo(() => {
+    const err: any = categoriesQuery.error ?? productDetailQuery.error;
+    if (!err) return null;
+    return err?.data?.message ?? err?.message ?? "데이터를 불러오는 데 실패했습니다.";
+  }, [categoriesQuery.error, productDetailQuery.error]);
+  const pageError = dataError ?? error;
+  const formLoading = loading || productDetailQuery.isLoading;
 
   const clearLocalImages = () => {
     setLocalImages((prev) => {
@@ -258,135 +282,100 @@ const ProductRegistration: React.FC = () => {
   };
 
   useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        setCategoriesLoading(true);
-        const response = await categoryApi.getCategories();
-        setAllCategories(response.data);
-      } catch (err) {
-        console.error("카테고리 목록 로딩 실패:", err);
-        setError("카테고리 목록을 불러오는 데 실패했습니다.");
-      } finally {
-        setCategoriesLoading(false);
-      }
-    };
+    if (productId || auctionId) return;
+    const nextHour = setMilliseconds(
+      setSeconds(setMinutes(addHours(new Date(), 1), 0), 0),
+      0
+    );
 
-    const fetchData = async () => {
-      if (!productId && !auctionId) {
-        // 신규 등록 - 기본 시간 설정
-        const nextHour = setMilliseconds(
-          setSeconds(setMinutes(addHours(new Date(), 1), 0), 0),
-          0
-        );
+    reset({
+      auctionStartAt: format(nextHour, "yyyy-MM-dd HH:mm", { locale: ko }),
+      auctionEndAt: format(
+        nextHour.setDate(nextHour.getDate() + 1),
+        "yyyy-MM-dd HH:mm",
+        { locale: ko }
+      ),
+    });
+    setHasActiveAuction(false);
+    setUseExistingImages(false);
+    clearLocalImages();
+  }, [auctionId, productId, reset]);
 
-        reset({
-          auctionStartAt: format(nextHour, "yyyy-MM-dd HH:mm", { locale: ko }),
-          auctionEndAt: format(
-            nextHour.setDate(nextHour.getDate() + 1),
-            "yyyy-MM-dd HH:mm",
-            { locale: ko }
+  useEffect(() => {
+    const productResponse = productDetailQuery.data?.data;
+    if (!productResponse) return;
+    const { product: productData, auctions = [] } = productResponse;
+    let auctionData: Auction | null = null;
+
+    if (!productData) {
+      setError("상품 정보를 찾을 수 없습니다.");
+      navigate("/");
+      return;
+    }
+
+    auctionData =
+      auctions.find(
+        (auction: Auction) => auction.status === AuctionStatus.READY
+      ) || null;
+
+    const blockingAuctionExists = auctions.some(
+      (auction: Auction) => auction.status === AuctionStatus.READY
+    );
+    setHasActiveAuction(blockingAuctionExists);
+
+    if (user?.userId !== productData.sellerId) {
+      alert("수정할 권한이 없습니다.");
+      navigate(-1);
+      return;
+    }
+
+    if (auctionData && auctionData.status !== AuctionStatus.READY) {
+      alert("대기 중인 경매만 수정할 수 있습니다.");
+      navigate(-1);
+      return;
+    }
+
+    reset({
+      name: productData.name,
+      description: productData.description,
+      startBid: auctionData?.startBid,
+      categoryIds: (productData.categories ?? []).map((c) =>
+        typeof c === "string" ? c : String(c.id)
+      ),
+      auctionStartAt:
+        auctionData?.auctionStartAt.slice(0, 16) ||
+        format(
+          setMilliseconds(
+            setSeconds(setMinutes(addHours(new Date(), 1), 0), 0),
+            0
           ),
-        });
-        setHasActiveAuction(false);
-        setUseExistingImages(false);
-        clearLocalImages();
-        return;
-      }
-
-      setLoading(true);
-      try {
-        let productData: Product | null = null;
-        let auctionData: Auction | null = null;
-
-        // 상품 ID로 조회
-        if (productId) {
-          const productResponse = await productApi.getProductById(productId);
-          productData = productResponse.data.product;
-          const auctions = productResponse.data.auctions || [];
-          // 상품의 경매 목록 조회
-
-          // 수정 가능한 경매 찾기 (READY 상태)
-          auctionData =
-            auctions.find(
-              (auction: Auction) => auction.status === AuctionStatus.READY
-            ) || null;
-
-          const blockingAuctionExists = auctions.some(
-            (auction: Auction) => auction.status === AuctionStatus.READY
-          );
-          setHasActiveAuction(blockingAuctionExists);
-        }
-
-        // 권한 체크
-        if (user?.userId !== productData?.sellerId) {
-          if (user?.role !== "ADMIN") {
-            alert("수정할 권한이 없습니다.");
-            navigate(-1);
-
-            return;
-          }
-        }
-
-        // 경매 상태 체크 (수정 모드에서만)
-        if (auctionData && auctionData.status !== AuctionStatus.READY) {
-          alert("대기 중인 경매만 수정할 수 있습니다.");
-          navigate(-1);
-          return;
-        }
-        console.log(productData, auctionData);
-        // 폼 데이터 설정
-        reset({
-          name: productData?.name,
-          description: productData?.description,
-          startBid: auctionData?.startBid,
-          categoryIds: (productData?.categories ?? [])?.map((c) =>
-            typeof c === "string" ? c : String(c.id)
+          "yyyy-MM-dd HH:mm",
+          { locale: ko }
+        ),
+      auctionEndAt:
+        auctionData?.auctionEndAt.slice(0, 16) ||
+        format(
+          setMilliseconds(
+            setSeconds(setMinutes(addHours(new Date(), 25), 0), 0),
+            0
           ),
-          auctionStartAt:
-            auctionData?.auctionStartAt.slice(0, 16) ||
-            format(
-              setMilliseconds(
-                setSeconds(setMinutes(addHours(new Date(), 1), 0), 0),
-                0
-              ),
-              "yyyy-MM-dd HH:mm",
-              { locale: ko }
-            ),
-          auctionEndAt:
-            auctionData?.auctionEndAt.slice(0, 16) ||
-            format(
-              setMilliseconds(
-                setSeconds(setMinutes(addHours(new Date(), 25), 0), 0),
-                0
-              ),
-              "yyyy-MM-dd HH:mm",
-              { locale: ko }
-            ),
-        });
+          "yyyy-MM-dd HH:mm",
+          { locale: ko }
+        ),
+    });
 
-        // 카테고리 설정
-        const selectedCategoryIds: string[] = (
-          productData?.categories ?? []
-        )?.map((c) => (typeof c === "string" ? c : String(c.id) ?? []));
-        setSelectedCategoryIds(selectedCategoryIds);
-        setCurrentProduct(productData);
-        setCurrentAuction(auctionData);
-        const hasExistingImages =
-          (productData?.fileGroup?.files?.length ?? 0) > 0 ||
-          (productData?.images?.length ?? 0) > 0 ||
-          !!productData?.imageUrl;
-        setUseExistingImages(hasExistingImages);
-      } catch (err) {
-        setError("데이터를 불러오는 데 실패했습니다.");
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchCategories();
-    fetchData();
-  }, [productId, auctionId, navigate, reset, user]);
+    const nextCategoryIds: string[] = (productData.categories ?? []).map((c) =>
+      typeof c === "string" ? c : String(c.id)
+    );
+    setSelectedCategoryIds(nextCategoryIds);
+    setCurrentProduct(productData);
+    setCurrentAuction(auctionData);
+    const hasExistingImages =
+      (productData.fileGroup?.files?.length ?? 0) > 0 ||
+      (productData.images?.length ?? 0) > 0 ||
+      !!productData.imageUrl;
+    setUseExistingImages(hasExistingImages);
+  }, [navigate, productDetailQuery.data, reset, user?.userId]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (!event.target.files) return;
@@ -427,7 +416,7 @@ const ProductRegistration: React.FC = () => {
   };
 
   const onSubmit = async (data: ProductAuctionFormData) => {
-    if (loading) return;
+    if (formLoading) return;
 
     setLoading(true);
     setError(null);
@@ -597,15 +586,14 @@ const ProductRegistration: React.FC = () => {
     }
   };
 
-  if (user?.role !== "SELLER" && user?.role !== "ADMIN" && !isEditMode) {
+  if (user?.role !== "SELLER" && !isEditMode) {
     return (
       <Container maxWidth="md">
         <Typography variant="h4" sx={{ my: 4 }}>
           상품 및 경매 등록
         </Typography>
         <Alert severity="error" sx={{ mb: 2 }}>
-          상품과 경매를 등록할 권한이 없습니다. 판매자 또는 관리자만 등록할 수
-          있습니다.
+          상품과 경매를 등록할 권한이 없습니다. 판매자만 등록할 수 있습니다.
         </Alert>
         <Button
           variant="contained"
@@ -622,8 +610,7 @@ const ProductRegistration: React.FC = () => {
   const canDeleteProduct = !!(
     isEditMode &&
     currentProduct &&
-    (user?.role === UserRole.ADMIN ||
-      user?.userId === currentProduct.sellerId) &&
+    user?.userId === currentProduct.sellerId &&
     deletableProductStatuses.includes(currentProduct.status) &&
     !hasActiveAuction
   );
@@ -631,8 +618,7 @@ const ProductRegistration: React.FC = () => {
   const canDeleteAuction = !!(
     currentProduct &&
     currentAuction &&
-    (user?.role === UserRole.ADMIN ||
-      user?.userId === currentProduct.sellerId) &&
+    user?.userId === currentProduct.sellerId &&
     deletableAuctionStatuses.includes(currentAuction.status)
   );
 
@@ -702,6 +688,11 @@ const ProductRegistration: React.FC = () => {
         </Stack>
       </Box>
       <Paper sx={{ p: 4, boxShadow: 2 }}>
+        {pageError && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {pageError}
+          </Alert>
+        )}
         <Box
           component="form"
           onSubmit={handleSubmit(onSubmit)}
@@ -710,7 +701,7 @@ const ProductRegistration: React.FC = () => {
         >
           <Box
             component="fieldset"
-            disabled={loading}
+            disabled={formLoading}
             sx={{ border: 0, p: 0, m: 0, minInlineSize: 0 }}
           >
           {/* 상품 정보 섹션 */}
@@ -760,7 +751,7 @@ const ProductRegistration: React.FC = () => {
           <FormControl component="fieldset" margin="normal" fullWidth>
             <FormLabel component="legend">카테고리</FormLabel>
             <FormGroup row>
-              {categoriesLoading && allCategories.length === 0
+              {categoriesLoading && categories.length === 0
                 ? Array.from({ length: 6 }).map((_, idx) => (
                     <FormControlLabel
                       key={idx}
@@ -768,7 +759,7 @@ const ProductRegistration: React.FC = () => {
                       label={<Skeleton width={80} />}
                     />
                   ))
-                : allCategories?.map((category) => (
+                : categories.map((category) => (
                     <FormControlLabel
                       key={category.id}
                       control={
@@ -1169,7 +1160,7 @@ const ProductRegistration: React.FC = () => {
             />
           </Box>
 
-          {error && (
+          {error && !dataError && (
             <Alert severity="error" sx={{ mt: 2 }}>
               {error}
             </Alert>
@@ -1180,7 +1171,7 @@ const ProductRegistration: React.FC = () => {
             fullWidth
             variant="contained"
             sx={{ mt: 3, mb: 2, py: 1.5 }}
-            disabled={loading}
+            disabled={formLoading}
           >
             {loading ? (
               <CircularProgress size={24} />

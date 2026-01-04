@@ -16,6 +16,7 @@ import {
 import FavoriteIcon from "@mui/icons-material/Favorite";
 import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
 import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { auctionApi } from "../apis/auctionApi";
 import { productApi } from "../apis/productApi";
 import { wishlistApi } from "../apis/wishlistApi";
@@ -33,7 +34,6 @@ const ProductDetail: React.FC = () => {
   const navigate = useNavigate();
   const [product, setProduct] = useState<Product | null>(null);
   const [auctions, setAuctions] = useState<Auction[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isWish, setIsWish] = useState(false);
   const [wishLoading, setWishLoading] = useState(false);
@@ -58,31 +58,42 @@ const ProductDetail: React.FC = () => {
     ProductStatus.CANCELLED,
   ];
 
-  useEffect(() => {
-    const fetchData = async () => {
+  const productQuery = useQuery({
+    queryKey: ["products", "detail", productId],
+    queryFn: async () => {
       if (!productId) {
-        setError("Product ID is missing.");
-        setLoading(false);
-        return;
+        throw new Error("Product ID is missing.");
       }
+      const productResponse = await productApi.getProductById(productId);
+      return productResponse.data;
+    },
+    enabled: !!productId,
+    staleTime: 30_000,
+  });
 
-      try {
-        setLoading(true);
-        const productResponse = await productApi.getProductById(productId);
-        const { auctions = [], product } = productResponse.data;
+  useEffect(() => {
+    if (!productQuery.data) return;
+    const { auctions = [], product } = productQuery.data;
+    setProduct(product);
+    setAuctions(Array.isArray(auctions) ? auctions : []);
+  }, [productQuery.data]);
 
-        setProduct(product);
-        setAuctions(Array.isArray(auctions) ? auctions : []);
-      } catch (err) {
-        console.error("Error fetching product details or auctions:", err);
-        setError("Failed to load product details or auctions.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [productId]);
+  useEffect(() => {
+    if (!productId) {
+      setError("Product ID is missing.");
+      return;
+    }
+    if (productQuery.isError) {
+      const err: any = productQuery.error;
+      setError(
+        err?.data?.message ??
+          err?.message ??
+          "Failed to load product details or auctions."
+      );
+    } else {
+      setError(null);
+    }
+  }, [productId, productQuery.error, productQuery.isError]);
 
   interface GalleryItem {
     key: string;
@@ -152,10 +163,8 @@ const ProductDetail: React.FC = () => {
     [auctions, activeAuction]
   );
 
-  const isOwnerOrAdmin =
-    user &&
-    product &&
-    (user.role === "ADMIN" || user.userId === product.sellerId);
+  const isOwner =
+    !!user?.userId && !!product?.sellerId && user.userId === product.sellerId;
 
   const hasPendingAuction = auctions.some(
     (auction) => auction.status === AuctionStatus.READY
@@ -164,14 +173,14 @@ const ProductDetail: React.FC = () => {
   const canEditProduct =
     !!activeAuction &&
     activeAuction.status === AuctionStatus.READY &&
-    !!isOwnerOrAdmin;
+    isOwner;
 
   const canReregisterAuction =
     ((!activeAuction && auctions.length > 0) || auctions.length === 0) &&
-    !!isOwnerOrAdmin;
+    isOwner;
 
   const canDeleteProduct = !!(
-    isOwnerOrAdmin &&
+    isOwner &&
     product &&
     deletableProductStatuses.includes(product.status) &&
     !hasPendingAuction
@@ -183,7 +192,7 @@ const ProductDetail: React.FC = () => {
   const isAuctionDeletable = (auction?: Auction | null) =>
     !!(
       auction &&
-      isOwnerOrAdmin &&
+      isOwner &&
       deletableAuctionStatuses.includes(auction.status)
     );
 
@@ -281,7 +290,7 @@ const ProductDetail: React.FC = () => {
     fetchWishlistStatus();
   }, [productId, user]);
 
-  if (loading) {
+  if (productQuery.isLoading) {
     return (
       <Container maxWidth="lg">
         <Box sx={{ my: 4 }}>
@@ -365,7 +374,7 @@ const ProductDetail: React.FC = () => {
             }}
           >
             <Stack direction="row" spacing={1} alignItems="center">
-              {isOwnerOrAdmin && (
+              {isOwner && (
                 <Button
                   variant="outlined"
                   color="error"
@@ -390,7 +399,7 @@ const ProductDetail: React.FC = () => {
                 </Button>
               )}
             </Stack>
-            {hasPendingAuction && isOwnerOrAdmin && (
+            {hasPendingAuction && isOwner && (
               <Typography
                 variant="body2"
                 color="warning.main"
