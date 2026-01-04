@@ -1,7 +1,7 @@
 {
   "name": "monorepo",
   "private": true,
-  "packageManager": "npm@9.8.1",
+  "packageManager": "pnpm@9.12.2",
   "engines": {
     "node": ">=18.18.0",
     "npm": ">=8.0.0"
@@ -12,13 +12,13 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run dev -w web",
-    "dev:web": "npm run dev -w web",
-    "dev:admin": "npm run dev -w admin",
-    "build": "npm run build -w web",
-    "build:web": "npm run build -w web",
-    "build:admin": "npm run build -w admin",
-    "lint:web": "npm run lint -w web",
-    "lint:admin": "npm run lint -w admin"
+    "dev": "pnpm --filter web dev",
+    "dev:web": "pnpm --filter web dev",
+    "dev:admin": "pnpm --filter admin dev",
+    "build": "pnpm --filter web build",
+    "build:web": "pnpm --filter web build",
+    "build:admin": "pnpm --filter admin build",
+    "lint:web": "pnpm --filter web lint",
+    "lint:admin": "pnpm --filter admin lint"
   }
 }
