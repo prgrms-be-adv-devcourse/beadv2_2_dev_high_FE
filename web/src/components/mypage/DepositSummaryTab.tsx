@@ -10,13 +10,13 @@ import {
   Skeleton,
   Typography,
 } from "@mui/material";
-import type { UserRole } from "@moreauction/types";
+import { hasRole, UserRole, type UserRoles } from "@moreauction/types";
 
 interface DepositSummaryTabProps {
   loading: boolean;
   error: string | null;
   sellerInfo: { bankName?: string; bankAccount?: string } | null;
-  role?: UserRole;
+  roles?: UserRoles;
   onCreateAccount: () => void;
 }
 
@@ -24,10 +24,11 @@ export const DepositSummaryTab: React.FC<DepositSummaryTabProps> = ({
   loading,
   error,
   sellerInfo,
-  role,
+  roles,
   onCreateAccount,
 }) => {
-  const isBuyerOnly = role === "USER";
+  const isBuyerOnly =
+    hasRole(roles, UserRole.USER) && !hasRole(roles, UserRole.SELLER);
 
   if (isBuyerOnly) {
     return (

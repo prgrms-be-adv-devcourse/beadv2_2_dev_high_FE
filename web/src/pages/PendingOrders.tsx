@@ -25,7 +25,7 @@ import { OrdersTab, type OrderFilter } from "../components/mypage/OrdersTab";
 import { requestTossPayment } from "../components/tossPay/requestTossPayment";
 import { useAuth } from "../contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { OrderStatus, type OrderResponse } from "@moreauction/types";
+import { hasRole, OrderStatus, UserRole, type OrderResponse } from "@moreauction/types";
 import { formatWon } from "@moreauction/utils";
 
 type OrdersViewMode = "PENDING" | "HISTORY";
@@ -118,7 +118,7 @@ const PendingOrders: React.FC = () => {
       isAuthenticated &&
       viewMode === "HISTORY" &&
       historyFilter === "SOLD" &&
-      user?.role !== "USER",
+      hasRole(user?.roles, UserRole.SELLER),
     staleTime: 30_000,
   });
 
@@ -179,8 +179,8 @@ const PendingOrders: React.FC = () => {
         userId: user?.userId,
       });
       alert("구매가 완료되었습니다.");
-      if (typeof info?.balance === "number") {
-        setDepositBalanceCache(info.balance);
+      if (typeof info?.data?.balance === "number") {
+        setDepositBalanceCache(info.data.balance);
       } else {
         decrementDepositBalance(payableAmount);
       }
@@ -204,7 +204,7 @@ const PendingOrders: React.FC = () => {
       if (err.status === 400) {
         try {
           const account = await depositApi.getAccount();
-          const balance = account?.balance ?? 0;
+          const balance = account?.data?.balance ?? 0;
           const shortage = Math.max(0, payableAmount - balance);
           const recommendedCharge = Math.ceil(shortage / 1000) * 1000;
           setInsufficientInfo({
@@ -387,7 +387,7 @@ const PendingOrders: React.FC = () => {
           setChargeError(null);
           try {
             const depositOrder = await depositApi.createDepositOrder(amount);
-            if (depositOrder && depositOrder.orderId) {
+            if (depositOrder?.data?.orderId) {
               if (autoPurchaseTarget) {
                 sessionStorage.setItem(
                   "autoPurchaseAfterCharge",
@@ -398,7 +398,10 @@ const PendingOrders: React.FC = () => {
                   })
                 );
               }
-              requestTossPayment(depositOrder.orderId, depositOrder.amount);
+              requestTossPayment(
+                depositOrder.data.orderId,
+                depositOrder.data.amount
+              );
               setChargeOpen(false);
             } else {
               setChargeError("주문 생성에 실패했습니다.");

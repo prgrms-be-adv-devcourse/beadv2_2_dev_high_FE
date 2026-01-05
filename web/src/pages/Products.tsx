@@ -1,3 +1,4 @@
+import { type Product } from "@moreauction/types";
 import {
   Alert,
   Box,
@@ -9,24 +10,15 @@ import {
   Container,
   LinearProgress,
   Pagination,
-  Typography,
-  Chip,
-  Stack,
   Skeleton,
+  Stack,
+  Typography,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import React, { useMemo, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { productApi } from "../apis/productApi";
-import {
-  ProductStatus,
-  type Product,
-  type ProductAndAuction,
-} from "@moreauction/types";
-import { getCommonStatusText } from "@moreauction/utils";
-import { getPrimaryProductImageUrl } from "@moreauction/utils";
-import { formatWon } from "@moreauction/utils";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 // 경매 목록 API 응답 타입 정의 (페이징 포함)
 const Products: React.FC = () => {
@@ -35,15 +27,13 @@ const Products: React.FC = () => {
   const PAGES_PER_FETCH = FETCH_SIZE / UI_PAGE_SIZE;
 
   const [page, setPage] = useState(1); // UI page (8개씩)
-  const [statusFilter, setStatusFilter] = useState<ProductStatus | "">("");
   const apiPage = Math.floor((page - 1) / PAGES_PER_FETCH); // 서버는 32개씩
   const productsQuery = useQuery({
-    queryKey: ["products", apiPage, statusFilter],
+    queryKey: ["products", apiPage],
     queryFn: async () => {
       const response = await productApi.getProducts({
         page: apiPage,
         size: FETCH_SIZE,
-        status: statusFilter || undefined,
       });
       return response.data;
     },
@@ -71,65 +61,13 @@ const Products: React.FC = () => {
     setPage(value);
   };
 
-  const handleStatusChange = (value: ProductStatus | "") => {
-    setStatusFilter((prev) => (prev === value ? "" : value));
-    setPage(1);
-  };
-
-  const formatAuctionPrice = (product: Product) => {
-    switch (product.status) {
-      case ProductStatus.IN_PROGESS: {
-        const hasBid = (product.currentBid ?? 0) > 0;
-        const highestAmount = hasBid ? (product.currentBid as number) : null;
-        const startBid = product.startBid ?? null;
-        if (startBid == null && highestAmount == null) return null;
-        return {
-          highestAmount,
-          startBid,
-          color: "error.main" as const,
-        };
-      }
-      case ProductStatus.READY: {
-        const startBid = product.startBid ?? null;
-        if (startBid == null) return null;
-        return {
-          highestAmount: null,
-          startBid,
-          color: "primary.main" as const,
-        };
-      }
-      default:
-        return null;
-    }
-  };
-
-  const mapEntryToDisplayProduct = (
-    entry: ProductAndAuction
-  ): Product | null => {
-    if (!entry?.product) return null;
-    const latestAuction = entry.auctions?.[0];
-    const primaryImageUrl = getPrimaryProductImageUrl(entry.product);
-    return {
-      ...entry.product,
-      startBid: entry.product.startBid ?? latestAuction?.startBid,
-      currentBid:
-        entry.product.currentBid ??
-        latestAuction?.currentBid ??
-        entry.product.startBid ??
-        latestAuction?.startBid,
-      imageUrl:
-        primaryImageUrl ?? entry.product.imageUrl ?? latestAuction?.filePath,
-    };
-  };
-
   const productsForDisplay =
     productData?.content
       ?.slice(
         ((page - 1) % PAGES_PER_FETCH) * UI_PAGE_SIZE,
         ((page - 1) % PAGES_PER_FETCH) * UI_PAGE_SIZE + UI_PAGE_SIZE
       )
-      ?.map(mapEntryToDisplayProduct)
-      .filter((p): p is Product => p !== null) ?? [];
+      ?.filter((product): product is Product => !!product) ?? [];
 
   const totalUiPages = Math.ceil(
     (productData?.totalElements ?? 0) / UI_PAGE_SIZE
@@ -145,40 +83,6 @@ const Products: React.FC = () => {
           상품 기준으로 최근 경매 정보(최고입찰가/시작가)와 상태를 함께 볼 수
           있습니다.
         </Typography>
-      </Box>
-
-      {/* TODO: 상태 필터 서버측에서  */}
-      <Box sx={{ my: 3 }}>
-        <Stack direction="row" spacing={1}>
-          <Chip
-            label="전체"
-            clickable
-            color={statusFilter === "" ? "primary" : "default"}
-            onClick={() => handleStatusChange("")}
-          />
-          <Chip
-            label="진행중"
-            clickable
-            color={
-              statusFilter === ProductStatus.IN_PROGESS ? "primary" : "default"
-            }
-            onClick={() => handleStatusChange(ProductStatus.IN_PROGESS)}
-          />
-          <Chip
-            label="대기중"
-            clickable
-            color={statusFilter === ProductStatus.READY ? "primary" : "default"}
-            onClick={() => handleStatusChange(ProductStatus.READY)}
-          />
-          <Chip
-            label="종료"
-            clickable
-            color={
-              statusFilter === ProductStatus.COMPLETED ? "primary" : "default"
-            }
-            onClick={() => handleStatusChange(ProductStatus.COMPLETED)}
-          />
-        </Stack>
       </Box>
 
       <Box sx={{ mt: 3 }}>
@@ -306,7 +210,7 @@ const Products: React.FC = () => {
                       <CardMedia
                         component="img"
                         height="200"
-                        image={product?.imageUrl || "/images/no_image.png"}
+                        image="/images/no_image.png"
                         alt={product.name}
                         sx={{
                           objectFit: "cover",
@@ -336,6 +240,21 @@ const Products: React.FC = () => {
                           {product.name}
                         </Typography>
 
+                        {/* 상품 설명 */}
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            textOverflow: "ellipsis",
+                            overflow: "hidden",
+                          }}
+                        >
+                          {product.description || "상품 설명이 없습니다."}
+                        </Typography>
+
                         {/* 카테고리 표시 */}
                         <Typography
                           variant="caption"
@@ -362,50 +281,6 @@ const Products: React.FC = () => {
                               : "카테고리 없음" /* 기본 카테고리 */
                           }
                         </Typography>
-
-                        {/* 경매 가격 요약 */}
-                        {(() => {
-                          const price = formatAuctionPrice(product);
-                          if (!price) return null;
-                          return (
-                            <Box sx={{ mt: 1, textAlign: "right" }}>
-                              <Typography
-                                variant="subtitle2"
-                                sx={{
-                                  fontWeight: 600,
-                                  color: price.color,
-                                }}
-                              >
-                              최고입찰가{" "}
-                              {price.highestAmount != null
-                                ? formatWon(price.highestAmount)
-                                : "-"}
-                            </Typography>
-                            {price.startBid != null && (
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                              >
-                                시작가 {formatWon(price.startBid)}
-                              </Typography>
-                            )}
-                          </Box>
-                        );
-                      })()}
-
-                        {/* 상품 상태 */}
-                        <Box sx={{ mt: "auto", pt: 1 }}>
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              color: "success.main",
-                              fontWeight: 500,
-                              textAlign: "right",
-                            }}
-                          >
-                            {getCommonStatusText(product.status)}
-                          </Typography>
-                        </Box>
                       </CardContent>
                     </CardActionArea>
                   </Card>

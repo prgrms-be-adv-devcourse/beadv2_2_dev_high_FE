@@ -8,6 +8,16 @@ import {
   Badge,
   Container,
   Tooltip,
+  Popover,
+  List,
+  ListItemButton,
+  ListItemText,
+  Divider,
+  Skeleton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from "@mui/material";
 import {
   Search as SearchIcon,
@@ -23,17 +33,25 @@ import {
 import { Link as RouterLink } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useThemeContext } from "../contexts/ThemeProvider";
-import { useEffect, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { notificationApi } from "../apis/notificationApi";
 import { orderApi } from "../apis/orderApi";
 import { depositApi } from "../apis/depositApi";
-import { OrderStatus } from "@moreauction/types";
+import { OrderStatus, type NotificationInfo } from "@moreauction/types";
 import { formatWon } from "@moreauction/utils";
+import { useNavigate } from "react-router-dom";
 
 export const AppHeader: React.FC = () => {
   const { isAuthenticated, user, logout } = useAuth();
   const { mode, toggleColorMode } = useThemeContext();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [notificationAnchorEl, setNotificationAnchorEl] =
+    useState<HTMLElement | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [selectedNotification, setSelectedNotification] =
+    useState<NotificationInfo | null>(null);
   const storedBalance = useMemo(() => {
     const raw = localStorage.getItem("depositBalance");
     const parsed = raw != null ? Number(raw) : NaN;
@@ -49,11 +67,35 @@ export const AppHeader: React.FC = () => {
     gcTime: 5 * 60_000,
   });
 
+  const notificationsQuery = useQuery({
+    queryKey: ["notifications", "list", "header", user?.userId],
+    queryFn: () =>
+      notificationApi.getNotifications({
+        userId: user?.userId,
+        page: 0,
+        size: 50,
+      }),
+    enabled: isAuthenticated && !!user?.userId,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+  });
+
+  const unreadNotifications = useMemo(() => {
+    const items = notificationsQuery.data?.content ?? [];
+    return items
+      .filter((notification) => !notification.readYn)
+      .sort((a, b) => {
+        const aTime = new Date(a.createdAt ?? 0).getTime();
+        const bTime = new Date(b.createdAt ?? 0).getTime();
+        return bTime - aTime;
+      });
+  }, [notificationsQuery.data?.content]);
+
   const depositQuery = useQuery({
     queryKey: ["deposit", "balance"],
     queryFn: async () => {
       const info = await depositApi.getAccount();
-      return info?.balance ?? 0;
+      return info?.data?.balance ?? 0;
     },
     enabled: isAuthenticated,
     staleTime: 30_000,
@@ -72,11 +114,121 @@ export const AppHeader: React.FC = () => {
     gcTime: 5 * 60_000,
   });
 
+  const markAsReadMutation = useMutation({
+    mutationFn: (notificationId: string) =>
+      notificationApi.getNotifi(notificationId),
+    onSuccess: (_, notificationId) => {
+      queryClient.setQueryData(
+        ["notifications", "list", "header", user?.userId],
+        (oldData: any) => {
+          if (!oldData?.content) return oldData;
+          return {
+            ...oldData,
+            content: oldData.content.map((n: NotificationInfo) =>
+              n.id === notificationId ? { ...n, readYn: true } : n
+            ),
+          };
+        }
+      );
+      queryClient.setQueryData(
+        ["notifications", "list", user?.userId],
+        (oldData: any) => {
+          if (!oldData?.pages) return oldData;
+          return {
+            ...oldData,
+            pages: oldData.pages.map((page: any) => ({
+              ...page,
+              content: (page.content ?? []).map((n: NotificationInfo) =>
+                n.id === notificationId ? { ...n, readYn: true } : n
+              ),
+            })),
+          };
+        }
+      );
+      queryClient.setQueryData(
+        ["notifications", "unreadCount"],
+        (prev: number | undefined) =>
+          Math.max((typeof prev === "number" ? prev : 0) - 1, 0)
+      );
+    },
+  });
+
   useEffect(() => {
     if (!isAuthenticated) return;
     if (depositQuery.data == null) return;
     localStorage.setItem("depositBalance", String(depositQuery.data));
   }, [depositQuery.data, isAuthenticated]);
+
+  const handleOpenNotifications = (event: React.MouseEvent<HTMLElement>) => {
+    setNotificationAnchorEl(event.currentTarget);
+  };
+
+  const handleCloseNotifications = () => {
+    setNotificationAnchorEl(null);
+  };
+
+  const handleClickNotification = async (notification: NotificationInfo) => {
+    if (notification.id && !notification.readYn) {
+      await markAsReadMutation.mutateAsync(notification.id);
+    }
+    handleCloseNotifications();
+
+    if (notification.relatedUrl) {
+      navigate(notification.relatedUrl);
+      return;
+    }
+
+    setSelectedNotification({
+      ...notification,
+      readYn: true,
+    });
+    setDetailOpen(true);
+  };
+
+  const formatDateTime = (value?: string) => {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleString();
+  };
+
+  const handleMarkAllRead = () => {
+    queryClient.setQueryData(
+      ["notifications", "list", "header", user?.userId],
+      (oldData: any) => {
+        if (!oldData?.content) return oldData;
+        return {
+          ...oldData,
+          content: oldData.content.map((n: NotificationInfo) => ({
+            ...n,
+            readYn: true,
+          })),
+        };
+      }
+    );
+    queryClient.setQueryData(
+      ["notifications", "list", user?.userId],
+      (oldData: any) => {
+        if (!oldData?.pages) return oldData;
+        return {
+          ...oldData,
+          pages: oldData.pages.map((page: any) => ({
+            ...page,
+            content: (page.content ?? []).map((n: NotificationInfo) => ({
+              ...n,
+              readYn: true,
+            })),
+          })),
+        };
+      }
+    );
+    queryClient.setQueryData(["notifications", "unreadCount"], 0);
+  };
+
+  const handleViewAllNotifications = () => {
+    handleCloseNotifications();
+    navigate("/notifications");
+  };
 
   const handleLogout = () => {
     logout();
@@ -191,11 +343,7 @@ export const AppHeader: React.FC = () => {
                 </Tooltip>
 
                 <Tooltip title="알림">
-                  <IconButton
-                    component={RouterLink}
-                    to="/notifications"
-                    color="inherit"
-                  >
+                  <IconButton color="inherit" onClick={handleOpenNotifications}>
                     <Badge
                       badgeContent={unreadQuery.data ?? 0}
                       color="error"
@@ -252,6 +400,87 @@ export const AppHeader: React.FC = () => {
           </Box>
         </Toolbar>
       </Container>
+      <Popover
+        open={Boolean(notificationAnchorEl)}
+        anchorEl={notificationAnchorEl}
+        onClose={handleCloseNotifications}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+        PaperProps={{ sx: { width: 360, p: 2 } }}
+      >
+        <Box display="flex" alignItems="center" justifyContent="space-between">
+          <Typography variant="subtitle1" fontWeight={700}>
+            읽지 않은 알림
+          </Typography>
+          <Button
+            size="small"
+            onClick={handleMarkAllRead}
+            disabled={unreadNotifications.length === 0}
+          >
+            모두읽기
+          </Button>
+        </Box>
+        <Divider sx={{ my: 1.5 }} />
+        <Box sx={{ maxHeight: 320, overflowY: "auto" }}>
+          {notificationsQuery.isLoading &&
+            Array.from({ length: 3 }).map((_, idx) => (
+              <Box key={idx} sx={{ mb: 1.5 }}>
+                <Skeleton width="80%" />
+                <Skeleton width="95%" />
+              </Box>
+            ))}
+          {!notificationsQuery.isLoading && unreadNotifications.length === 0 && (
+            <Typography variant="body2" color="text.secondary">
+              새로운 알림이 없습니다.
+            </Typography>
+          )}
+          {!notificationsQuery.isLoading &&
+            unreadNotifications.length > 0 && (
+              <List disablePadding>
+                {unreadNotifications.map((notification) => (
+                  <ListItemButton
+                    key={notification.id ?? notification.createdAt}
+                    onClick={() => handleClickNotification(notification)}
+                  >
+                    <ListItemText
+                      primary={notification.title}
+                      secondary={notification.content}
+                      primaryTypographyProps={{ fontWeight: 600 }}
+                      secondaryTypographyProps={{
+                        noWrap: true,
+                        color: "text.secondary",
+                      }}
+                    />
+                  </ListItemButton>
+                ))}
+              </List>
+            )}
+        </Box>
+        <Divider sx={{ my: 1.5 }} />
+        <Box display="flex" justifyContent="flex-end" gap={1}>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={handleViewAllNotifications}
+          >
+            전체알림보기
+          </Button>
+        </Box>
+      </Popover>
+      <Dialog open={detailOpen} onClose={() => setDetailOpen(false)} fullWidth>
+        <DialogTitle>{selectedNotification?.title}</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="caption" color="text.secondary">
+            받은 시각: {formatDateTime(selectedNotification?.createdAt)}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {selectedNotification?.content}
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDetailOpen(false)}>닫기</Button>
+        </DialogActions>
+      </Dialog>
     </AppBar>
   );
 };

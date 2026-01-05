@@ -1,4 +1,16 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import {
+  AuctionStatus,
+  type AuctionDetailResponse,
+  type FileGroup,
+  type Product,
+} from "@moreauction/types";
+import {
+  formatWon,
+  getAuctionStatusText,
+  getProductImageUrls,
+} from "@moreauction/utils";
+import FavoriteIcon from "@mui/icons-material/Favorite";
+import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
 import {
   Box,
   Button,
@@ -13,27 +25,21 @@ import {
   Stack,
   Typography,
 } from "@mui/material";
-import FavoriteIcon from "@mui/icons-material/Favorite";
-import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
-import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import { auctionApi } from "../apis/auctionApi";
+import { fileApi } from "../apis/fileApi";
 import { productApi } from "../apis/productApi";
 import { wishlistApi } from "../apis/wishlistApi";
-import { ProductStatus, type Product } from "@moreauction/types";
-import { AuctionStatus, type Auction } from "@moreauction/types";
-import { useAuth } from "../contexts/AuthContext";
 import RemainingTime from "../components/RemainingTime";
-import { getAuctionStatusText } from "@moreauction/utils";
-import { getProductImageUrls } from "@moreauction/utils";
-import { formatWon } from "@moreauction/utils";
+import { useAuth } from "../contexts/AuthContext";
 
 const ProductDetail: React.FC = () => {
   const { id: productId } = useParams<{ id: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [product, setProduct] = useState<Product | null>(null);
-  const [auctions, setAuctions] = useState<Auction[]>([]);
+  const [auctions, setAuctions] = useState<AuctionDetailResponse[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isWish, setIsWish] = useState(false);
   const [wishLoading, setWishLoading] = useState(false);
@@ -45,6 +51,7 @@ const ProductDetail: React.FC = () => {
   const [deletingAuctionId, setDeletingAuctionId] = useState<string | null>(
     null
   );
+  const [fileGroup, setFileGroup] = useState<FileGroup | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
   const deletableAuctionStatuses: AuctionStatus[] = [
@@ -52,12 +59,6 @@ const ProductDetail: React.FC = () => {
     AuctionStatus.FAILED,
     AuctionStatus.CANCELLED,
   ];
-  const deletableProductStatuses: ProductStatus[] = [
-    ProductStatus.READY,
-    ProductStatus.FAILED,
-    ProductStatus.CANCELLED,
-  ];
-
   const productQuery = useQuery({
     queryKey: ["products", "detail", productId],
     queryFn: async () => {
@@ -71,12 +72,42 @@ const ProductDetail: React.FC = () => {
     staleTime: 30_000,
   });
 
+  const product = productQuery.data ?? null;
+  const productFileGroupId = productQuery.data?.fileGroupId;
+  const fileGroupQuery = useQuery({
+    queryKey: ["files", "group", productFileGroupId],
+    queryFn: () => fileApi.getFiles(String(productFileGroupId)),
+    enabled: !!productFileGroupId,
+    staleTime: 30_000,
+  });
+
+  const auctionsQuery = useQuery({
+    queryKey: ["auctions", "byProduct", productId],
+    queryFn: () => auctionApi.getAuctionsByProductId(productId as string),
+    enabled: !!productId,
+    staleTime: 30_000,
+  });
+
+  const latestAuctionId = product?.latestAuctionId;
+
+  const latestAuctionQuery = useQuery({
+    queryKey: ["auctions", "detail", latestAuctionId],
+    queryFn: () => auctionApi.getAuctionDetail(latestAuctionId as string),
+    enabled: !!latestAuctionId,
+    staleTime: 30_000,
+  });
+
   useEffect(() => {
-    if (!productQuery.data) return;
-    const { auctions = [], product } = productQuery.data;
-    setProduct(product);
-    setAuctions(Array.isArray(auctions) ? auctions : []);
-  }, [productQuery.data]);
+    const group = fileGroupQuery.data?.data ?? null;
+    setFileGroup(group);
+  }, [fileGroupQuery.data]);
+
+  useEffect(() => {
+    if (!auctionsQuery.data) return;
+    const payload = auctionsQuery.data?.data;
+    const list = payload ? payload : [];
+    setAuctions(list);
+  }, [auctionsQuery.data]);
 
   useEffect(() => {
     if (!productId) {
@@ -104,7 +135,7 @@ const ProductDetail: React.FC = () => {
 
   const galleryItems = useMemo<GalleryItem[]>(() => {
     const fileItems =
-      product?.fileGroup?.files
+      fileGroup?.files
         ?.map((file, idx) => {
           if (!file.filePath) return null;
           return {
@@ -119,7 +150,7 @@ const ProductDetail: React.FC = () => {
       return fileItems;
     }
 
-    const fallback = getProductImageUrls(product).map((url, idx) => ({
+    const fallback = getProductImageUrls(fileGroup).map((url, idx) => ({
       key: `image-${idx}`,
       url,
       label: `이미지 ${idx + 1}`,
@@ -137,67 +168,73 @@ const ProductDetail: React.FC = () => {
         isPlaceholder: true,
       },
     ];
-  }, [product]);
+  }, [fileGroup]);
 
   useEffect(() => {
     setActiveImageIndex(0);
   }, [product?.id]);
 
+  const latestAuction = latestAuctionQuery.data?.data ?? null;
   const activeAuction = useMemo(
     () =>
-      auctions.find((a) => a.status === AuctionStatus.IN_PROGRESS) ||
-      auctions.find((a) => a.status === AuctionStatus.READY) ||
-      auctions.find((a) => a.status === AuctionStatus.COMPLETED),
-    [auctions]
+      latestAuction ??
+      (auctions.find((a) => a.status === AuctionStatus.IN_PROGRESS) ||
+        auctions.find((a) => a.status === AuctionStatus.READY) ||
+        auctions.find((a) => a.status === AuctionStatus.COMPLETED)),
+    [auctions, latestAuction]
   );
 
   // 이전 경매 이력(종료/유찰/취소 등)만 별도로 보여줌
+  const getAuctionKey = (auction: AuctionDetailResponse) =>
+    auction.auctionId ?? auction.id ?? "";
+
+  const activeAuctionKey = activeAuction ? getAuctionKey(activeAuction) : null;
   const otherAuctions = useMemo(
     () =>
       auctions.filter(
         (a) =>
-          a !== activeAuction &&
+          getAuctionKey(a) !== activeAuctionKey &&
           a.status !== AuctionStatus.IN_PROGRESS &&
           a.status !== AuctionStatus.READY
       ),
-    [auctions, activeAuction]
+    [auctions, activeAuctionKey]
   );
 
   const isOwner =
     !!user?.userId && !!product?.sellerId && user.userId === product.sellerId;
 
-  const hasPendingAuction = auctions.some(
-    (auction) => auction.status === AuctionStatus.READY
-  );
+  const hasPendingAuction =
+    auctions.some((auction) => auction.status === AuctionStatus.READY) ||
+    activeAuction?.status === AuctionStatus.READY;
 
   const canEditProduct =
-    !!activeAuction &&
-    activeAuction.status === AuctionStatus.READY &&
-    isOwner;
+    !!activeAuction && activeAuction.status === AuctionStatus.READY && isOwner;
 
   const canReregisterAuction =
     ((!activeAuction && auctions.length > 0) || auctions.length === 0) &&
     isOwner;
 
-  const canDeleteProduct = !!(
-    isOwner &&
-    product &&
-    deletableProductStatuses.includes(product.status) &&
-    !hasPendingAuction
-  );
+  const hasBlockingAuction =
+    auctions.some(
+      (auction) =>
+        auction.status === AuctionStatus.IN_PROGRESS ||
+        auction.status === AuctionStatus.READY
+    ) ||
+    activeAuction?.status === AuctionStatus.IN_PROGRESS ||
+    activeAuction?.status === AuctionStatus.READY;
+
+  const canDeleteProduct = !!(isOwner && product && !hasBlockingAuction);
+  const showAuctionActions =
+    !auctionsQuery.isLoading &&
+    !latestAuctionQuery.isLoading &&
+    !auctionsQuery.isError &&
+    !latestAuctionQuery.isError;
 
   const heroImage =
     galleryItems[activeImageIndex]?.url ?? "/images/no_image.png";
 
-  const isAuctionDeletable = (auction?: Auction | null) =>
-    !!(
-      auction &&
-      isOwner &&
-      deletableAuctionStatuses.includes(auction.status)
-    );
-
-  const getAuctionKey = (auction: Auction) =>
-    auction.auctionId ?? auction.id ?? "";
+  const isAuctionDeletable = (auction?: AuctionDetailResponse | null) =>
+    !!(auction && isOwner && deletableAuctionStatuses.includes(auction.status));
 
   const handleDeleteProduct = async () => {
     if (!product) {
@@ -233,7 +270,7 @@ const ProductDetail: React.FC = () => {
     }
   };
 
-  const handleDeleteAuction = async (auction: Auction) => {
+  const handleDeleteAuction = async (auction: AuctionDetailResponse) => {
     const auctionKey = getAuctionKey(auction);
     if (!auctionKey) return;
     if (!isAuctionDeletable(auction)) {
@@ -373,33 +410,35 @@ const ProductDetail: React.FC = () => {
               maxWidth: { xs: "100%", md: "auto" },
             }}
           >
-            <Stack direction="row" spacing={1} alignItems="center">
-              {isOwner && (
-                <Button
-                  variant="outlined"
-                  color="error"
-                  onClick={handleDeleteProduct}
-                  disabled={deleteLoading || !canDeleteProduct}
-                >
-                  {deleteLoading
-                    ? "삭제 중..."
-                    : hasPendingAuction
-                    ? "상품 삭제 (대기 경매 존재)"
-                    : "상품 삭제"}
-                </Button>
-              )}
-              {canEditProduct && (
-                <Button
-                  variant="outlined"
-                  color="secondary"
-                  component={RouterLink}
-                  to={`/products/${product.id}/edit`}
-                >
-                  상품 / 경매 수정
-                </Button>
-              )}
-            </Stack>
-            {hasPendingAuction && isOwner && (
+            {showAuctionActions && (
+              <Stack direction="row" spacing={1} alignItems="center">
+                {isOwner && (
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    onClick={handleDeleteProduct}
+                    disabled={deleteLoading || !canDeleteProduct}
+                  >
+                    {deleteLoading
+                      ? "삭제 중..."
+                      : hasPendingAuction
+                      ? "상품 삭제 (대기 경매 존재)"
+                      : "상품 삭제"}
+                  </Button>
+                )}
+                {canEditProduct && (
+                  <Button
+                    variant="outlined"
+                    color="secondary"
+                    component={RouterLink}
+                    to={`/products/${product.id}/edit`}
+                  >
+                    상품 / 경매 수정
+                  </Button>
+                )}
+              </Stack>
+            )}
+            {showAuctionActions && hasPendingAuction && isOwner && (
               <Typography
                 variant="body2"
                 color="warning.main"
@@ -508,7 +547,9 @@ const ProductDetail: React.FC = () => {
                       setWishLoading(true);
 
                       try {
-                        while (wishServerRef.current !== wishDesiredRef.current) {
+                        while (
+                          wishServerRef.current !== wishDesiredRef.current
+                        ) {
                           const target = wishDesiredRef.current;
                           if (target) {
                             await wishlistApi.add(product.id);
@@ -585,7 +626,8 @@ const ProductDetail: React.FC = () => {
                           }
                           size="small"
                         />
-                        {isAuctionDeletable(activeAuction) && (
+                        {showAuctionActions &&
+                          isAuctionDeletable(activeAuction) && (
                           <Button
                             size="small"
                             color="error"
@@ -665,13 +707,13 @@ const ProductDetail: React.FC = () => {
                       <Typography variant="body2" color="text.secondary">
                         이 상품에 진행 중인 경매가 없습니다.
                       </Typography>
-                      {canReregisterAuction && (
+                      {showAuctionActions && canReregisterAuction && (
                         <Box sx={{ mt: 2, textAlign: "right" }}>
                           <Button
                             variant="contained"
                             color="primary"
                             component={RouterLink}
-                            to={`/auctions/re-register/${product.id}`}
+                            to={`/auctions/new/${product.id}`}
                           >
                             {auctions.length === 0
                               ? "경매 등록"
@@ -723,10 +765,14 @@ const ProductDetail: React.FC = () => {
                                 color="text.secondary"
                               >
                                 {formatWon(
-                                  Math.max(auction.currentBid ?? 0, auction.startBid)
+                                  Math.max(
+                                    auction.currentBid ?? 0,
+                                    auction.startBid
+                                  )
                                 )}
                               </Typography>
-                              {isAuctionDeletable(auction) && (
+                              {showAuctionActions &&
+                                isAuctionDeletable(auction) && (
                                 <Button
                                   size="small"
                                   color="error"

@@ -1,17 +1,15 @@
 import type {
-  Auction,
+  ApiResponseDto,
+  AuctionBidMessage,
   AuctionCreationRequest,
   AuctionDetailResponse,
   AuctionParticipationResponse,
   AuctionQueryParams,
-  AuctionStatus,
   AuctionUpdateRequest,
+  PagedAuctionDocument,
   PagedAuctionResponse,
   PagedBidHistoryResponse,
 } from "@moreauction/types";
-import type { PagedAuctionDocument } from "@moreauction/types";
-import type { AuctionBidMessage } from "@moreauction/types"; // Auction 타입 임포트
-import type { ApiResponseDto } from "@moreauction/types";
 import { client } from "./client";
 // Auction 타입 임포트
 import qs from "qs";
@@ -38,7 +36,7 @@ export const auctionApi = {
   // 경매 생성
   createAuction: async (
     auctionData: AuctionCreationRequest
-  ): Promise<ApiResponseDto<Auction>> => {
+  ): Promise<ApiResponseDto<AuctionDetailResponse>> => {
     console.log("경매 생성 API 호출:", auctionData);
     const response = await client.post("/auctions", auctionData);
     return response.data;
@@ -48,7 +46,7 @@ export const auctionApi = {
   updateAuction: async (
     auctionId: string,
     auctionData: AuctionUpdateRequest
-  ): Promise<ApiResponseDto<Auction>> => {
+  ): Promise<ApiResponseDto<AuctionDetailResponse>> => {
     console.log(`경매 수정 API 호출: ${auctionId}`, auctionData);
     const response = await client.put(`/auctions/${auctionId}`, auctionData);
     return response.data;
@@ -121,7 +119,7 @@ export const auctionApi = {
    */
   getAuctionsByProductId: async (
     productId: string
-  ): Promise<ApiResponseDto<any>> => {
+  ): Promise<ApiResponseDto<AuctionDetailResponse[]>> => {
     console.log(`상품 관련 경매 내역 조회 API 호출 (ProductID: ${productId})`);
     const response = await client.get(`/auctions/by-product`, {
       params: { productId },
@@ -167,9 +165,7 @@ export const auctionApi = {
   /**
    * 경매를 삭제합니다.
    */
-  removeAuction: async (
-    auctionId: string
-  ): Promise<ApiResponseDto<void>> => {
+  removeAuction: async (auctionId: string): Promise<ApiResponseDto<void>> => {
     console.log(`경매 삭제 API 호출: ${auctionId}`);
     const response = await client.delete(`/auctions/${auctionId}`);
     return response.data;

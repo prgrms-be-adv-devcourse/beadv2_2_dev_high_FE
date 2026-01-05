@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import type { PaymentFailReqeuest } from "@moreauction/types";
 import { ErrorOutline } from "@mui/icons-material";
 import {
   Box,
@@ -10,16 +9,21 @@ import {
   Typography,
 } from "@mui/material";
 import { useMutation } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+
 import { depositApi } from "../../apis/depositApi";
+import { useAuth } from "../../contexts/AuthContext";
 
 export default function PaymentFail() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [title, setTitle] = useState("결제가 실패했어요");
   const [description, setDescription] = useState(
     "결제가 취소되었거나 실패했습니다. 예치금 잔액에 변동이 없는지 마이페이지에서 확인해 주세요."
   );
   const paymentFailMutation = useMutation({
-    mutationFn: (payload: { orderId?: string; message?: string; code?: string }) =>
+    mutationFn: (payload: PaymentFailReqeuest) =>
       depositApi.paymentFail(payload),
   });
   const loading = paymentFailMutation.isPending;
@@ -32,7 +36,12 @@ export default function PaymentFail() {
       const orderId = params.get("orderId") ?? undefined;
 
       try {
-        await paymentFailMutation.mutateAsync({ orderId, message: msg, code });
+        await paymentFailMutation.mutateAsync({
+          orderId,
+          message: msg,
+          code,
+          userId: user?.userId,
+        });
       } catch (err) {
         console.error("결제 실패 처리 중 오류:", err);
       } finally {

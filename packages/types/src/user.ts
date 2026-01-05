@@ -5,12 +5,18 @@ export const UserRole = {
 } as const;
 
 export type UserRole = (typeof UserRole)[keyof typeof UserRole];
+export type UserRoles = UserRole[];
+export type UserRoleValue = UserRole | UserRoles;
+export const normalizeRoles = (roles?: UserRoleValue): UserRoles =>
+  Array.isArray(roles) ? roles : roles ? [roles] : [];
+export const hasRole = (roles: UserRoleValue | undefined, role: UserRole) =>
+  normalizeRoles(roles).includes(role);
 export interface User {
   userId?: string;
   name?: string;
   email?: string;
   nickname?: string;
-  role?: UserRole;
+  roles?: UserRoles;
   phone_number?: string;
   city?: string;
   state?: string;
@@ -27,7 +33,7 @@ export interface LoginParams {
 export interface LoginResponse {
   accessToken: string;
   refreshToken?: string;
-  role?: UserRole;
+  roles?: UserRoles;
   nickname?: string;
   userId?: string;
 }

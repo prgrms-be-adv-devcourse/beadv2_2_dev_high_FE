@@ -1,4 +1,11 @@
 // src/contexts/AuthContext.tsx
+import {
+  normalizeRoles,
+  type LoginResponse,
+  type User,
+} from "@moreauction/types";
+import { CircularProgress } from "@mui/material";
+import { useQueryClient } from "@tanstack/react-query";
 import React, {
   createContext,
   useContext,
@@ -6,9 +13,6 @@ import React, {
   useState,
   type ReactNode,
 } from "react";
-import { CircularProgress } from "@mui/material";
-import { useQueryClient } from "@tanstack/react-query";
-import { UserRole, type LoginResponse, type User } from "@moreauction/types";
 
 export interface AuthContextType {
   isAuthenticated: boolean;
@@ -38,8 +42,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const queryClient = useQueryClient();
   const normalizeUser = (nextUser: User | null): User | null => {
     if (!nextUser) return null;
-    if (nextUser.role !== UserRole.ADMIN) return nextUser;
-    return { ...nextUser, role: UserRole.SELLER };
+    return { ...nextUser, roles: normalizeRoles(nextUser.roles) };
   };
 
   const [user, setUser] = useState<User | null>(

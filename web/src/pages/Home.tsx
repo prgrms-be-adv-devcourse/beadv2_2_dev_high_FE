@@ -11,7 +11,7 @@ import {
 import { Gavel as GavelIcon } from "@mui/icons-material";
 import { Link as RouterLink } from "react-router-dom";
 import AuctionList from "../components/AuctionList";
-import { AuctionStatus } from "@moreauction/types";
+import { hasRole, UserRole, AuctionStatus } from "@moreauction/types";
 import { useAuth } from "../contexts/AuthContext";
 
 // 홈: 상단 히어로 섹션 + 상품 목록
@@ -19,7 +19,7 @@ const Home: React.FC = () => {
   const theme = useTheme();
   const { isAuthenticated, user } = useAuth();
 
-  const isSeller = user?.role === "SELLER";
+  const isSeller = hasRole(user?.roles, UserRole.SELLER);
 
   let secondaryLabel = "판매자 등록하기";
   let secondaryTo: string = "/seller/register";
@@ -78,7 +78,7 @@ const Home: React.FC = () => {
                   color="primary"
                   size="large"
                   component={RouterLink}
-                  to="/products"
+                  to="/search"
                   startIcon={<GavelIcon />}
                 >
                   상품 둘러보기

@@ -13,7 +13,7 @@ import {
   Typography,
 } from "@mui/material";
 import React, { useMemo, useState } from "react";
-import { getOrderStatusLabel, type OrderResponse } from "@moreauction/types";
+import { hasRole, UserRole, type OrderResponse } from "@moreauction/types";
 import { Link as RouterLink } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { formatWon } from "@moreauction/utils";
@@ -82,7 +82,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
         sx={{ mb: 2 }}
       >
         <ToggleButton value="BOUGHT">구매 내역</ToggleButton>
-        {user?.role !== "USER" && (
+        {hasRole(user?.roles, UserRole.SELLER) && (
           <ToggleButton value="SOLD">판매 내역</ToggleButton>
         )}
       </ToggleButtonGroup>

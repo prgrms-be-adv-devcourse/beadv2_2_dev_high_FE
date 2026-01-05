@@ -95,6 +95,10 @@ export const router = createBrowserRouter([
             element: <AuctionRegistration />,
           },
           {
+            path: "auctions/new/:productId",
+            element: <AuctionRegistration />,
+          },
+          {
             path: "auctions/re-register/:productId",
             element: <AuctionRegistration />,
           },

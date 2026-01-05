@@ -96,8 +96,8 @@ export default function PaymentSuccess() {
                   type: "USAGE",
                   userId: user?.userId,
                 });
-                if (typeof info?.balance === "number") {
-                  setDepositBalanceCache(info.balance);
+                if (typeof info?.data?.balance === "number") {
+                  setDepositBalanceCache(info.data.balance);
                 } else {
                   decrementDepositBalance(purchaseAmount);
                 }
@@ -183,8 +183,8 @@ export default function PaymentSuccess() {
 
                 try {
                   const account = await depositApi.getAccount();
-                  if (typeof account?.balance === "number") {
-                    setDepositBalanceCache(account.balance);
+                  if (typeof account?.data?.balance === "number") {
+                    setDepositBalanceCache(account.data.balance);
                   } else {
                     decrementDepositBalance(targetDepositAmount);
                   }

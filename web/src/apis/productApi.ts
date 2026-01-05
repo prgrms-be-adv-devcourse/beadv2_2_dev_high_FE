@@ -1,16 +1,18 @@
-import qs from "qs";
-import type { ApiResponseDto } from "@moreauction/types";
 import type {
-  PagedProductAndAuctionResponse,
+  ApiResponseDto,
+  PagedProductResponse,
   Product,
-  ProductAndAuction,
   ProductCreationRequest,
   ProductQueryParams,
   ProductUpdateRequest,
 } from "@moreauction/types";
+import qs from "qs";
 import { client } from "./client";
 
 // 상품 목록 조회 시 사용될 쿼리 파라미터 인터페이스 (필요에 따라 확장)
+interface ProductLatestAuctionUpdateRequest {
+  latestAuctionId: string;
+}
 
 /**
  * 상품 및 경매 관련 API 함수들
@@ -22,7 +24,7 @@ export const productApi = {
    */
   getProducts: async (
     params?: ProductQueryParams
-  ): Promise<ApiResponseDto<PagedProductAndAuctionResponse>> => {
+  ): Promise<ApiResponseDto<PagedProductResponse>> => {
     console.log("상품 목록 조회 API 호출:", params);
     const finalParams: ProductQueryParams = {
       ...params,
@@ -46,7 +48,7 @@ export const productApi = {
    */
   getProductById: async (
     productId: string
-  ): Promise<ApiResponseDto<ProductAndAuction>> => {
+  ): Promise<ApiResponseDto<Product>> => {
     console.log(`상품 상세 조회 API 호출 (ID: ${productId})`);
     const response = await client.get(`/products/${productId}`);
     return response.data;
@@ -69,7 +71,7 @@ export const productApi = {
    */
   createProduct: async (
     productData: ProductCreationRequest
-  ): Promise<ApiResponseDto<ProductAndAuction>> => {
+  ): Promise<ApiResponseDto<Product>> => {
     console.log("상품 생성 API 호출:", productData);
     const response = await client.post("/products", productData);
     return response.data;
@@ -83,7 +85,7 @@ export const productApi = {
   updateProduct: async (
     productId: string,
     productData: ProductUpdateRequest
-  ): Promise<ApiResponseDto<ProductAndAuction>> => {
+  ): Promise<ApiResponseDto<Product>> => {
     console.log(`상품 수정 API 호출 (ID: ${productId}):`, productData);
     const response = await client.put(`/products/${productId}`, productData);
     return response.data;
@@ -95,7 +97,7 @@ export const productApi = {
    */
   getMyProducts: async (
     sellerId?: string
-  ): Promise<ApiResponseDto<ProductAndAuction[]>> => {
+  ): Promise<ApiResponseDto<Product[]>> => {
     console.log("내 상품 목록 조회 API 호출:", sellerId);
     const response = await client.get(`/products/users/${sellerId}`);
     return response.data;
@@ -114,6 +116,21 @@ export const productApi = {
     const response = await client.delete(`/products/${productId}`, {
       params: { sellerId },
     });
+    return response.data;
+  },
+
+  /**
+   * 상품 최신 경매 ID 업데이트
+   */
+  updateLatestAuctionId: async (
+    productId: string,
+    latestAuctionId: string
+  ): Promise<ApiResponseDto<void>> => {
+    const payload: ProductLatestAuctionUpdateRequest = { latestAuctionId };
+    const response = await client.put(
+      `/products/${productId}/latest-auction`,
+      payload
+    );
     return response.data;
   },
 };

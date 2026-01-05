@@ -112,7 +112,8 @@ export const SettlementTab: React.FC = () => {
     const list: SettlementSummary[] =
       summaryQuery.data?.pages.flatMap((p) => p.content ?? []) ?? [];
 
-    if (summaryQuery.isLoading && list.length === 0) return renderSkeletonList();
+    if (summaryQuery.isLoading && list.length === 0)
+      return renderSkeletonList();
     if (list.length === 0) {
       if (summaryQuery.isError) return null;
       return <Alert severity="info">정산 내역이 없습니다.</Alert>;
@@ -126,8 +127,14 @@ export const SettlementTab: React.FC = () => {
               <React.Fragment key={`${item.sellerId}-${item.date ?? "all"}`}>
                 <ListItem>
                   <ListItemText
-                    primary={`${item.date ? formatDate(item.date) : "전체"} · ${formatNumber(item.count)}건`}
-                    secondary={`낙찰합계: ${formatWon(item.totalWinningAmount)} · 수수료합계: ${formatWon(item.totalCharge)} · 정산합계: ${formatWon(item.totalFinalAmount)}`}
+                    primary={`${
+                      item.date ? formatDate(item.date) : "전체"
+                    } · ${formatNumber(item.count)}건`}
+                    secondary={`낙찰합계: ${formatWon(
+                      item.totalWinningAmount
+                    )} · 수수료합계: ${formatWon(
+                      item.totalCharge
+                    )} · 정산합계: ${formatWon(item.totalFinalAmount)}`}
                   />
                 </ListItem>
                 <Divider />
@@ -159,7 +166,8 @@ export const SettlementTab: React.FC = () => {
     const list: SettlementResponse[] =
       historyQuery.data?.pages.flatMap((p) => p.content ?? []) ?? [];
 
-    if (historyQuery.isLoading && list.length === 0) return renderSkeletonList();
+    if (historyQuery.isLoading && list.length === 0)
+      return renderSkeletonList();
     if (list.length === 0) {
       if (historyQuery.isError) return null;
       return <Alert severity="info">정산 내역이 없습니다.</Alert>;
@@ -173,7 +181,9 @@ export const SettlementTab: React.FC = () => {
               <React.Fragment key={item.id}>
                 <ListItem>
                   <ListItemText
-                    primary={`${formatDate(item.dueDate)} · 주문 ID: ${item.orderId}`}
+                    primary={`${formatDate(item.completeDate)} · 주문 ID: ${
+                      item.orderId
+                    }`}
                     secondary={[
                       `낙찰가: ${formatWon(item.winningAmount)}`,
                       `수수료: ${formatWon(item.charge)}`,

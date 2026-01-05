@@ -40,6 +40,7 @@ export const createApiClient = ({
     (config) => {
       const token = localStorage.getItem("accessToken");
       if (token) {
+        config.headers = config.headers ?? {};
         config.headers.Authorization = `Bearer ${token}`;
       }
       return config;
@@ -50,6 +51,29 @@ export const createApiClient = ({
   client.interceptors.response.use(
     (response) => response,
     async (error) => {
+      if (!error?.response) {
+        const isOffline =
+          typeof navigator !== "undefined" && navigator?.onLine === false;
+        const errorCode = error?.code as string | undefined;
+        const kind = isOffline
+          ? "offline"
+          : errorCode === "ECONNABORTED" || errorCode === "ETIMEDOUT"
+          ? "timeout"
+          : "server_down";
+        const message =
+          kind === "offline"
+            ? "현재 오프라인입니다. 네트워크 상태를 확인해 주세요."
+            : kind === "timeout"
+            ? "요청 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요."
+            : "요청을 보낼 수 없습니다. 네트워크 상태를 확인해 주세요.";
+        return Promise.reject({
+          kind,
+          code: errorCode,
+          message,
+          originalError: error,
+        });
+      }
+
       const originalRequest = error.config;
 
       if (error.response?.status === 401 && !originalRequest._retry) {

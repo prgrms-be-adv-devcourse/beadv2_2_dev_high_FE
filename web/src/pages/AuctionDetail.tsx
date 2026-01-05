@@ -95,7 +95,9 @@ const AuctionDetail: React.FC = () => {
   const participationQuery = useQuery({
     queryKey: ["auctions", "participation", auctionId],
     queryFn: async () => {
-      const res = await auctionApi.checkParticipationStatus(auctionId as string);
+      const res = await auctionApi.checkParticipationStatus(
+        auctionId as string
+      );
       return res.data as AuctionParticipationResponse;
     },
     enabled: !!auctionId && isAuthenticated,
@@ -162,7 +164,7 @@ const AuctionDetail: React.FC = () => {
     }
 
     return [trimmed];
-  }, [auctionDetail?.files]);
+  }, [auctionDetail]);
 
   const bidHistoryQuery = useInfiniteQuery<
     PagedBidHistoryResponse,
@@ -173,10 +175,13 @@ const AuctionDetail: React.FC = () => {
   >({
     queryKey: ["auctions", "bidHistory", auctionId],
     queryFn: async ({ pageParam = 0 }) => {
-      const response = await auctionApi.getAuctionBidHistory(auctionId as string, {
-        page: pageParam,
-        size: 20,
-      });
+      const response = await auctionApi.getAuctionBidHistory(
+        auctionId as string,
+        {
+          page: pageParam,
+          size: 20,
+        }
+      );
       return response.data;
     },
     initialPageParam: 0,
@@ -212,9 +217,7 @@ const AuctionDetail: React.FC = () => {
     if (!participationQuery.isError) return null;
     const err: any = participationQuery.error;
     return (
-      err?.data?.message ??
-      err?.message ??
-      "참여 내역을 불러오지 못했습니다."
+      err?.data?.message ?? err?.message ?? "참여 내역을 불러오지 못했습니다."
     );
   }, [participationQuery.error, participationQuery.isError]);
 
@@ -266,9 +269,7 @@ const AuctionDetail: React.FC = () => {
             queryClient.setQueryData(
               ["auctions", "bidHistory", auctionId],
               (
-                prev:
-                  | InfiniteData<PagedBidHistoryResponse, number>
-                  | undefined
+                prev: InfiniteData<PagedBidHistoryResponse, number> | undefined
               ) => {
                 if (!prev?.pages) return prev;
                 const newBid: AuctionBidMessage = {
@@ -284,7 +285,9 @@ const AuctionDetail: React.FC = () => {
                 const firstPage = prev.pages[0];
                 if (!firstPage) return prev;
                 const firstContent = firstPage?.content ?? [];
-                if (firstContent.some((bid) => bid.bidSrno === newBid.bidSrno)) {
+                if (
+                  firstContent.some((bid) => bid.bidSrno === newBid.bidSrno)
+                ) {
                   return prev;
                 }
                 return {
@@ -354,13 +357,17 @@ const AuctionDetail: React.FC = () => {
     if (auctionDetail) {
       if (!hasAnyBid && bid < auctionDetail.startBid) {
         alert(
-          `첫 입찰 금액은 시작가(${formatWon(auctionDetail.startBid)}) 이상이어야 합니다.`
+          `첫 입찰 금액은 시작가(${formatWon(
+            auctionDetail.startBid
+          )}) 이상이어야 합니다.`
         );
         return;
       }
       if (hasAnyBid && bid <= currentBidPrice) {
         alert(
-          `입찰 금액은 최고입찰가(${formatWon(currentBidPrice)})보다 높아야 합니다.`
+          `입찰 금액은 최고입찰가(${formatWon(
+            currentBidPrice
+          )})보다 높아야 합니다.`
         );
         return;
       }
@@ -442,8 +449,8 @@ const AuctionDetail: React.FC = () => {
       const depositAmount = Number(auctionDetail?.depositAmount ?? 0);
       const account = await depositApi.getAccount();
 
-      if ((account?.balance ?? 0) < depositAmount) {
-        const balance = Number(account?.balance ?? 0);
+      if ((account?.data?.balance ?? 0) < depositAmount) {
+        const balance = Number(account?.data?.balance ?? 0);
         const needed = depositAmount;
         const shortage = Math.max(0, needed - balance);
         const recommendedCharge = Math.max(
@@ -646,7 +653,9 @@ const AuctionDetail: React.FC = () => {
                   <Alert severity="error">{errorMessage}</Alert>
                 ) : canRenderDetail ? (
                   <AuctionInfoPanel
-                    productName={auctionDetail.productName}
+                    productName={
+                      auctionDetail.productName ?? "TODO : auctionDetail"
+                    }
                     status={auctionDetail.status}
                     isAuctionInProgress={isAuctionInProgress}
                     isConnected={isConnected}
@@ -655,7 +664,9 @@ const AuctionDetail: React.FC = () => {
                     auctionId={auctionId!}
                   />
                 ) : (
-                  <Alert severity="error">경매 정보를 불러오지 못했습니다.</Alert>
+                  <Alert severity="error">
+                    경매 정보를 불러오지 못했습니다.
+                  </Alert>
                 )}
                 <Divider />
                 {canRenderDetail ? (
@@ -670,9 +681,7 @@ const AuctionDetail: React.FC = () => {
                     startBid={auctionDetail.startBid}
                   />
                 ) : (
-                  <Alert severity="info">
-                    경매 정보를 불러오는 중입니다.
-                  </Alert>
+                  <Alert severity="info">경매 정보를 불러오는 중입니다.</Alert>
                 )}
                 <Divider />
                 {canRenderDetail ? (
@@ -728,8 +737,7 @@ const AuctionDetail: React.FC = () => {
             필요 금액: {formatWon(insufficientDepositInfo?.needed ?? 0)}
           </Typography>
           <Typography variant="body2">
-            부족 금액:{" "}
-            {formatWon(insufficientDepositInfo?.shortage ?? 0)}
+            부족 금액: {formatWon(insufficientDepositInfo?.shortage ?? 0)}
           </Typography>
           <Typography variant="body2" sx={{ mt: 1 }}>
             예치금을 충전한 뒤 보증금 결제를 진행할 수 있어요.
@@ -778,7 +786,7 @@ const AuctionDetail: React.FC = () => {
           setChargeError(null);
           try {
             const depositOrder = await depositApi.createDepositOrder(amount);
-            if (depositOrder && depositOrder.orderId && auctionId) {
+            if (depositOrder?.data?.orderId && auctionId) {
               const depositAmount = Number(auctionDetail?.depositAmount ?? 0);
               const bidPrice = Number(newBidAmount);
               sessionStorage.setItem(
@@ -790,7 +798,10 @@ const AuctionDetail: React.FC = () => {
                   createdAt: Date.now(),
                 })
               );
-              requestTossPayment(depositOrder.orderId, depositOrder.amount);
+              requestTossPayment(
+                depositOrder.data.orderId,
+                depositOrder.data.amount
+              );
               setChargeOpen(false);
             } else {
               setChargeError("주문 생성에 실패했습니다.");

@@ -1,13 +1,13 @@
 import { Box, Button, Grid, TextField } from "@mui/material";
 import React, { useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { userApi } from "../apis/userApi";
 import FormContainer from "../components/FormContainer";
 import AdminShell from "../components/AdminShell";
 import { useAuth } from "../contexts/AuthContext";
-import { UserRole, type LoginParams, type LoginResponse } from "@moreauction/types";
+import { hasRole, UserRole, type LoginParams, type LoginResponse } from "@moreauction/types";
 
 const Login: React.FC = () => {
   const {
@@ -22,13 +22,15 @@ const Login: React.FC = () => {
   });
   const navigate = useNavigate();
   const auth = useAuth(); // useAuth 훅 사용
+  const location = useLocation();
+  const redirectTo = (location.state as { from?: string } | null)?.from || "/";
 
   const loginMutation = useMutation({
     mutationFn: (payload: LoginParams) => userApi.login(payload),
     onSuccess: (response) => {
       const res = response.data;
-      const role = (res as LoginResponse).role;
-      if (role !== UserRole.ADMIN) {
+      const roles = (res as LoginResponse).roles;
+      if (!hasRole(roles, UserRole.ADMIN)) {
         alert("관리자 계정으로만 로그인할 수 있습니다.");
         localStorage.removeItem("accessToken");
         localStorage.removeItem("refreshToken");
@@ -38,6 +40,7 @@ const Login: React.FC = () => {
       }
       auth.login(res as LoginResponse);
       alert("관리자 로그인 성공!");
+      navigate(redirectTo, { replace: true });
     },
     onError: (error) => {
       console.error("로그인 실패:", error);
@@ -51,10 +54,10 @@ const Login: React.FC = () => {
   };
 
   useEffect(() => {
-    if (auth.isAuthenticated) {
-      navigate("/", { replace: true });
+    if (auth.isAuthenticated && hasRole(auth.user?.roles, UserRole.ADMIN)) {
+      navigate(redirectTo, { replace: true });
     }
-  }, [auth.isAuthenticated, navigate]);
+  }, [auth.isAuthenticated, auth.user?.roles, navigate, redirectTo]);
 
   return (
     <AdminShell headerTitle="Admin Console">

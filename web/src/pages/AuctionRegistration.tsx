@@ -1,34 +1,29 @@
+import type {
+  AuctionDetailResponse,
+  AuctionUpdateRequest,
+  Product,
+} from "@moreauction/types";
+import { AuctionStatus } from "@moreauction/types";
 import {
   Alert,
   Box,
   Button,
   CircularProgress,
   Container,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  Divider,
-  List,
-  ListItem,
-  ListItemText,
   Paper,
   Skeleton,
   TextField,
   Typography,
 } from "@mui/material";
+import { useQuery } from "@tanstack/react-query";
 import React, { useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { useNavigate, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
 import { auctionApi } from "../apis/auctionApi";
 import { productApi } from "../apis/productApi";
 import { useAuth } from "../contexts/AuthContext";
-import type { Auction, AuctionUpdateRequest } from "@moreauction/types";
-import { AuctionStatus } from "@moreauction/types";
-import type { Product, ProductAndAuction } from "@moreauction/types";
 
+import { hasRole, UserRole } from "@moreauction/types";
 import {
   addHours,
   format,
@@ -37,7 +32,6 @@ import {
   setSeconds,
 } from "date-fns";
 import { ko } from "date-fns/locale";
-import { UserRole } from "@moreauction/types";
 import { MoneyInput } from "../components/inputs/MoneyInput";
 
 interface AuctionFormData {
@@ -53,7 +47,6 @@ const AuctionRegistration: React.FC = () => {
   }>();
   const { user } = useAuth();
   const isEditMode = !!auctionId;
-  const isReregisterMode = !auctionId && !!productId;
   const navigate = useNavigate();
   const {
     register,
@@ -64,26 +57,9 @@ const AuctionRegistration: React.FC = () => {
     reset,
   } = useForm<AuctionFormData>();
 
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogMessage, setDialogMessage] = useState("");
-
-  const productsQuery = useQuery({
-    queryKey: ["products", "auctionRegistration", user?.role, user?.userId],
-    queryFn: async () => {
-      if (user?.role === UserRole.SELLER) {
-        const response = await productApi.getMyProducts();
-        return response.data as ProductAndAuction[];
-      }
-      const response = await productApi.getProducts();
-      return response.data.content as ProductAndAuction[];
-    },
-    enabled: !isEditMode && !isReregisterMode,
-    staleTime: 30_000,
-  });
+  const [isCheckingAuction, setIsCheckingAuction] = useState(false);
 
   const auctionDetailQuery = useQuery({
     queryKey: ["auctions", "detail", auctionId],
@@ -92,10 +68,26 @@ const AuctionRegistration: React.FC = () => {
     staleTime: 30_000,
   });
 
-  const productForReregisterQuery = useQuery({
+  const productForRegisterQuery = useQuery({
     queryKey: ["products", "detail", productId],
-    queryFn: () => productApi.getProductById(productId as string),
-    enabled: isReregisterMode && !!productId,
+    queryFn: async () => {
+      const response = await productApi.getProductById(productId as string);
+      return response.data;
+    },
+    enabled: !isEditMode && !!productId,
+    staleTime: 30_000,
+  });
+
+  const auctionProductId = auctionDetailQuery.data?.data?.productId;
+  const productForEditQuery = useQuery({
+    queryKey: ["products", "detail", auctionProductId],
+    queryFn: async () => {
+      const response = await productApi.getProductById(
+        auctionProductId as string
+      );
+      return response.data;
+    },
+    enabled: isEditMode && !!auctionProductId,
     staleTime: 30_000,
   });
 
@@ -122,13 +114,13 @@ const AuctionRegistration: React.FC = () => {
     if (!isEditMode) {
       initTimes();
     }
-  }, [initTimes, isEditMode, isReregisterMode]);
+  }, [initTimes, isEditMode]);
 
   useEffect(() => {
     const auction = auctionDetailQuery.data?.data;
     if (!auction) return;
 
-    if (user?.role === UserRole.USER) {
+    if (!hasRole(user?.roles, UserRole.SELLER)) {
       alert("경매를 수정할 권한이 없습니다.");
       navigate("/");
       return;
@@ -140,26 +132,17 @@ const AuctionRegistration: React.FC = () => {
       return;
     }
 
-    setSelectedProduct({
-      id: auction.productId,
-      name: auction.productName,
-      sellerId: auction.sellerId,
-      description: auction.description,
-      status: "READY",
-      deletedYn: "N",
-    });
-
     reset({
       startBid: auction.startBid,
       auctionStartAt: auction.auctionStartAt.slice(0, 16),
       auctionEndAt: auction.auctionEndAt.slice(0, 16),
     });
-  }, [auctionDetailQuery.data, auctionId, navigate, reset, user?.role]);
+  }, [auctionDetailQuery.data, auctionId, navigate, reset, user?.roles]);
 
   useEffect(() => {
-    const productResponse = productForReregisterQuery.data?.data;
+    const productResponse = productForRegisterQuery.data;
     if (!productResponse) return;
-    const { product, auctions = [] } = productResponse;
+    const product = productResponse as Product;
 
     if (!product) {
       setSubmitError("상품 정보를 찾을 수 없습니다.");
@@ -167,82 +150,77 @@ const AuctionRegistration: React.FC = () => {
       return;
     }
 
-    if (user?.role !== UserRole.SELLER) {
-      alert("경매를 재등록할 권한이 없습니다.");
+    if (!hasRole(user?.roles, UserRole.SELLER)) {
+      alert("경매를 등록할 권한이 없습니다.");
       navigate("/");
       return;
     }
 
     if (product.sellerId && user?.userId !== product.sellerId) {
-      alert("본인이 등록한 상품만 경매를 재등록할 수 있습니다.");
+      alert("본인이 등록한 상품만 경매를 등록할 수 있습니다.");
       navigate("/");
       return;
     }
 
-    const hasActive = (Array.isArray(auctions) ? auctions : []).some(
-      (auction: Auction) =>
-        auction.status === AuctionStatus.IN_PROGRESS ||
-        auction.status === AuctionStatus.READY
-    );
+    const checkExistingAuctions = async () => {
+      setIsCheckingAuction(true);
+      try {
+        const auctionsResponse = await auctionApi.getAuctionsByProductId(
+          product.id
+        );
+        const auctions = auctionsResponse.data ? auctionsResponse.data : [];
+        const hasActive = auctions.some(
+          (auction: AuctionDetailResponse) =>
+            auction.status === AuctionStatus.IN_PROGRESS ||
+            auction.status === AuctionStatus.READY
+        );
 
-    if (hasActive) {
-      alert("진행 중 또는 대기 중인 경매가 있어 재등록할 수 없습니다.");
-      navigate(`/products/${productId}`);
-      return;
-    }
+        if (hasActive) {
+          alert("진행 중 또는 대기 중인 경매가 있어 등록할 수 없습니다.");
+          navigate(`/products/${productId}`);
+          return;
+        }
+      } catch (err) {
+        console.error("경매 상태 확인 실패:", err);
+      } finally {
+        setIsCheckingAuction(false);
+      }
+    };
 
-    setSelectedProduct(product);
-  }, [navigate, productForReregisterQuery.data, productId, user?.role, user?.userId]);
+    checkExistingAuctions();
+  }, [
+    navigate,
+    productForRegisterQuery.data,
+    productId,
+    user?.roles,
+    user?.userId,
+  ]);
 
-  const products = productsQuery.data ?? [];
   const isInitialLoading =
-    productsQuery.isLoading ||
     auctionDetailQuery.isLoading ||
-    productForReregisterQuery.isLoading;
+    productForRegisterQuery.isLoading ||
+    productForEditQuery.isLoading;
   const queryError = useMemo(() => {
     const err: any =
       auctionDetailQuery.error ??
-      productForReregisterQuery.error ??
-      productsQuery.error;
+      productForRegisterQuery.error ??
+      productForEditQuery.error;
     if (!err) return null;
-    return err?.data?.message ?? err?.message ?? "데이터를 불러오는데 실패했습니다.";
+    return (
+      err?.data?.message ?? err?.message ?? "데이터를 불러오는데 실패했습니다."
+    );
   }, [
     auctionDetailQuery.error,
-    productForReregisterQuery.error,
-    productsQuery.error,
+    productForRegisterQuery.error,
+    productForEditQuery.error,
   ]);
 
-  const handleProductSelect = async (data: ProductAndAuction) => {
-    setActionLoading(true);
-    const { product, auctions } = data;
-    try {
-      const conflictingStatuses: AuctionStatus[] = [
-        AuctionStatus.READY,
-        AuctionStatus.IN_PROGRESS,
-        AuctionStatus.COMPLETED,
-      ];
-
-      const hasConflict = auctions?.some((auction: Auction) =>
-        conflictingStatuses.includes(auction.status)
-      );
-
-      if (hasConflict) {
-        setDialogMessage(
-          "이 상품은 이미 대기, 진행 또는 완료 상태의 경매가 존재하여 추가로 등록할 수 없습니다."
-        );
-        setDialogOpen(true);
-      } else {
-        setSelectedProduct(product);
-      }
-    } catch (err) {
-      setSelectedProduct(product);
-    } finally {
-      setActionLoading(false);
-    }
-  };
+  const selectedProduct = isEditMode
+    ? ((productForEditQuery.data ?? null) as Product | null)
+    : ((productForRegisterQuery.data ?? null) as Product | null);
 
   const onSubmit = async (data: AuctionFormData) => {
-    if (actionLoading) return;
+    if (actionLoading || isCheckingAuction) return;
     setActionLoading(true);
     setSubmitError(null);
 
@@ -272,8 +250,22 @@ const AuctionRegistration: React.FC = () => {
           sellerId: user?.userId,
         };
         const response = await auctionApi.createAuction(auctionData);
+        const createdAuctionId =
+          response.data.auctionId ?? response.data.id ?? "";
+        if (createdAuctionId) {
+          await productApi.updateLatestAuctionId(
+            selectedProduct.id,
+            createdAuctionId
+          );
+        }
+        const targetAuctionId =
+          createdAuctionId || response.data.auctionId || response.data.id;
         alert("경매가 성공적으로 등록되었습니다.");
-        navigate(`/auctions/${response.data.auctionId}`);
+        if (targetAuctionId) {
+          navigate(`/auctions/${targetAuctionId}`);
+        } else {
+          navigate("/auctions");
+        }
       }
     } catch (err: any) {
       console.error("경매 처리 실패:", err);
@@ -283,11 +275,7 @@ const AuctionRegistration: React.FC = () => {
     }
   };
 
-  const handleCloseDialog = () => {
-    setDialogOpen(false);
-  };
-
-  if (user?.role === UserRole.USER && !isEditMode) {
+  if (!hasRole(user?.roles, UserRole.SELLER) && !isEditMode) {
     return (
       <Container maxWidth="md">
         <Typography variant="h4" sx={{ my: 4 }}>
@@ -300,32 +288,28 @@ const AuctionRegistration: React.FC = () => {
     );
   }
 
+  if (!isEditMode && !productId) {
+    return (
+      <Container maxWidth="md">
+        <Typography variant="h4" sx={{ my: 4 }}>
+          경매 등록
+        </Typography>
+        <Alert severity="error">상품 ID가 필요합니다.</Alert>
+      </Container>
+    );
+  }
+
   if (isInitialLoading && !selectedProduct) {
     return (
       <Container maxWidth="md">
         <Typography variant="h4" sx={{ my: 4 }}>
-          {isEditMode ? "경매 정보 수정" : "경매에 등록할 상품 선택"}
+          {isEditMode ? "경매 정보 수정" : "경매 정보 등록"}
         </Typography>
         <Paper>
-          <List>
-            {Array.from({ length: 4 }).map((_, idx) => (
-              <React.Fragment key={idx}>
-                <ListItem
-                  secondaryAction={
-                    <Button variant="contained" disabled>
-                      <Skeleton variant="rounded" width={60} height={32} />
-                    </Button>
-                  }
-                >
-                  <ListItemText
-                    primary={<Skeleton width="60%" />}
-                    secondary={<Skeleton width="80%" />}
-                  />
-                </ListItem>
-                <Divider />
-              </React.Fragment>
-            ))}
-          </List>
+          <Box sx={{ p: 3 }}>
+            <Skeleton height={32} width="40%" />
+            <Skeleton height={24} width="60%" />
+          </Box>
         </Paper>
       </Container>
     );
@@ -333,54 +317,7 @@ const AuctionRegistration: React.FC = () => {
 
   return (
     <Container maxWidth="md">
-      {!selectedProduct ? (
-        <>
-          <Typography variant="h4" sx={{ my: 4 }}>
-            경매에 등록할 상품 선택
-          </Typography>
-          {(queryError || submitError) && (
-            <Alert severity="warning">{queryError ?? submitError}</Alert>
-          )}
-          <Paper>
-            <List>
-              {products.length > 0 ? (
-                products.map((data) => {
-                  const { product } = data;
-                  return (
-                    <React.Fragment key={product.id}>
-                      <ListItem
-                        secondaryAction={
-                        <Button
-                          variant="contained"
-                          onClick={() => handleProductSelect(data)}
-                          disabled={actionLoading}
-                        >
-                          {actionLoading ? (
-                            <CircularProgress size={24} color="inherit" />
-                          ) : (
-                            "선택"
-                          )}
-                          </Button>
-                        }
-                      >
-                        <ListItemText
-                          primary={product.name}
-                          secondary={product.description}
-                        />
-                      </ListItem>
-                      <Divider />
-                    </React.Fragment>
-                  );
-                })
-              ) : (
-                <ListItem>
-                  <ListItemText primary="경매에 등록할 수 있는 상품이 없습니다." />
-                </ListItem>
-              )}
-            </List>
-          </Paper>
-        </>
-      ) : (
+      {selectedProduct ? (
         <>
           <Typography variant="h4" sx={{ my: 4 }}>
             {isEditMode ? "경매 정보 수정" : "경매 정보 등록"}
@@ -400,156 +337,144 @@ const AuctionRegistration: React.FC = () => {
                 disabled={actionLoading}
                 sx={{ border: 0, p: 0, m: 0, minInlineSize: 0 }}
               >
-              <Controller
-                name="startBid"
-                control={control}
-                rules={{
-                  required: "시작 입찰가는 필수입니다.",
-                  validate: (v) => {
-                    if (v <= 0) return "시작 입찰가는 0보다 커야 합니다";
-                    if (v % 100 !== 0) return "100원 단위로 입력해주세요";
-                    return true;
-                  },
-                }}
-                render={({ field }) => (
-                  <MoneyInput
-                    margin="normal"
-                    required
-                    fullWidth
-                    id="startBid"
-                    label="시작 입찰가 (100원 단위)"
-                    value={field.value != null ? String(field.value) : ""}
-                    onChangeValue={(digits) => {
-                      const num = digits ? Number(digits) : 0;
-                      field.onChange(Number.isFinite(num) ? num : 0);
-                    }}
-                    onBlur={() => {
-                      field.onBlur();
-                      const next = Math.round(Number(field.value ?? 0) / 100) * 100;
-                      field.onChange(Number.isFinite(next) ? next : 0);
-                    }}
-                    error={!!errors.startBid}
-                    helperText={errors.startBid?.message}
-                    InputProps={{ endAdornment: "원" }}
-                    slotProps={{
-                      input: {
-                        inputProps: {
-                          "aria-label": "시작 입찰가",
+                <Controller
+                  name="startBid"
+                  control={control}
+                  rules={{
+                    required: "시작 입찰가는 필수입니다.",
+                    validate: (v) => {
+                      if (v <= 0) return "시작 입찰가는 0보다 커야 합니다";
+                      if (v % 100 !== 0) return "100원 단위로 입력해주세요";
+                      return true;
+                    },
+                  }}
+                  render={({ field }) => (
+                    <MoneyInput
+                      margin="normal"
+                      required
+                      fullWidth
+                      id="startBid"
+                      label="시작 입찰가 (100원 단위)"
+                      value={field.value != null ? String(field.value) : ""}
+                      onChangeValue={(digits) => {
+                        const num = digits ? Number(digits) : 0;
+                        field.onChange(Number.isFinite(num) ? num : 0);
+                      }}
+                      onBlur={() => {
+                        field.onBlur();
+                        const next =
+                          Math.round(Number(field.value ?? 0) / 100) * 100;
+                        field.onChange(Number.isFinite(next) ? next : 0);
+                      }}
+                      error={!!errors.startBid}
+                      helperText={errors.startBid?.message}
+                      InputProps={{ endAdornment: "원" }}
+                      slotProps={{
+                        input: {
+                          inputProps: {
+                            "aria-label": "시작 입찰가",
+                          },
                         },
-                      },
-                      inputLabel: { shrink: true },
-                    }}
-                  />
-                )}
-              />
-              <TextField
-                margin="normal"
-                required
-                fullWidth
-                id="auctionStartAt"
-                label="경매 시작 시간"
-                type="datetime-local"
-                {...register("auctionStartAt", {
-                  required: "경매 시작 시간은 필수입니다.",
-                  validate: (v) => {
-                    const date = new Date(v);
-                    if (isNaN(date.getTime()))
-                      return "올바른 날짜를 입력해주세요";
-                    if (date < new Date() && !isEditMode)
-                      return "현재 이후 시간만 선택 가능합니다";
-                    if (date.getMinutes() !== 0)
-                      return "정각 단위로 입력해주세요";
-                    return true;
-                  },
-                })}
-                error={!!errors.auctionStartAt}
-                helperText={
-                  errors.auctionStartAt?.message || "예: 연-월-일 12:00"
-                }
-                slotProps={{
-                  inputLabel: { shrink: true },
-                }}
-              />
-              <TextField
-                margin="normal"
-                required
-                fullWidth
-                id="auctionEndAt"
-                label="경매 종료 시간"
-                type="datetime-local"
-                {...register("auctionEndAt", {
-                  required: "경매 종료 시간은 필수입니다.",
-                  validate: (v) => {
-                    const start = new Date(watch("auctionStartAt"));
-                    const end = new Date(v);
-                    if (isNaN(end.getTime()))
-                      return "올바른 날짜를 입력해주세요";
-                    if (end <= start)
-                      return "종료 시간은 시작 시간 이후여야 합니다";
-                    if (end.getMinutes() !== 0)
-                      return "정각 단위로 입력해주세요";
-                    return true;
-                  },
-                })}
-                error={!!errors.auctionEndAt}
-                helperText={
-                  errors.auctionEndAt?.message || "예: 연-월-일 12:00"
-                }
-                slotProps={{
-                  inputLabel: { shrink: true },
-                }}
-              />
-
-              {submitError && (
-                <Alert severity="error" sx={{ mt: 2 }}>
-                  {submitError}
-                </Alert>
-              )}
-
-              <Box sx={{ display: "flex", gap: 2, mt: 3 }}>
-                {!isEditMode && (
-                  <Button
-                    fullWidth
-                    variant="outlined"
-                    onClick={() => setSelectedProduct(null)}
-                    disabled={actionLoading}
-                  >
-                    상품 다시 선택
-                  </Button>
-                )}
-                <Button
-                  type="submit"
-                  fullWidth
-                  variant="contained"
-                  disabled={actionLoading}
-                  sx={{ py: 1.5 }}
-                >
-                  {actionLoading ? (
-                    <CircularProgress size={24} color="inherit" />
-                  ) : isEditMode ? (
-                    "경매 수정하기"
-                  ) : (
-                    "경매 등록하기"
+                        inputLabel: { shrink: true },
+                      }}
+                    />
                   )}
-                </Button>
-              </Box>
+                />
+                <TextField
+                  margin="normal"
+                  required
+                  fullWidth
+                  id="auctionStartAt"
+                  label="경매 시작 시간"
+                  type="datetime-local"
+                  {...register("auctionStartAt", {
+                    required: "경매 시작 시간은 필수입니다.",
+                    validate: (v) => {
+                      const date = new Date(v);
+                      if (isNaN(date.getTime()))
+                        return "올바른 날짜를 입력해주세요";
+                      if (date < new Date() && !isEditMode)
+                        return "현재 이후 시간만 선택 가능합니다";
+                      if (date.getMinutes() !== 0)
+                        return "정각 단위로 입력해주세요";
+                      return true;
+                    },
+                  })}
+                  error={!!errors.auctionStartAt}
+                  helperText={
+                    errors.auctionStartAt?.message || "예: 연-월-일 12:00"
+                  }
+                  slotProps={{
+                    inputLabel: { shrink: true },
+                  }}
+                />
+                <TextField
+                  margin="normal"
+                  required
+                  fullWidth
+                  id="auctionEndAt"
+                  label="경매 종료 시간"
+                  type="datetime-local"
+                  {...register("auctionEndAt", {
+                    required: "경매 종료 시간은 필수입니다.",
+                    validate: (v) => {
+                      const start = new Date(watch("auctionStartAt"));
+                      const end = new Date(v);
+                      if (isNaN(end.getTime()))
+                        return "올바른 날짜를 입력해주세요";
+                      if (end <= start)
+                        return "종료 시간은 시작 시간 이후여야 합니다";
+                      if (end.getMinutes() !== 0)
+                        return "정각 단위로 입력해주세요";
+                      return true;
+                    },
+                  })}
+                  error={!!errors.auctionEndAt}
+                  helperText={
+                    errors.auctionEndAt?.message || "예: 연-월-일 12:00"
+                  }
+                  slotProps={{
+                    inputLabel: { shrink: true },
+                  }}
+                />
+
+                {submitError && (
+                  <Alert severity="error" sx={{ mt: 2 }}>
+                    {submitError}
+                  </Alert>
+                )}
+
+                <Box sx={{ display: "flex", gap: 2, mt: 3 }}>
+                  <Button
+                    type="submit"
+                    fullWidth
+                    variant="contained"
+                    disabled={actionLoading || isCheckingAuction}
+                    sx={{ py: 1.5 }}
+                  >
+                    {actionLoading || isCheckingAuction ? (
+                      <CircularProgress size={24} color="inherit" />
+                    ) : isEditMode ? (
+                      "경매 수정하기"
+                    ) : (
+                      "경매 등록하기"
+                    )}
+                  </Button>
+                </Box>
               </Box>
             </Box>
           </Paper>
         </>
+      ) : (
+        <>
+          <Typography variant="h4" sx={{ my: 4 }}>
+            {isEditMode ? "경매 정보 수정" : "경매 정보 등록"}
+          </Typography>
+          {(queryError || submitError) && (
+            <Alert severity="warning">{queryError ?? submitError}</Alert>
+          )}
+        </>
       )}
-
-      <Dialog open={dialogOpen} onClose={handleCloseDialog}>
-        <DialogTitle>알림</DialogTitle>
-        <DialogContent>
-          <DialogContentText>{dialogMessage}</DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog} autoFocus>
-            확인
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Container>
   );
 };

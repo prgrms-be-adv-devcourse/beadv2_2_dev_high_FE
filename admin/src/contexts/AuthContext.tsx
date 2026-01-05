@@ -1,4 +1,7 @@
 // src/contexts/AuthContext.tsx
+import type { LoginResponse, User } from "@moreauction/types";
+import { CircularProgress } from "@mui/material";
+import { useQueryClient } from "@tanstack/react-query";
 import React, {
   createContext,
   useContext,
@@ -6,10 +9,7 @@ import React, {
   useState,
   type ReactNode,
 } from "react";
-import { CircularProgress } from "@mui/material";
-import { useQueryClient } from "@tanstack/react-query";
 import { userApi } from "../apis/userApi";
-import type { LoginResponse, User } from "@moreauction/types";
 
 export interface AuthContextType {
   isAuthenticated: boolean;

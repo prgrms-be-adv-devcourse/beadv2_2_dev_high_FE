@@ -1,7 +1,14 @@
+import type {
+  ApiResponseDto,
+  DepositInfo,
+  PagedDepositHistoryResponse,
+  Product,
+} from "@moreauction/types";
+import { hasRole, UserRole } from "@moreauction/types";
 import { Box, Container, Tab, Tabs, Typography } from "@mui/material";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { depositApi } from "../apis/depositApi";
 import { orderApi } from "../apis/orderApi";
 import { productApi } from "../apis/productApi";
@@ -15,9 +22,6 @@ import { ProfileTab } from "../components/mypage/ProfileTab";
 import { SettlementTab } from "../components/mypage/SettlementTab";
 import { requestTossPayment } from "../components/tossPay/requestTossPayment";
 import { useAuth } from "../contexts/AuthContext";
-import type { DepositInfo, PagedDepositHistoryResponse } from "@moreauction/types";
-import type { ProductAndAuction } from "@moreauction/types";
-import { UserRole } from "@moreauction/types";
 
 const MyPage: React.FC = () => {
   const { user } = useAuth();
@@ -52,14 +56,16 @@ const MyPage: React.FC = () => {
     staleTime: 60_000,
   });
 
-  const depositInfoQuery = useQuery<DepositInfo>({
+  const depositInfoQuery = useQuery<ApiResponseDto<DepositInfo>>({
     queryKey: ["deposit", "account"],
     queryFn: () => depositApi.getAccount(),
     enabled: tabValue === 1,
     staleTime: 30_000,
   });
 
-  const depositHistoryQuery = useQuery<PagedDepositHistoryResponse>({
+  const depositHistoryQuery = useQuery<
+    ApiResponseDto<PagedDepositHistoryResponse>
+  >({
     queryKey: ["deposit", "history"],
     queryFn: () =>
       depositApi.getDepositHistories({
@@ -87,14 +93,16 @@ const MyPage: React.FC = () => {
       return Array.isArray(soldRes.data) ? soldRes.data : [];
     },
     enabled:
-      tabValue === 2 && ordersFilter === "SOLD" && user?.role !== UserRole.USER,
+      tabValue === 2 &&
+      ordersFilter === "SOLD" &&
+      hasRole(user?.roles, UserRole.SELLER),
     staleTime: 30_000,
   });
 
   const sellerInfoQuery = useQuery({
     queryKey: ["seller", "info"],
     queryFn: () => userApi.getSellerInfo(),
-    enabled: tabValue === 3 && user?.role !== UserRole.USER,
+    enabled: tabValue === 3 && hasRole(user?.roles, UserRole.SELLER),
     staleTime: 60_000,
   });
 
@@ -102,15 +110,15 @@ const MyPage: React.FC = () => {
     queryKey: ["products", "mine", user?.userId],
     queryFn: async () => {
       const response = await productApi.getMyProducts(user?.userId);
-      return response.data as ProductAndAuction[];
+      return response.data as Product[];
     },
-    enabled: tabValue === 5 && user?.role !== UserRole.USER,
+    enabled: tabValue === 5 && hasRole(user?.roles, UserRole.SELLER),
     staleTime: 30_000,
   });
 
   const userInfo = profileQuery.data?.data ?? null;
-  const depositInfo = depositInfoQuery.data ?? null;
-  const depositHistory = depositHistoryQuery.data?.content ?? [];
+  const depositInfo = depositInfoQuery.data?.data ?? null;
+  const depositHistory = depositHistoryQuery.data?.data?.content ?? [];
   const ordersBought = boughtOrdersQuery.data ?? [];
   const ordersSold = soldOrdersQuery.data ?? [];
   const sellerInfo = sellerInfoQuery.data?.data ?? null;
@@ -120,9 +128,7 @@ const MyPage: React.FC = () => {
     if (!depositInfoQuery.isError) return null;
     const err: any = depositInfoQuery.error;
     return (
-      err?.data?.message ??
-      err?.message ??
-      "예치금 정보를 불러오지 못했습니다."
+      err?.data?.message ?? err?.message ?? "예치금 정보를 불러오지 못했습니다."
     );
   }, [depositInfoQuery.error, depositInfoQuery.isError]);
 
@@ -189,14 +195,16 @@ const MyPage: React.FC = () => {
   const handleCreateAccount = async () => {
     try {
       const res = await depositApi.createAccount(user?.userId);
-      if (res) {
+      if (res?.data) {
         alert("예치금 계좌가 생성되었습니다.");
         queryClient.setQueryData(["deposit", "account"], res);
-        if (typeof res.balance === "number") {
-          queryClient.setQueryData(["deposit", "balance"], res.balance);
-          localStorage.setItem("depositBalance", String(res.balance));
+        if (typeof res.data.balance === "number") {
+          queryClient.setQueryData(["deposit", "balance"], res.data.balance);
+          localStorage.setItem("depositBalance", String(res.data.balance));
         }
-        await queryClient.invalidateQueries({ queryKey: ["deposit", "history"] });
+        await queryClient.invalidateQueries({
+          queryKey: ["deposit", "history"],
+        });
       }
     } catch (err: any) {
       alert("계좌 생성 실패: " + (err?.data?.message ?? "알 수 없는 오류"));
@@ -217,8 +225,8 @@ const MyPage: React.FC = () => {
     try {
       const depositOrder = await depositApi.createDepositOrder(amount);
 
-      if (depositOrder && depositOrder.orderId) {
-        requestTossPayment(depositOrder.orderId, depositOrder.amount);
+      if (depositOrder?.data?.orderId) {
+        requestTossPayment(depositOrder.data.orderId, depositOrder.data.amount);
         handleCloseChargeDialog();
       } else {
         setChargeError("주문 생성에 실패했습니다.");
@@ -241,17 +249,14 @@ const MyPage: React.FC = () => {
           <Tab label="프로필" />
           <Tab label="예치금 내역" />
           <Tab label="주문 내역" />
-          {user?.role !== "USER" && <Tab label="정산 계좌" />}
-          {user?.role !== "USER" && <Tab label="정산 내역" />}
-          {user?.role !== "USER" && <Tab label="내 상품" />}
+          {hasRole(user?.roles, UserRole.SELLER) && <Tab label="정산 계좌" />}
+          {hasRole(user?.roles, UserRole.SELLER) && <Tab label="정산 내역" />}
+          {hasRole(user?.roles, UserRole.SELLER) && <Tab label="내 상품" />}
         </Tabs>
       </Box>
       <Box sx={{ mt: 3 }}>
         {tabValue === 0 && (
-          <ProfileTab
-            userInfo={userInfo}
-            role={user?.role}
-          />
+          <ProfileTab userInfo={userInfo} roles={user?.roles} />
         )}
 
         {tabValue === 1 && (
@@ -278,19 +283,19 @@ const MyPage: React.FC = () => {
             onFilterChange={(next) => setOrdersFilter(next)}
           />
         )}
-        {tabValue === 3 && user?.role !== "USER" && (
+        {tabValue === 3 && hasRole(user?.roles, UserRole.SELLER) && (
           <DepositSummaryTab
             loading={sellerInfoQuery.isLoading}
             error={sellerInfoError}
             sellerInfo={sellerInfo}
-            role={user?.role}
+            roles={user?.roles}
             onCreateAccount={handleCreateAccount}
           />
         )}
-        {tabValue === 4 && user?.role !== "USER" && (
+        {tabValue === 4 && hasRole(user?.roles, UserRole.SELLER) && (
           <SettlementTab />
         )}
-        {tabValue === 5 && user?.role !== "USER" && (
+        {tabValue === 5 && hasRole(user?.roles, UserRole.SELLER) && (
           <MyProductsTab
             loading={myProductsQuery.isLoading}
             error={myProductsError}

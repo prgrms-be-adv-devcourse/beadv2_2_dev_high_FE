@@ -12,14 +12,12 @@ import {
 } from "@mui/material";
 import React from "react";
 import { Link as RouterLink } from "react-router-dom";
-import type { Product, ProductAndAuction } from "@moreauction/types";
-import { getCommonStatusText } from "@moreauction/utils";
-import { formatWon } from "@moreauction/utils";
+import type { Product } from "@moreauction/types";
 
 interface MyProductsTabProps {
   loading: boolean;
   error: string | null;
-  products: ProductAndAuction[];
+  products: Product[];
 }
 
 export const MyProductsTab: React.FC<MyProductsTabProps> = ({
@@ -39,17 +37,6 @@ export const MyProductsTab: React.FC<MyProductsTabProps> = ({
       </Paper>
     );
   }
-
-  const formatPriceInfo = (product: Product) => {
-    if (product.startBid != null) {
-      const highest =
-        product.currentBid != null && product.currentBid > 0
-          ? formatWon(product.currentBid)
-          : "-";
-      return `최고입찰가 ${highest} · 시작가 ${formatWon(product.startBid)}`;
-    }
-    return null;
-  };
 
   return (
     <Paper sx={{ p: 2 }}>
@@ -74,9 +61,7 @@ export const MyProductsTab: React.FC<MyProductsTabProps> = ({
         <Alert severity="info">등록된 상품이 없습니다.</Alert>
       ) : (
         <List sx={{ maxHeight: "60vh", overflowY: "auto" }}>
-          {products.map(({ product, auctions }) => {
-            const priceInfo = formatPriceInfo(product);
-            const statusText = getCommonStatusText(product.status);
+          {products.map((product) => {
             return (
               <React.Fragment key={product.id}>
                 <ListItem disablePadding>
@@ -92,14 +77,17 @@ export const MyProductsTab: React.FC<MyProductsTabProps> = ({
                       }
                       secondary={
                         <>
-                          <Typography variant="body2" color="text.secondary">
-                            상태: {statusText}
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {product.description || "상품 설명이 없습니다."}
                           </Typography>
-                          {priceInfo && (
-                            <Typography variant="body2" color="text.secondary">
-                              {priceInfo}
-                            </Typography>
-                          )}
                         </>
                       }
                     />

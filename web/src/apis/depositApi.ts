@@ -1,4 +1,5 @@
 import type {
+  ApiResponseDto,
   DepositHstRequest,
   DepositInfo,
   DepositOrderInfo,
@@ -6,14 +7,13 @@ import type {
   PaymentFailReqeuest,
   PaymentSuccessReqeuest,
 } from "@moreauction/types";
-import type { ApiResponseDto } from "@moreauction/types";
 import { client } from "./client";
 
 export const depositApi = {
   /**
    * 사용자 예치금계좌조회
    */
-  getAccount: async (userId?: string): Promise<DepositInfo> => {
+  getAccount: async (userId?: string): Promise<ApiResponseDto<DepositInfo>> => {
     console.log("사용자 예치금 계좌 조회 API 호출:", userId);
     const response = await client.get(`/deposit/me`);
     return response.data;
@@ -23,7 +23,9 @@ export const depositApi = {
    * 예치금계좌 생성 (최초 1회)
    * @param userId - user ID
    */
-  createAccount: async (userId?: string): Promise<DepositInfo> => {
+  createAccount: async (
+    userId?: string
+  ): Promise<ApiResponseDto<DepositInfo>> => {
     console.log(`예치금 계좌 생성 API 호출 (ID: ${userId})`);
     const response = await client.post(`/deposit`, { userId });
     return response.data;
@@ -34,23 +36,31 @@ export const depositApi = {
    * @param userId
    * @returns
    */
-  createDeposit: async (params: DepositHstRequest): Promise<DepositInfo> => {
+  createDeposit: async (
+    params: DepositHstRequest
+  ): Promise<ApiResponseDto<DepositInfo>> => {
     const response = await client.post(`/deposit/usages`, params);
     return response.data;
   },
 
-  createDepositOrder: async (amount: number): Promise<DepositOrderInfo> => {
+  createDepositOrder: async (
+    amount: number
+  ): Promise<ApiResponseDto<DepositOrderInfo>> => {
     const res = await client.post(`/deposit/orders`, { amount });
 
     return res.data;
   },
-  paymentSuccess: async (params: PaymentSuccessReqeuest): Promise<any> => {
+  paymentSuccess: async (
+    params: PaymentSuccessReqeuest
+  ): Promise<ApiResponseDto<unknown>> => {
     const res = await client.post(`/deposit/payments/confirm`, params);
 
     return res.data;
   },
 
-  paymentFail: async (params: PaymentFailReqeuest): Promise<any> => {
+  paymentFail: async (
+    params: PaymentFailReqeuest
+  ): Promise<ApiResponseDto<unknown>> => {
     const res = await client.post(`/deposit/payments/fail`, params);
 
     return res.data;
@@ -63,7 +73,7 @@ export const depositApi = {
   getDepositHistories: async (params?: {
     page?: number;
     size?: number;
-  }): Promise<PagedDepositHistoryResponse> => {
+  }): Promise<ApiResponseDto<PagedDepositHistoryResponse>> => {
     const res = await client.get("/deposit/histories/me", { params });
     return res.data;
   },

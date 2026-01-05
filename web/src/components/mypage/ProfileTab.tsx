@@ -1,12 +1,14 @@
 import { Divider, List, ListItem, ListItemText, Paper } from "@mui/material";
-import type { User } from "@moreauction/types";
+import { type User, type UserRoles } from "@moreauction/types";
 
 interface ProfileTabProps {
   userInfo: User | null;
-  role?: string;
+  roles?: UserRoles;
 }
 
-export const ProfileTab: React.FC<ProfileTabProps> = ({ userInfo, role }) => {
+export const ProfileTab: React.FC<ProfileTabProps> = ({ userInfo, roles }) => {
+  const roleLabel =
+    Array.isArray(roles) && roles.length > 0 ? roles.join(", ") : "정보 없음";
   return (
     <Paper>
       <List>
@@ -65,10 +67,9 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({ userInfo, role }) => {
         </ListItem>
         <Divider />
         <ListItem>
-          <ListItemText primary="역할" secondary={role || "정보 없음"} />
+          <ListItemText primary="역할" secondary={roleLabel} />
         </ListItem>
       </List>
     </Paper>
   );
 };
-

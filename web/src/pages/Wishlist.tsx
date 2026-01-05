@@ -1,3 +1,5 @@
+import type { Product } from "@moreauction/types";
+import CloseIcon from "@mui/icons-material/Close";
 import {
   Alert,
   Box,
@@ -11,14 +13,12 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { useMemo, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
-import { wishlistApi } from "../apis/wishlistApi";
 import { productApi } from "../apis/productApi";
-import type { Product } from "@moreauction/types";
+import { wishlistApi } from "../apis/wishlistApi";
 import { useAuth } from "../contexts/AuthContext";
-import CloseIcon from "@mui/icons-material/Close";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 const Wishlist: React.FC = () => {
   const { isAuthenticated, user } = useAuth();
@@ -53,18 +53,25 @@ const Wishlist: React.FC = () => {
         })
       );
 
+      // const auctionList = await Promise.all(
+      //   uniqueProductIds.map(async (productId) => {
+      //     try {
+      //       const res = await auctionApi.getAuctionsByProductId(productId);
+      //       return res.data;
+      //     } catch (err) {
+      //       console.error("상품 조회 실패:", productId, err);
+      //       return null;
+      //     }
+      //   })
+      // );
+
       return productResults
         .map((result) => {
-          if (!result?.product) return null;
-          const latestAuction = result.auctions?.[0];
-          const mergedProduct: Product = {
-            ...result.product,
-            startBid: result.product.startBid ?? latestAuction?.startBid,
-            currentBid:
-              result.product.currentBid ??
-              latestAuction?.currentBid ??
-              result.product.startBid ??
-              latestAuction?.startBid,
+          if (!result) return null;
+          // const latestAuction: any = auctionList.pop();
+          const mergedProduct: any = {
+            // ...latestAuction,
+            ...result,
           };
           return mergedProduct;
         })
@@ -77,7 +84,9 @@ const Wishlist: React.FC = () => {
   const errorMessage = useMemo(() => {
     if (!wishlistQuery.isError) return null;
     const err: any = wishlistQuery.error;
-    return err?.data?.message ?? err?.message ?? "찜 목록을 불러오는데 실패했습니다.";
+    return (
+      err?.data?.message ?? err?.message ?? "찜 목록을 불러오는데 실패했습니다."
+    );
   }, [wishlistQuery.error, wishlistQuery.isError]);
 
   const removeMutation = useMutation({
@@ -130,27 +139,31 @@ const Wishlist: React.FC = () => {
           찜 목록 (Wishlist)
         </Typography>
         <Paper sx={{ p: 2 }}>
-          {wishlistQuery.isLoading && products.length === 0 && !errorMessage && (
-            <List>
-              {Array.from({ length: 5 }).map((_, idx) => (
-                <ListItem key={idx} divider>
-                  <ListItemText
-                    primary={<Skeleton width="60%" />}
-                    secondary={<Skeleton width="30%" />}
-                  />
-                </ListItem>
-              ))}
-            </List>
-          )}
+          {wishlistQuery.isLoading &&
+            products.length === 0 &&
+            !errorMessage && (
+              <List>
+                {Array.from({ length: 5 }).map((_, idx) => (
+                  <ListItem key={idx} divider>
+                    <ListItemText
+                      primary={<Skeleton width="60%" />}
+                      secondary={<Skeleton width="30%" />}
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            )}
 
           {!wishlistQuery.isLoading && errorMessage && (
             <Alert severity="error">{errorMessage}</Alert>
           )}
-          {!wishlistQuery.isLoading && !errorMessage && products.length === 0 && (
-            <Alert severity="info">
-              찜한 상품이 없습니다. 마음에 드는 상품을 찜해보세요.
-            </Alert>
-          )}
+          {!wishlistQuery.isLoading &&
+            !errorMessage &&
+            products.length === 0 && (
+              <Alert severity="info">
+                찜한 상품이 없습니다. 마음에 드는 상품을 찜해보세요.
+              </Alert>
+            )}
           {!wishlistQuery.isLoading && !errorMessage && products.length > 0 && (
             <List>
               {products.map((product) => (

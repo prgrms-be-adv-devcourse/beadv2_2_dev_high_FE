@@ -2,7 +2,7 @@ import React from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Box, Button, Paper, Typography } from "@mui/material";
 import { useAuth } from "../contexts/AuthContext";
-import { UserRole } from "@moreauction/types";
+import { hasRole, UserRole } from "@moreauction/types";
 import AdminShell from "../components/AdminShell";
 
 /**
@@ -59,7 +59,7 @@ const ProtectedRoute: React.FC = () => {
     );
   }
 
-  if (user?.role !== UserRole.ADMIN) {
+  if (!hasRole(user?.roles, UserRole.ADMIN)) {
     return (
       <AdminShell headerTitle="Admin Console">
         <Box
