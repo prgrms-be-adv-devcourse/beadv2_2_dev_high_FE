@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import {
   Box,
   Button,
@@ -13,6 +13,7 @@ import { Link as RouterLink } from "react-router-dom";
 import AuctionList from "../components/AuctionList";
 import { hasRole, UserRole, AuctionStatus } from "@moreauction/types";
 import { useAuth } from "../contexts/AuthContext";
+import { productApi } from "../apis/productApi";
 
 // 홈: 상단 히어로 섹션 + 상품 목록
 const Home: React.FC = () => {
@@ -32,6 +33,9 @@ const Home: React.FC = () => {
     secondaryTo = "/products/new";
   }
 
+  useEffect(() => {
+    // productApi.getProductsByIds(["test", "teset2"]);
+  }, []);
   return (
     <>
       <Box
@@ -228,7 +232,6 @@ const Home: React.FC = () => {
           <AuctionList
             status={[AuctionStatus.READY]}
             sortOption="START_SOON"
-            linkDestination="product"
           />
         </Container>
       </Box>

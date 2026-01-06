@@ -15,7 +15,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { useNavigate, useParams } from "react-router-dom";
@@ -48,6 +48,7 @@ const AuctionRegistration: React.FC = () => {
   const { user } = useAuth();
   const isEditMode = !!auctionId;
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const {
     register,
     handleSubmit,
@@ -60,6 +61,8 @@ const AuctionRegistration: React.FC = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isCheckingAuction, setIsCheckingAuction] = useState(false);
+  const [registrationBlockedMessage, setRegistrationBlockedMessage] =
+    useState<string | null>(null);
 
   const auctionDetailQuery = useQuery({
     queryKey: ["auctions", "detail", auctionId],
@@ -132,10 +135,19 @@ const AuctionRegistration: React.FC = () => {
       return;
     }
 
+    const toLocalInput = (value: string) => {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return value.slice(0, 16);
+      }
+      const offset = date.getTimezoneOffset() * 60000;
+      return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+    };
+
     reset({
       startBid: auction.startBid,
-      auctionStartAt: auction.auctionStartAt.slice(0, 16),
-      auctionEndAt: auction.auctionEndAt.slice(0, 16),
+      auctionStartAt: toLocalInput(auction.auctionStartAt),
+      auctionEndAt: toLocalInput(auction.auctionEndAt),
     });
   }, [auctionDetailQuery.data, auctionId, navigate, reset, user?.roles]);
 
@@ -171,15 +183,18 @@ const AuctionRegistration: React.FC = () => {
         const auctions = auctionsResponse.data ? auctionsResponse.data : [];
         const hasActive = auctions.some(
           (auction: AuctionDetailResponse) =>
-            auction.status === AuctionStatus.IN_PROGRESS ||
-            auction.status === AuctionStatus.READY
+            !auction.deletedYn &&
+            (auction.status === AuctionStatus.IN_PROGRESS ||
+              auction.status === AuctionStatus.READY)
         );
 
         if (hasActive) {
-          alert("진행 중 또는 대기 중인 경매가 있어 등록할 수 없습니다.");
-          navigate(`/products/${productId}`);
+          setRegistrationBlockedMessage(
+            "진행 중 또는 대기 중인 경매가 있어 등록할 수 없습니다."
+          );
           return;
         }
+        setRegistrationBlockedMessage(null);
       } catch (err) {
         console.error("경매 상태 확인 실패:", err);
       } finally {
@@ -221,6 +236,10 @@ const AuctionRegistration: React.FC = () => {
 
   const onSubmit = async (data: AuctionFormData) => {
     if (actionLoading || isCheckingAuction) return;
+    if (!isEditMode && registrationBlockedMessage) {
+      setSubmitError(registrationBlockedMessage);
+      return;
+    }
     setActionLoading(true);
     setSubmitError(null);
 
@@ -239,8 +258,27 @@ const AuctionRegistration: React.FC = () => {
           auctionEndAt: auctionEnd,
         };
         const response = await auctionApi.updateAuction(auctionId, auctionData);
+        const targetAuctionId =
+          response.data.auctionId ?? response.data.id ?? auctionId;
+        const targetProductId =
+          selectedProduct?.id ?? response.data.productId ?? "";
+        await queryClient.invalidateQueries({
+          queryKey: ["auctions", "detail", targetAuctionId],
+        });
+        if (targetProductId) {
+          await queryClient.invalidateQueries({
+            queryKey: ["auctions", "byProduct", targetProductId],
+          });
+          await queryClient.invalidateQueries({
+            queryKey: ["products", "detail", targetProductId],
+          });
+        }
         alert("경매가 성공적으로 수정되었습니다.");
-        navigate(`/auctions/${response.data.auctionId}`);
+        if (targetProductId) {
+          navigate(`/products/${targetProductId}`);
+        } else {
+          navigate(`/auctions/${targetAuctionId}`);
+        }
       } else if (!isEditMode && selectedProduct) {
         const auctionData = {
           productId: selectedProduct.id,
@@ -258,14 +296,19 @@ const AuctionRegistration: React.FC = () => {
             createdAuctionId
           );
         }
+        await queryClient.invalidateQueries({
+          queryKey: ["auctions", "detail", createdAuctionId],
+        });
+        await queryClient.invalidateQueries({
+          queryKey: ["auctions", "byProduct", selectedProduct.id],
+        });
+        await queryClient.invalidateQueries({
+          queryKey: ["products", "detail", selectedProduct.id],
+        });
         const targetAuctionId =
           createdAuctionId || response.data.auctionId || response.data.id;
         alert("경매가 성공적으로 등록되었습니다.");
-        if (targetAuctionId) {
-          navigate(`/auctions/${targetAuctionId}`);
-        } else {
-          navigate("/auctions");
-        }
+        navigate(`/products/${selectedProduct.id}`);
       }
     } catch (err: any) {
       console.error("경매 처리 실패:", err);

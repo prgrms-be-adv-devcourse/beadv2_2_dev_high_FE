@@ -19,6 +19,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link as RouterLink, useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { auctionApi } from "../apis/auctionApi";
+import { fileApi } from "../apis/fileApi";
 import type { AuctionDocument } from "@moreauction/types";
 import { type ProductCategory } from "@moreauction/types";
 import { categoryApi } from "../apis/categoryApi";
@@ -200,6 +201,31 @@ const SearchPage: React.FC = () => {
     const err: any = searchQuery.error;
     return err?.data?.message ?? err?.message ?? "검색 결과를 불러오는데 실패했습니다.";
   }, [searchQuery.error, searchQuery.isError]);
+
+  const fileGroupIds = useMemo(
+    () =>
+      result.content
+        .map((doc) => (doc as { fileGroupId?: string }).fileGroupId)
+        .filter((id): id is string => !!id),
+    [result.content]
+  );
+
+  const fileGroupsQuery = useQuery({
+    queryKey: ["files", "groups", "search", fileGroupIds],
+    queryFn: async () => {
+      const response = await fileApi.getFileGroupsByIds(fileGroupIds);
+      return response.data ?? [];
+    },
+    enabled: fileGroupIds.length > 0,
+    staleTime: 30_000,
+  });
+
+  const fileGroupMap = useMemo(() => {
+    const list = fileGroupsQuery.data ?? [];
+    return new Map(list.map((group) => [group.fileGroupId, group]));
+  }, [fileGroupsQuery.data]);
+
+  const isImageLoading = fileGroupsQuery.isLoading;
 
   // 입력 핸들러들 (아직 검색 조건에는 적용하지 않음)
   const handleInputKeywordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -453,7 +479,17 @@ const SearchPage: React.FC = () => {
             mb: 4,
           }}
         >
-          {result.content.map((doc) => (
+          {result.content.map((doc) => {
+            const fileGroupId = (doc as { fileGroupId?: string }).fileGroupId;
+            const fileGroup = fileGroupId
+              ? fileGroupMap.get(fileGroupId)
+              : undefined;
+            const coverImage =
+              fileGroup?.files?.[0]?.filePath ??
+              doc.imageUrl ??
+              "/images/no_image.png";
+
+            return (
             <Card
               key={doc.auctionId}
               sx={{
@@ -472,13 +508,21 @@ const SearchPage: React.FC = () => {
                   height: "100%",
                 }}
               >
-                <CardMedia
-                  component="img"
-                  height="150"
-                  image={doc.imageUrl || "/images/no_image.png"}
-                  alt={doc.productName}
-                  sx={{ objectFit: "cover", width: "100%" }}
-                />
+                {isImageLoading ? (
+                  <Skeleton
+                    variant="rectangular"
+                    height={150}
+                    sx={{ width: "100%" }}
+                  />
+                ) : (
+                  <CardMedia
+                    component="img"
+                    height="150"
+                    image={coverImage}
+                    alt={doc.productName}
+                    sx={{ objectFit: "cover", width: "100%" }}
+                  />
+                )}
                 <CardContent
                   sx={{
                     flex: 1,
@@ -573,7 +617,8 @@ const SearchPage: React.FC = () => {
                 </CardContent>
               </CardActionArea>
             </Card>
-          ))}
+            );
+          })}
         </Box>
       )}
 

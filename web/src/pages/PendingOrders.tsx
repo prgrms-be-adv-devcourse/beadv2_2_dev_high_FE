@@ -11,42 +11,23 @@ import {
   ListItem,
   ListItemText,
   Paper,
-  ToggleButton,
-  ToggleButtonGroup,
   Typography,
 } from "@mui/material";
 import { format } from "date-fns";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link as RouterLink, useLocation, useNavigate } from "react-router-dom";
 import { depositApi } from "../apis/depositApi";
 import { orderApi } from "../apis/orderApi";
 import { DepositChargeDialog } from "../components/mypage/DepositChargeDialog";
-import { OrdersTab, type OrderFilter } from "../components/mypage/OrdersTab";
 import { requestTossPayment } from "../components/tossPay/requestTossPayment";
 import { useAuth } from "../contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { hasRole, OrderStatus, UserRole, type OrderResponse } from "@moreauction/types";
+import { OrderStatus, type OrderResponse } from "@moreauction/types";
 import { formatWon } from "@moreauction/utils";
-
-type OrdersViewMode = "PENDING" | "HISTORY";
 
 const PendingOrders: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-
-  const initialViewMode = useMemo<OrdersViewMode>(() => {
-    const params = new URLSearchParams(location.search);
-    return params.get("view") === "HISTORY" ? "HISTORY" : "PENDING";
-  }, [location.search]);
-
-  const initialHistoryFilter = useMemo<OrderFilter>(() => {
-    const params = new URLSearchParams(location.search);
-    return params.get("filter") === "SOLD" ? "SOLD" : "BOUGHT";
-  }, [location.search]);
-
-  const [viewMode, setViewMode] = useState<OrdersViewMode>(initialViewMode);
-  const [historyFilter, setHistoryFilter] =
-    useState<OrderFilter>(initialHistoryFilter);
 
   const { user, isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
@@ -68,15 +49,11 @@ const PendingOrders: React.FC = () => {
     amount: number;
   } | null>(null);
 
-  const updateUrlState = useCallback(
-    (next: Partial<{ view: OrdersViewMode; filter: OrderFilter }>) => {
-      const params = new URLSearchParams(location.search);
-      if (next.view) params.set("view", next.view);
-      if (next.filter) params.set("filter", next.filter);
-      navigate(`/orders?${params.toString()}`, { replace: true });
-    },
-    [location.search, navigate]
-  );
+  const updateUrlState = useCallback(() => {
+    const params = new URLSearchParams(location.search);
+    params.delete("view");
+    navigate(`/orders?${params.toString()}`, { replace: true });
+  }, [location.search, navigate]);
 
   const pendingQuery = useQuery({
     queryKey: ["orders", "pending", user?.userId],
@@ -92,50 +69,16 @@ const PendingOrders: React.FC = () => {
     if (!pendingQuery.isError) return null;
     const err: any = pendingQuery.error;
     return (
-      err?.data?.message ?? err?.message ?? "구매 대기 주문을 불러오는 데 실패했습니다."
+      err?.data?.message ??
+      err?.message ??
+      "구매 대기 주문을 불러오는 데 실패했습니다."
     );
   }, [pendingQuery.error, pendingQuery.isError]);
 
   const orders = pendingQuery.data ?? [];
-  const boughtHistoryQuery = useQuery({
-    queryKey: ["orders", "history", "bought", user?.userId],
-    queryFn: async () => {
-      const res = await orderApi.getOrderByStatus("bought");
-      return Array.isArray(res.data) ? res.data : [];
-    },
-    enabled:
-      isAuthenticated && viewMode === "HISTORY" && historyFilter === "BOUGHT",
-    staleTime: 30_000,
-  });
-
-  const soldHistoryQuery = useQuery({
-    queryKey: ["orders", "history", "sold", user?.userId],
-    queryFn: async () => {
-      const res = await orderApi.getOrderByStatus("sold");
-      return Array.isArray(res.data) ? res.data : [];
-    },
-    enabled:
-      isAuthenticated &&
-      viewMode === "HISTORY" &&
-      historyFilter === "SOLD" &&
-      hasRole(user?.roles, UserRole.SELLER),
-    staleTime: 30_000,
-  });
-
-  const boughtHistoryError = useMemo(() => {
-    if (!boughtHistoryQuery.isError) return null;
-    const err: any = boughtHistoryQuery.error;
-    return err?.data?.message ?? err?.message ?? "구매 내역을 불러오는데 실패했습니다.";
-  }, [boughtHistoryQuery.error, boughtHistoryQuery.isError]);
-
-  const soldHistoryError = useMemo(() => {
-    if (!soldHistoryQuery.isError) return null;
-    const err: any = soldHistoryQuery.error;
-    return err?.data?.message ?? err?.message ?? "판매 내역을 불러오는데 실패했습니다.";
-  }, [soldHistoryQuery.error, soldHistoryQuery.isError]);
-
-  const historyBought = boughtHistoryQuery.data ?? [];
-  const historySold = soldHistoryQuery.data ?? [];
+  useEffect(() => {
+    updateUrlState();
+  }, [updateUrlState]);
 
   const setDepositBalanceCache = useCallback(
     (next: number) => {
@@ -236,79 +179,47 @@ const PendingOrders: React.FC = () => {
           주문서
         </Typography>
 
-        <ToggleButtonGroup
-          size="small"
-          color="primary"
-          value={viewMode}
-          exclusive
-          onChange={(_, v: OrdersViewMode | null) => {
-            if (!v) return;
-            setViewMode(v);
-            updateUrlState({ view: v });
-          }}
-          sx={{ mb: 2 }}
-        >
-          <ToggleButton value="PENDING">구매 대기</ToggleButton>
-          <ToggleButton value="HISTORY">주문 내역</ToggleButton>
-        </ToggleButtonGroup>
+        <Paper sx={{ p: 2 }}>
+          {pendingQuery.isLoading ? (
+            <Typography>로딩 중...</Typography>
+          ) : pendingErrorMessage ? (
+            <Alert severity="error">{pendingErrorMessage}</Alert>
+          ) : orders.length === 0 ? (
+            <Alert severity="info">구매 대기 중인 주문이 없습니다.</Alert>
+          ) : (
+            <List>
+              {orders.map((order) => {
+                const payableAmount =
+                  typeof order.depositAmount === "number"
+                    ? order.winningAmount - order.depositAmount
+                    : order.winningAmount;
 
-        {viewMode === "HISTORY" ? (
-          <OrdersTab
-            boughtLoading={boughtHistoryQuery.isLoading}
-            soldLoading={soldHistoryQuery.isLoading}
-            boughtError={boughtHistoryError}
-            soldError={soldHistoryError}
-            sold={historySold}
-            bought={historyBought}
-            filter={historyFilter}
-            initialFilter={historyFilter}
-            onFilterChange={(next) => {
-              setHistoryFilter(next);
-              updateUrlState({ filter: next });
-            }}
-          />
-        ) : (
-          <Paper sx={{ p: 2 }}>
-            {pendingQuery.isLoading ? (
-              <Typography>로딩 중...</Typography>
-            ) : pendingErrorMessage ? (
-              <Alert severity="error">{pendingErrorMessage}</Alert>
-            ) : orders.length === 0 ? (
-              <Alert severity="info">구매 대기 중인 주문이 없습니다.</Alert>
-            ) : (
-              <List>
-                {orders.map((order) => {
-                  const payableAmount =
-                    typeof order.depositAmount === "number"
-                      ? order.winningAmount - order.depositAmount
-                      : order.winningAmount;
-
-                  return (
-                    <ListItem
-                      key={order.id}
-                      secondaryAction={
-                        <Box sx={{ display: "flex", gap: 1 }}>
-                          <Button
-                            variant="outlined"
-                            size="small"
-                            component={RouterLink}
-                            to={`/orders/${order.id}`}
-                          >
-                            상세보기
-                          </Button>
-                          <Button
-                            variant="contained"
-                            size="small"
-                            disabled={actionLoadingId === order.id}
-                            onClick={() => handleCompleteByDeposit(order.id)}
-                          >
-                            {actionLoadingId === order.id
-                              ? "처리 중..."
-                              : "예치금으로 구매"}
-                          </Button>
-                        </Box>
-                      }
-                    >
+                return (
+                  <ListItem
+                    key={order.id}
+                    secondaryAction={
+                      <Box sx={{ display: "flex", gap: 1 }}>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          component={RouterLink}
+                          to={`/orders/${order.id}`}
+                        >
+                          상세보기
+                        </Button>
+                        <Button
+                          variant="contained"
+                          size="small"
+                          disabled={actionLoadingId === order.id}
+                          onClick={() => handleCompleteByDeposit(order.id)}
+                        >
+                          {actionLoadingId === order.id
+                            ? "처리 중..."
+                            : "예치금으로 구매"}
+                        </Button>
+                      </Box>
+                    }
+                  >
                     <ListItemText
                       primary={`${
                         order.productName ?? "주문"
@@ -318,13 +229,12 @@ const PendingOrders: React.FC = () => {
                         "yyyy-MM-dd HH:mm"
                       )}
                     />
-                    </ListItem>
-                  );
-                })}
-              </List>
-            )}
-          </Paper>
-        )}
+                  </ListItem>
+                );
+              })}
+            </List>
+          )}
+        </Paper>
       </Box>
 
       <Dialog

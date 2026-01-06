@@ -1,5 +1,4 @@
-import { Box, Button, Chip, Stack } from "@mui/material";
-import { Link as RouterLink } from "react-router-dom";
+import { Box, Chip, Stack } from "@mui/material";
 import { getCommonStatusText } from "@moreauction/utils";
 
 interface AuctionInfoPanelProps {
@@ -8,8 +7,6 @@ interface AuctionInfoPanelProps {
   isAuctionInProgress: boolean;
   isConnected: boolean;
   isRetrying: boolean;
-  canEdit: boolean;
-  auctionId: string;
 }
 
 const AuctionInfoPanel: React.FC<AuctionInfoPanelProps> = ({
@@ -17,8 +14,6 @@ const AuctionInfoPanel: React.FC<AuctionInfoPanelProps> = ({
   isAuctionInProgress,
   isConnected,
   isRetrying,
-  canEdit,
-  auctionId,
 }) => {
   return (
     <Box>
@@ -37,17 +32,6 @@ const AuctionInfoPanel: React.FC<AuctionInfoPanelProps> = ({
             size="small"
           />
         </Stack>
-        {canEdit && (
-          <Button
-            size="small"
-            variant="outlined"
-            color="secondary"
-            component={RouterLink}
-            to={`/auctions/${auctionId}/edit`}
-          >
-            수정
-          </Button>
-        )}
       </Stack>
     </Box>
   );

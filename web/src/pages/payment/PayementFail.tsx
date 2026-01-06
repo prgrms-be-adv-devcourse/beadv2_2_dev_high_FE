@@ -55,7 +55,7 @@ export default function PaymentFail() {
       }
 
       setTimeout(() => {
-        navigate("/mypage?tab=1", { replace: true });
+        navigate("/mypage?tab=0", { replace: true });
       }, 5000);
     };
 
@@ -63,7 +63,7 @@ export default function PaymentFail() {
   }, [navigate, paymentFailMutation]);
 
   const handleGoMyPage = () => {
-    navigate("/mypage?tab=1", { replace: true });
+    navigate("/mypage?tab=0", { replace: true });
   };
 
   return (

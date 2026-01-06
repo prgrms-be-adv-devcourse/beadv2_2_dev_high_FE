@@ -29,13 +29,20 @@ export interface LoginParams {
   password: string;
 }
 
+export type SocialProvider = "google" | "naver";
+
+export interface SocialLoginRequest {
+  provider: SocialProvider;
+  code: string;
+  state?: string;
+}
+
 // 로그인 응답 데이터 타입 (API 명세에 따라 실제 타입으로 교체)
 export interface LoginResponse {
   accessToken: string;
-  refreshToken?: string;
-  roles?: UserRoles;
-  nickname?: string;
-  userId?: string;
+  userId: string;
+  nickname: string;
+  roles: UserRoles;
 }
 
 // 회원가입 요청 파라미터 타입 (API 명세에 따라 실제 타입으로 교체)
@@ -45,10 +52,6 @@ export interface SignupParams {
   name: string;
   nickname: string;
   phone_number: string;
-  zip_code: string;
-  state: string;
-  city: string;
-  detail: string;
 }
 
 // 판매자 등록 요청 파라미터 타입 (API 명세에 따라 실제 타입으로 교체)

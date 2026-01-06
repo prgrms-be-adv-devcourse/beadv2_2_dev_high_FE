@@ -2,7 +2,6 @@ import {
   AuctionStatus,
   type AuctionDetailResponse,
   type FileGroup,
-  type Product,
 } from "@moreauction/types";
 import {
   formatWon,
@@ -25,7 +24,7 @@ import {
   Stack,
   Typography,
 } from "@mui/material";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import { auctionApi } from "../apis/auctionApi";
@@ -36,9 +35,16 @@ import RemainingTime from "../components/RemainingTime";
 import { useAuth } from "../contexts/AuthContext";
 
 const ProductDetail: React.FC = () => {
+  const formatDateTime = (value?: string | null) => {
+    if (!value) return "";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return value;
+    return d.toLocaleString();
+  };
   const { id: productId } = useParams<{ id: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [auctions, setAuctions] = useState<AuctionDetailResponse[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isWish, setIsWish] = useState(false);
@@ -206,9 +212,12 @@ const ProductDetail: React.FC = () => {
   const hasPendingAuction =
     auctions.some((auction) => auction.status === AuctionStatus.READY) ||
     activeAuction?.status === AuctionStatus.READY;
+  const hasInProgressAuction =
+    auctions.some((auction) => auction.status === AuctionStatus.IN_PROGRESS) ||
+    activeAuction?.status === AuctionStatus.IN_PROGRESS;
 
   const canEditProduct =
-    !!activeAuction && activeAuction.status === AuctionStatus.READY && isOwner;
+    isOwner && (!activeAuction || activeAuction.status === AuctionStatus.READY);
 
   const canReregisterAuction =
     ((!activeAuction && auctions.length > 0) || auctions.length === 0) &&
@@ -236,6 +245,15 @@ const ProductDetail: React.FC = () => {
   const isAuctionDeletable = (auction?: AuctionDetailResponse | null) =>
     !!(auction && isOwner && deletableAuctionStatuses.includes(auction.status));
 
+  const categoryLabels = useMemo(() => {
+    const categories = product?.categories ?? [];
+    return categories
+      .map((item: any) => {
+        if (item) return item?.name;
+      })
+      .filter((label) => label.trim().length > 0);
+  }, [product?.categories]);
+
   const handleDeleteProduct = async () => {
     if (!product) {
       alert("상품 정보를 찾을 수 없습니다.");
@@ -257,16 +275,30 @@ const ProductDetail: React.FC = () => {
     ) {
       return;
     }
+    let deleted = false;
     try {
       setDeleteLoading(true);
-      await productApi.deleteProduct(product.id, sellerIdForDeletion);
+      await productApi.deleteProduct(product.id);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["products"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["products", "detail", product.id],
+        }),
+        queryClient.invalidateQueries({ queryKey: ["products", "mine"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["auctions", "byProduct", product.id],
+        }),
+      ]);
+      deleted = true;
       alert("상품이 삭제되었습니다.");
-      navigate("/products");
     } catch (err: any) {
       console.error("상품 삭제 실패:", err);
       alert(err?.response?.data?.message ?? "상품 삭제에 실패했습니다.");
     } finally {
       setDeleteLoading(false);
+      if (deleted) {
+        navigate("/mypage?tab=5");
+      }
     }
   };
 
@@ -286,14 +318,39 @@ const ProductDetail: React.FC = () => {
     }
     try {
       setDeletingAuctionId(auctionKey);
-      await auctionApi.removeAuction(auctionKey);
-      alert("경매가 삭제되었습니다.");
       setAuctions((prev) =>
         prev.filter((item) => getAuctionKey(item) !== auctionKey)
       );
+      queryClient.setQueryData(
+        ["auctions", "byProduct", productId],
+        (
+          prev?: { data?: AuctionDetailResponse[] } | AuctionDetailResponse[]
+        ) => {
+          const list = Array.isArray(prev) ? prev : prev?.data ?? [];
+          const next = list.filter(
+            (item) => getAuctionKey(item) !== auctionKey
+          );
+          return Array.isArray(prev) ? next : { ...prev, data: next };
+        }
+      );
+      await auctionApi.removeAuction(auctionKey);
+      if (product?.latestAuctionId === auctionKey) {
+        await productApi.updateLatestAuctionId(product.id, null);
+      }
+      await queryClient.invalidateQueries({
+        queryKey: ["auctions", "byProduct", productId],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["auctions", "detail", auctionKey],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["products", "detail", product?.id],
+      });
+      alert("경매가 삭제되었습니다.");
     } catch (err: any) {
       console.error("경매 삭제 실패:", err);
       alert(err?.response?.data?.message ?? "경매 삭제에 실패했습니다.");
+      await auctionsQuery.refetch();
     } finally {
       setDeletingAuctionId(null);
     }
@@ -412,18 +469,14 @@ const ProductDetail: React.FC = () => {
           >
             {showAuctionActions && (
               <Stack direction="row" spacing={1} alignItems="center">
-                {isOwner && (
+                {isOwner && !hasInProgressAuction && (
                   <Button
                     variant="outlined"
                     color="error"
                     onClick={handleDeleteProduct}
                     disabled={deleteLoading || !canDeleteProduct}
                   >
-                    {deleteLoading
-                      ? "삭제 중..."
-                      : hasPendingAuction
-                      ? "상품 삭제 (대기 경매 존재)"
-                      : "상품 삭제"}
+                    {deleteLoading ? "삭제 중..." : "상품 삭제"}
                   </Button>
                 )}
                 {canEditProduct && (
@@ -433,7 +486,7 @@ const ProductDetail: React.FC = () => {
                     component={RouterLink}
                     to={`/products/${product.id}/edit`}
                   >
-                    상품 / 경매 수정
+                    상품 수정
                   </Button>
                 )}
               </Stack>
@@ -521,9 +574,29 @@ const ProductDetail: React.FC = () => {
                     gap: 1,
                   }}
                 >
-                  <Typography variant="h5" gutterBottom noWrap>
-                    {product.name}
-                  </Typography>
+                  <Box>
+                    <Typography variant="h5" gutterBottom noWrap>
+                      {product.name}
+                    </Typography>
+                    {categoryLabels.length > 0 && (
+                      <Stack
+                        direction="row"
+                        spacing={0.75}
+                        flexWrap="wrap"
+                        useFlexGap
+                        sx={{ mb: 1 }}
+                      >
+                        {categoryLabels.map((label) => (
+                          <Chip
+                            key={label}
+                            label={label}
+                            size="small"
+                            variant="outlined"
+                          />
+                        ))}
+                      </Stack>
+                    )}
+                  </Box>
                   <IconButton
                     size="small"
                     onClick={async () => {
@@ -583,13 +656,18 @@ const ProductDetail: React.FC = () => {
                     )}
                   </IconButton>
                 </Box>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ mb: 2, whiteSpace: "pre-line" }}
-                >
-                  {product.description || "설명 없음"}
-                </Typography>
+                <Box sx={{ mb: 2.5, mt: 1 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    상품 설명
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ mt: 0.5, whiteSpace: "pre-line", minHeight: 96 }}
+                  >
+                    {product.description || "설명 없음"}
+                  </Typography>
+                </Box>
               </CardContent>
             </Card>
           </Box>
@@ -599,24 +677,18 @@ const ProductDetail: React.FC = () => {
             <Stack spacing={3}>
               <Card>
                 <CardContent>
-                  <Stack
-                    direction={{ xs: "column", sm: "row" }}
-                    justifyContent="space-between"
-                    alignItems={{ xs: "flex-start", sm: "center" }}
-                    spacing={2}
-                    mb={2}
-                  >
-                    <Typography variant="h6">
-                      {activeAuction
-                        ? activeAuction.status === AuctionStatus.IN_PROGRESS
-                          ? "진행 중인 경매"
-                          : activeAuction.status === AuctionStatus.READY
-                          ? "예정된 경매"
-                          : "최근 경매"
-                        : "진행 중인 경매 없음"}
+                  <Stack spacing={1.5} mb={2}>
+                    <Typography variant="caption" color="text.secondary">
+                      경매 정보
                     </Typography>
                     {activeAuction && (
-                      <Stack direction="row" spacing={1} alignItems="center">
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        alignItems="center"
+                        justifyContent="space-between"
+                        flexWrap="wrap"
+                      >
                         <Chip
                           label={getAuctionStatusText(activeAuction.status)}
                           color={
@@ -626,21 +698,54 @@ const ProductDetail: React.FC = () => {
                           }
                           size="small"
                         />
-                        {showAuctionActions &&
-                          isAuctionDeletable(activeAuction) && (
-                          <Button
-                            size="small"
-                            color="error"
-                            onClick={() => handleDeleteAuction(activeAuction)}
-                            disabled={
-                              deletingAuctionId === getAuctionKey(activeAuction)
-                            }
-                          >
-                            {deletingAuctionId === getAuctionKey(activeAuction)
-                              ? "삭제 중..."
-                              : "경매 삭제"}
-                          </Button>
-                        )}
+                        <Stack
+                          direction="row"
+                          spacing={1}
+                          alignItems="center"
+                          justifyContent="flex-end"
+                          flexWrap="wrap"
+                        >
+                          {showAuctionActions &&
+                            isAuctionDeletable(activeAuction) && (
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                color="error"
+                                onClick={() =>
+                                  handleDeleteAuction(activeAuction)
+                                }
+                                disabled={
+                                  deletingAuctionId ===
+                                  getAuctionKey(activeAuction)
+                                }
+                                sx={{
+                                  borderLeft: "1px solid",
+                                  borderColor: "error.main",
+                                  pl: 1.25,
+                                }}
+                              >
+                                {deletingAuctionId ===
+                                getAuctionKey(activeAuction)
+                                  ? "삭제 중..."
+                                  : "경매 삭제"}
+                              </Button>
+                            )}
+                          {showAuctionActions &&
+                            activeAuction.status === AuctionStatus.READY &&
+                            isOwner && (
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                color="secondary"
+                                component={RouterLink}
+                                to={`/auctions/${
+                                  activeAuction.auctionId ?? activeAuction.id
+                                }/edit`}
+                              >
+                                경매 수정
+                              </Button>
+                            )}
+                        </Stack>
                       </Stack>
                     )}
                   </Stack>
@@ -677,14 +782,22 @@ const ProductDetail: React.FC = () => {
                           )}
                         </>
                       )}
-                      <Typography variant="body2" color="text.secondary">
-                        남은 시간:{" "}
-                        <RemainingTime
-                          auctionStartAt={activeAuction.auctionStartAt}
-                          auctionEndAt={activeAuction.auctionEndAt}
-                          status={activeAuction.status}
-                        />
-                      </Typography>
+                      {activeAuction.status === AuctionStatus.READY && (
+                        <Typography variant="body2" color="text.secondary">
+                          시작 예정:{" "}
+                          {formatDateTime(activeAuction.auctionStartAt)}
+                        </Typography>
+                      )}
+                      {activeAuction.status !== AuctionStatus.READY && (
+                        <Typography variant="body2" color="text.secondary">
+                          남은 시간:{" "}
+                          <RemainingTime
+                            auctionStartAt={activeAuction.auctionStartAt}
+                            auctionEndAt={activeAuction.auctionEndAt}
+                            status={activeAuction.status}
+                          />
+                        </Typography>
+                      )}
                       <Box sx={{ mt: 2, textAlign: "right" }}>
                         <Button
                           variant="contained"
@@ -749,16 +862,24 @@ const ProductDetail: React.FC = () => {
                           <Stack
                             direction="row"
                             justifyContent="space-between"
-                            alignItems="center"
+                            alignItems="flex-start"
                             mb={1}
                           >
-                            <Typography variant="subtitle2">
-                              {getAuctionStatusText(auction.status)}
-                            </Typography>
+                            <Chip
+                              label={getAuctionStatusText(
+                                auction.status as AuctionStatus
+                              )}
+                              size="small"
+                              color={
+                                auction.status === AuctionStatus.IN_PROGRESS
+                                  ? "success"
+                                  : "default"
+                              }
+                            />
                             <Stack
-                              direction="row"
                               spacing={1}
-                              alignItems="center"
+                              alignItems="flex-end"
+                              textAlign="right"
                             >
                               <Typography
                                 variant="body2"
@@ -771,30 +892,51 @@ const ProductDetail: React.FC = () => {
                                   )
                                 )}
                               </Typography>
-                              {showAuctionActions &&
-                                isAuctionDeletable(auction) && (
-                                <Button
-                                  size="small"
-                                  color="error"
-                                  onClick={() => handleDeleteAuction(auction)}
-                                  disabled={
-                                    deletingAuctionId === getAuctionKey(auction)
-                                  }
-                                >
-                                  {deletingAuctionId === getAuctionKey(auction)
-                                    ? "삭제 중..."
-                                    : "삭제"}
-                                </Button>
-                              )}
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                종료: {formatDateTime(auction.auctionEndAt)}
+                              </Typography>
                             </Stack>
                           </Stack>
-                          <Button
-                            size="small"
-                            component={RouterLink}
-                            to={`/auctions/${auction.auctionId ?? auction.id}`}
+                          <Stack
+                            direction="row"
+                            alignItems="center"
+                            justifyContent="space-between"
+                            mt={1}
                           >
-                            상세 보기
-                          </Button>
+                            <Box>
+                              {showAuctionActions &&
+                                isAuctionDeletable(auction) && (
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
+                                    color="error"
+                                    onClick={() => handleDeleteAuction(auction)}
+                                    disabled={
+                                      deletingAuctionId ===
+                                      getAuctionKey(auction)
+                                    }
+                                  >
+                                    {deletingAuctionId ===
+                                    getAuctionKey(auction)
+                                      ? "삭제 중..."
+                                      : "삭제"}
+                                  </Button>
+                                )}
+                            </Box>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              component={RouterLink}
+                              to={`/auctions/${
+                                auction.auctionId ?? auction.id
+                              }`}
+                            >
+                              상세 보기
+                            </Button>
+                          </Stack>
                         </CardContent>
                       </Card>
                     ))}

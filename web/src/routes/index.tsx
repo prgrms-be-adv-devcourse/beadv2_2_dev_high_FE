@@ -8,6 +8,10 @@ import MyPage from "../pages/MyPage";
 import Notifications from "../pages/Notifications";
 import ProductDetail from "../pages/ProductDetail";
 import PendingOrders from "../pages/PendingOrders";
+import Settings from "../pages/Settings";
+import ProfileAddresses from "../pages/ProfileAddresses";
+import ProfileEdit from "../pages/ProfileEdit";
+import ProfilePassword from "../pages/ProfilePassword";
 import ProductRegistration from "../pages/ProductRegistration";
 import Products from "../pages/Products";
 import SellerRegistration from "../pages/SellerRegistration";
@@ -18,6 +22,7 @@ import PaymentSuccess from "../pages/payment/PaymentSuccess";
 import PaymentFail from "../pages/payment/PayementFail";
 import SearchPage from "../pages/Search";
 import OrderDetail from "../pages/OrderDetail";
+import OAuthRedirect from "../pages/oauth/OAuthRedirect";
 
 /**
  * React Router v6.4+의 createBrowserRouter를 사용한 라우터 설정입니다.
@@ -42,6 +47,14 @@ export const router = createBrowserRouter([
       {
         path: "login",
         element: <Login />,
+      },
+      {
+        path: "oauth/google/redirect",
+        element: <OAuthRedirect provider="google" />,
+      },
+      {
+        path: "oauth/naver/redirect",
+        element: <OAuthRedirect provider="naver" />,
       },
       {
         path: "signup",
@@ -109,6 +122,26 @@ export const router = createBrowserRouter([
           {
             path: "mypage",
             element: <MyPage />,
+          },
+          {
+            path: "settings",
+            element: <Settings />,
+          },
+          {
+            path: "profile",
+            element: <Settings />,
+          },
+          {
+            path: "profile/edit",
+            element: <ProfileEdit />,
+          },
+          {
+            path: "profile/password",
+            element: <ProfilePassword />,
+          },
+          {
+            path: "profile/addresses",
+            element: <ProfileAddresses />,
           },
           {
             path: "wishlist", // 찜 목록 라우트 추가

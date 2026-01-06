@@ -3,6 +3,7 @@ import type {
   LoginParams,
   LoginResponse,
   RegisterSellerParams,
+  SocialLoginRequest,
   SignupParams,
   User,
 } from "@moreauction/types";
@@ -24,6 +25,16 @@ export const userApi = {
     console.log("로그인 시도:", params);
     const response = await client.post("/auth/login", params);
 
+    return response.data;
+  },
+
+  /**
+   * 소셜 로그인 (구글/네이버)
+   */
+  socialLogin: async (
+    params: SocialLoginRequest
+  ): Promise<ApiResponseDto<LoginResponse>> => {
+    const response = await client.post("/auth/social/login", params);
     return response.data;
   },
 
@@ -84,6 +95,14 @@ export const userApi = {
   ): Promise<ApiResponseDto<any>> => {
     console.log(`이메일 인증 코드 확인 시도: ${email}, 코드: ${code}`);
     const response = await client.post("/auth/verify/email", { email, code });
+    return response.data;
+  },
+
+  /**
+   * 로그아웃 처리 (리프레시 토큰 쿠키 제거)
+   */
+  logout: async (): Promise<ApiResponseDto<void>> => {
+    const response = await client.post("/auth/logout");
     return response.data;
   },
 };

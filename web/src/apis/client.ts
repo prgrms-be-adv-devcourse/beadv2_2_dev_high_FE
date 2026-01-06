@@ -4,8 +4,9 @@ import { updateAccessTokenOutsideReact } from "../contexts/AuthContext";
 // API 서버의 기본 URL
 // - VITE_API_BASE_URL 없으면 http://localhost:8000
 // - /api/v1은 공통으로 붙음
-const API_ORIGIN = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000")
-  .replace(/\/$/, "");
+const API_ORIGIN = (
+  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000"
+).replace(/\/$/, "");
 const API_BASE_URL = `${API_ORIGIN}/api/v1`;
 
 /**

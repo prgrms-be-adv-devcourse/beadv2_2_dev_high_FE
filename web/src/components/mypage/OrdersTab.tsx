@@ -8,87 +8,40 @@ import {
   ListItemText,
   Paper,
   Stack,
-  ToggleButton,
-  ToggleButtonGroup,
   Typography,
 } from "@mui/material";
-import React, { useMemo, useState } from "react";
-import { hasRole, UserRole, type OrderResponse } from "@moreauction/types";
+import React from "react";
+import { getOrderStatusLabel, type OrderResponse } from "@moreauction/types";
 import { Link as RouterLink } from "react-router-dom";
-import { useAuth } from "../../contexts/AuthContext";
 import { formatWon } from "@moreauction/utils";
 
-export type OrderFilter = "BOUGHT" | "SOLD";
-
 interface OrdersTabProps {
-  boughtLoading: boolean;
-  soldLoading: boolean;
-  boughtError: string | null;
-  soldError: string | null;
-  sold: OrderResponse[];
-  bought: OrderResponse[];
-  filter?: OrderFilter;
-  initialFilter?: OrderFilter;
-  onFilterChange?: (filter: OrderFilter) => void;
+  title: string;
+  loading: boolean;
+  error: string | null;
+  orders: OrderResponse[];
+  emptyText: string;
+  showAdditionalPayment?: boolean;
 }
 
 export const OrdersTab: React.FC<OrdersTabProps> = ({
-  boughtLoading,
-  soldLoading,
-  boughtError,
-  soldError,
-  sold,
-  bought,
-  filter,
-  initialFilter,
-  onFilterChange,
+  title,
+  loading,
+  error,
+  orders,
+  emptyText,
+  showAdditionalPayment = false,
 }) => {
-  const { user } = useAuth();
-  const [internalFilter, setInternalFilter] = useState<OrderFilter>(
-    initialFilter ?? "BOUGHT"
-  );
-
-  const activeFilter = filter ?? internalFilter;
-
-  const { label, list } = useMemo(() => {
-    if (activeFilter === "SOLD") {
-      return { label: "판매 내역", list: sold };
-    }
-    return { label: "구매 내역", list: bought };
-  }, [activeFilter, bought, sold]);
-
-  const currentError = activeFilter === "SOLD" ? soldError : boughtError;
-  const currentLoading = activeFilter === "SOLD" ? soldLoading : boughtLoading;
-  const showSkeleton = currentLoading && !currentError && list.length === 0;
+  const showSkeleton = loading && !error && orders.length === 0;
 
   return (
     <Paper sx={{ p: 2 }}>
       <Typography variant="h6" sx={{ mb: 2 }}>
-        주문 내역
+        {title}
       </Typography>
 
-      <ToggleButtonGroup
-        size="small"
-        color="primary"
-        value={activeFilter}
-        exclusive
-        onChange={(_, v: OrderFilter | null) => {
-          if (!v) return;
-          if (filter == null) {
-            setInternalFilter(v);
-          }
-          onFilterChange?.(v);
-        }}
-        sx={{ mb: 2 }}
-      >
-        <ToggleButton value="BOUGHT">구매 내역</ToggleButton>
-        {hasRole(user?.roles, UserRole.SELLER) && (
-          <ToggleButton value="SOLD">판매 내역</ToggleButton>
-        )}
-      </ToggleButtonGroup>
-
-      {currentError ? (
-        <Alert severity="error">{currentError}</Alert>
+      {error ? (
+        <Alert severity="error">{error}</Alert>
       ) : showSkeleton ? (
         <List sx={{ maxHeight: "60vh", overflowY: "auto" }}>
           {Array.from({ length: 3 }).map((_, idx) => (
@@ -103,15 +56,11 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
             </React.Fragment>
           ))}
         </List>
-      ) : list.length === 0 ? (
-        <Alert severity="info">
-          {filter === "BOUGHT"
-            ? "구매한 주문이 없습니다."
-            : "판매한 주문이 없습니다."}
-        </Alert>
+      ) : orders.length === 0 ? (
+        <Alert severity="info">{emptyText}</Alert>
       ) : (
         <List sx={{ maxHeight: "60vh", overflowY: "auto" }}>
-          {list.map((order) => {
+          {orders.map((order) => {
             const depositAmount =
               typeof order.depositAmount === "number" ? order.depositAmount : 0;
             const additionalPaymentAmount =
@@ -141,8 +90,11 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                           {typeof order.depositAmount === "number"
                             ? ` · 보증금(기납부): ${formatWon(depositAmount)}`
                             : ""}
-                          {filter === "BOUGHT" && additionalPaymentAmount != null
-                            ? ` · 추가 결제금액: ${formatWon(additionalPaymentAmount)}`
+                          {showAdditionalPayment &&
+                          additionalPaymentAmount != null
+                            ? ` · 추가 결제금액: ${formatWon(
+                                additionalPaymentAmount
+                              )}`
                             : ""}
                         </Typography>
 

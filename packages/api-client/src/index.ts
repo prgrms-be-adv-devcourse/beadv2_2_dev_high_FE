@@ -6,15 +6,18 @@ interface CreateApiClientOptions {
   onUpdateToken: (token: string | null) => void;
 }
 
+let refreshFailed = false;
+let refreshPromise: Promise<string | null> | null = null;
+
 const refreshToken = async (baseUrl: string): Promise<string | null> => {
   try {
-    const refreshTokenValue = localStorage.getItem("refreshToken");
-    if (!refreshTokenValue) {
-      return null;
-    }
-    const response = await axios.post(`${baseUrl}/auth/refresh/token`, {
-      refreshToken: refreshTokenValue,
-    });
+    const response = await axios.post(
+      `${baseUrl}/auth/refresh/token`,
+      {},
+      {
+        withCredentials: true,
+      }
+    );
     const data = response.data as ApiResponseDto<{ accessToken: string }>;
     const newAccessToken = data.data.accessToken;
     localStorage.setItem("accessToken", newAccessToken);
@@ -34,14 +37,20 @@ export const createApiClient = ({
     headers: {
       "Content-Type": "application/json",
     },
+    withCredentials: true,
   });
 
   client.interceptors.request.use(
     (config) => {
-      const token = localStorage.getItem("accessToken");
-      if (token) {
-        config.headers = config.headers ?? {};
-        config.headers.Authorization = `Bearer ${token}`;
+      const skipAuth = (config as { skipAuth?: boolean }).skipAuth;
+      if (!skipAuth) {
+        const token = localStorage.getItem("accessToken");
+        if (token) {
+          config.headers = config.headers ?? {};
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      } else if (config.headers) {
+        delete (config.headers as Record<string, string>).Authorization;
       }
       return config;
     },
@@ -76,18 +85,34 @@ export const createApiClient = ({
 
       const originalRequest = error.config;
 
+      const skipAuth = (originalRequest as { skipAuth?: boolean }).skipAuth;
+      if (skipAuth) {
+        return Promise.reject(error.response ?? error);
+      }
+
       if (error.response?.status === 401 && !originalRequest._retry) {
         originalRequest._retry = true;
 
         try {
-          const newToken = await refreshToken(baseUrl);
+          if (refreshFailed) {
+            return Promise.reject(error.response ?? error);
+          }
+
+          if (!refreshPromise) {
+            refreshPromise = refreshToken(baseUrl).finally(() => {
+              refreshPromise = null;
+            });
+          }
+          const newToken = await refreshPromise;
 
           if (newToken) {
+            refreshFailed = false;
             onUpdateToken(newToken);
             originalRequest.headers["Authorization"] = `Bearer ${newToken}`;
             return client(originalRequest);
           }
 
+          refreshFailed = true;
           localStorage.setItem("sessionExpired", "true");
           onUpdateToken(null);
           throw new Error("토큰 재발급 실패");

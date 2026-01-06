@@ -38,7 +38,7 @@ export interface Product {
   updatedBy?: string;
   categories?: ProductCategory[] | string[]; // 상품-카테고리 관계
   latestAuctionId?: string;
-  fileGroupId?: number | string;
+  fileGroupId?: string | null;
 }
 
 /**
@@ -58,7 +58,7 @@ export interface ProductCreationRequest {
 export interface ProductUpdateRequest {
   name: string;
   description: string;
-  fileGrpId?: number | string;
+  fileGrpId?: null | string;
   categoryIds: string[];
   sellerId?: string;
 }

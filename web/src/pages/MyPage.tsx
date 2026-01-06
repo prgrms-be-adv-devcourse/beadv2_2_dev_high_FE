@@ -6,8 +6,12 @@ import type {
 } from "@moreauction/types";
 import { hasRole, UserRole } from "@moreauction/types";
 import { Box, Container, Tab, Tabs, Typography } from "@mui/material";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import React, { useMemo, useState } from "react";
+import {
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import React, { useMemo, useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { depositApi } from "../apis/depositApi";
 import { orderApi } from "../apis/orderApi";
@@ -17,8 +21,7 @@ import { DepositChargeDialog } from "../components/mypage/DepositChargeDialog";
 import { DepositHistoryTab } from "../components/mypage/DepositHistoryTab";
 import { DepositSummaryTab } from "../components/mypage/DepositSummaryTab";
 import { MyProductsTab } from "../components/mypage/MyProductsTab";
-import { OrdersTab, type OrderFilter } from "../components/mypage/OrdersTab";
-import { ProfileTab } from "../components/mypage/ProfileTab";
+import { OrdersTab } from "../components/mypage/OrdersTab";
 import { SettlementTab } from "../components/mypage/SettlementTab";
 import { requestTossPayment } from "../components/tossPay/requestTossPayment";
 import { useAuth } from "../contexts/AuthContext";
@@ -39,8 +42,24 @@ const MyPage: React.FC = () => {
   const params = new URLSearchParams(location.search);
   const initialTabParam = params.get("tab");
   const initialTab = initialTabParam ? Number(initialTabParam) : 0;
-  const [tabValue, setTabValue] = useState(initialTab);
-  const [ordersFilter, setOrdersFilter] = useState<OrderFilter>("BOUGHT");
+  const isSeller = hasRole(user?.roles, UserRole.SELLER);
+
+  const maxTabIndex = isSeller ? 5 : 1;
+  const safeInitialTab =
+    Number.isFinite(initialTab) && initialTab >= 0 && initialTab <= maxTabIndex
+      ? initialTab
+      : 0;
+  const [tabValue, setTabValue] = useState(safeInitialTab);
+
+  useEffect(() => {
+    const nextMax = isSeller ? 5 : 1;
+    if (tabValue > nextMax) {
+      setTabValue(0);
+      const newParams = new URLSearchParams(location.search);
+      newParams.set("tab", "0");
+      navigate(`/mypage?${newParams.toString()}`, { replace: true });
+    }
+  }, [isSeller, tabValue, location.search, navigate]);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -49,31 +68,30 @@ const MyPage: React.FC = () => {
     navigate(`/mypage?${newParams.toString()}`, { replace: true });
   };
 
-  const profileQuery = useQuery({
-    queryKey: ["user", "me"],
-    queryFn: () => userApi.getMe(),
-    enabled: tabValue === 0,
-    staleTime: 60_000,
-  });
-
   const depositInfoQuery = useQuery<ApiResponseDto<DepositInfo>>({
     queryKey: ["deposit", "account"],
     queryFn: () => depositApi.getAccount(),
-    enabled: tabValue === 1,
+    enabled: tabValue === 0,
     staleTime: 30_000,
   });
 
-  const depositHistoryQuery = useQuery<
-    ApiResponseDto<PagedDepositHistoryResponse>
+  const depositHistoryQuery = useInfiniteQuery<
+    PagedDepositHistoryResponse,
+    Error
   >({
     queryKey: ["deposit", "history"],
-    queryFn: () =>
-      depositApi.getDepositHistories({
-        page: 0,
-        size: 50,
-      }),
-    enabled: tabValue === 1,
+    queryFn: async ({ pageParam = 0 }) => {
+      const response = await depositApi.getDepositHistories({
+        page: pageParam as number,
+        size: 20,
+      });
+      return response.data;
+    },
+    initialPageParam: 0,
+    enabled: tabValue === 0,
     staleTime: 30_000,
+    getNextPageParam: (lastPage) =>
+      lastPage.last ? undefined : (lastPage.number ?? 0) + 1,
   });
 
   const boughtOrdersQuery = useQuery({
@@ -82,7 +100,7 @@ const MyPage: React.FC = () => {
       const boughtRes = await orderApi.getOrderByStatus("bought");
       return Array.isArray(boughtRes.data) ? boughtRes.data : [];
     },
-    enabled: tabValue === 2 && ordersFilter === "BOUGHT",
+    enabled: tabValue === 1,
     staleTime: 30_000,
   });
 
@@ -92,10 +110,7 @@ const MyPage: React.FC = () => {
       const soldRes = await orderApi.getOrderByStatus("sold");
       return Array.isArray(soldRes.data) ? soldRes.data : [];
     },
-    enabled:
-      tabValue === 2 &&
-      ordersFilter === "SOLD" &&
-      hasRole(user?.roles, UserRole.SELLER),
+    enabled: tabValue === 2 && hasRole(user?.roles, UserRole.SELLER),
     staleTime: 30_000,
   });
 
@@ -116,9 +131,9 @@ const MyPage: React.FC = () => {
     staleTime: 30_000,
   });
 
-  const userInfo = profileQuery.data?.data ?? null;
   const depositInfo = depositInfoQuery.data?.data ?? null;
-  const depositHistory = depositHistoryQuery.data?.data?.content ?? [];
+  const depositHistory =
+    depositHistoryQuery.data?.pages.flatMap((page) => page.content ?? []) ?? [];
   const ordersBought = boughtOrdersQuery.data ?? [];
   const ordersSold = soldOrdersQuery.data ?? [];
   const sellerInfo = sellerInfoQuery.data?.data ?? null;
@@ -246,22 +261,19 @@ const MyPage: React.FC = () => {
       </Typography>
       <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
         <Tabs value={tabValue} onChange={handleTabChange}>
-          <Tab label="프로필" />
           <Tab label="예치금 내역" />
-          <Tab label="주문 내역" />
-          {hasRole(user?.roles, UserRole.SELLER) && <Tab label="정산 계좌" />}
-          {hasRole(user?.roles, UserRole.SELLER) && <Tab label="정산 내역" />}
-          {hasRole(user?.roles, UserRole.SELLER) && <Tab label="내 상품" />}
+          <Tab label="구매 내역" />
+          {isSeller && <Tab label="판매 내역" />}
+          {isSeller && <Tab label="정산 계좌" />}
+          {isSeller && <Tab label="정산 내역" />}
+          {isSeller && <Tab label="내 상품" />}
         </Tabs>
       </Box>
       <Box sx={{ mt: 3 }}>
         {tabValue === 0 && (
-          <ProfileTab userInfo={userInfo} roles={user?.roles} />
-        )}
-
-        {tabValue === 1 && (
           <DepositHistoryTab
             loading={depositHistoryQuery.isLoading}
+            loadingMore={depositHistoryQuery.isFetchingNextPage}
             error={depositHistoryError}
             history={depositHistory}
             balanceInfo={depositInfo}
@@ -269,21 +281,30 @@ const MyPage: React.FC = () => {
             balanceError={depositInfoError}
             onOpenChargeDialog={handleDepositCharge}
             onCreateAccount={handleCreateAccount}
+            hasMore={!!depositHistoryQuery.hasNextPage}
+            onLoadMore={() => depositHistoryQuery.fetchNextPage()}
           />
         )}
-        {tabValue === 2 && (
+        {tabValue === 1 && (
           <OrdersTab
-            boughtLoading={boughtOrdersQuery.isLoading}
-            soldLoading={soldOrdersQuery.isLoading}
-            boughtError={ordersBoughtError}
-            soldError={ordersSoldError}
-            sold={ordersSold}
-            bought={ordersBought}
-            filter={ordersFilter}
-            onFilterChange={(next) => setOrdersFilter(next)}
+            title="구매 내역"
+            loading={boughtOrdersQuery.isLoading}
+            error={ordersBoughtError}
+            orders={ordersBought}
+            emptyText="구매한 주문이 없습니다."
+            showAdditionalPayment
           />
         )}
-        {tabValue === 3 && hasRole(user?.roles, UserRole.SELLER) && (
+        {tabValue === 2 && isSeller && (
+          <OrdersTab
+            title="판매 내역"
+            loading={soldOrdersQuery.isLoading}
+            error={ordersSoldError}
+            orders={ordersSold}
+            emptyText="판매한 주문이 없습니다."
+          />
+        )}
+        {tabValue === 3 && isSeller && (
           <DepositSummaryTab
             loading={sellerInfoQuery.isLoading}
             error={sellerInfoError}
@@ -292,10 +313,8 @@ const MyPage: React.FC = () => {
             onCreateAccount={handleCreateAccount}
           />
         )}
-        {tabValue === 4 && hasRole(user?.roles, UserRole.SELLER) && (
-          <SettlementTab />
-        )}
-        {tabValue === 5 && hasRole(user?.roles, UserRole.SELLER) && (
+        {tabValue === 4 && isSeller && <SettlementTab />}
+        {tabValue === 5 && isSeller && (
           <MyProductsTab
             loading={myProductsQuery.isLoading}
             error={myProductsError}

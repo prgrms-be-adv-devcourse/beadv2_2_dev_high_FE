@@ -80,10 +80,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const login = (data: LoginResponse) => {
-    const { accessToken, refreshToken, ...rest } = data;
+    const { accessToken, ...rest } = data;
     const normalizedUser = normalizeUser(rest);
     localStorage.setItem("accessToken", accessToken);
-    localStorage.setItem("refreshToken", refreshToken as string);
     localStorage.setItem("user", JSON.stringify(normalizedUser));
     setToken(accessToken);
     setUser(normalizedUser);

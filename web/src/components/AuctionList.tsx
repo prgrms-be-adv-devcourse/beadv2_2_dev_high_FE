@@ -12,9 +12,12 @@ import React, { useMemo } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { auctionApi } from "../apis/auctionApi";
+import { fileApi } from "../apis/fileApi";
+import { productApi } from "../apis/productApi";
 import {
   type AuctionQueryParams,
   type PagedAuctionResponse,
+  type Product,
   AuctionStatus,
 } from "@moreauction/types";
 import { formatWon } from "@moreauction/utils";
@@ -76,6 +79,52 @@ const AuctionList: React.FC<AuctionListProps> = ({
   }, [auctionQuery.error, auctionQuery.isError]);
 
   const auctionData = auctionQuery.data ?? null;
+  const auctions = auctionData?.content ?? [];
+
+  const productIds = useMemo(() => {
+    const ids = auctions
+      .map((auction) => auction.productId)
+      .filter((id): id is string => !!id);
+    return Array.from(new Set(ids));
+  }, [auctions]);
+
+  const productsQuery = useQuery({
+    queryKey: ["products", "many", productIds],
+    queryFn: async () => {
+      const response = await productApi.getProductsByIds(productIds);
+      return response.data as Product[];
+    },
+    enabled: productIds.length > 0,
+    staleTime: 30_000,
+  });
+
+  const productMap = useMemo(() => {
+    const list = productsQuery.data ?? [];
+    return new Map(list.map((product) => [product.id, product]));
+  }, [productsQuery.data]);
+
+  const fileGroupIds = useMemo(() => {
+    const ids = (productsQuery.data ?? [])
+      .map((product) => product.fileGroupId)
+      .filter((id): id is string => !!id);
+    return Array.from(new Set(ids));
+  }, [productsQuery.data]);
+
+  const fileGroupsQuery = useQuery({
+    queryKey: ["files", "groups", fileGroupIds],
+    queryFn: async () => {
+      const response = await fileApi.getFileGroupsByIds(fileGroupIds);
+      return response.data ?? [];
+    },
+    enabled: fileGroupIds.length > 0,
+    staleTime: 30_000,
+  });
+
+  const fileGroupMap = useMemo(() => {
+    const list = fileGroupsQuery.data ?? [];
+    return new Map(list.map((group) => [group.fileGroupId, group]));
+  }, [fileGroupsQuery.data]);
+  const isImageLoading = productsQuery.isLoading || fileGroupsQuery.isLoading;
 
   return (
     <Box
@@ -124,10 +173,27 @@ const AuctionList: React.FC<AuctionListProps> = ({
               </CardContent>
             </Card>
           ))
-        : auctionData?.content?.map((auction, i) => {
+        : auctions.map((auction, i) => {
             const hasBid =
               auction.status === AuctionStatus.IN_PROGRESS &&
               (auction.currentBid ?? 0) > 0;
+            const bidText =
+              auction.status === AuctionStatus.READY
+                ? "시작 전"
+                : hasBid
+                  ? `현재 가격: ${formatWon(auction.currentBid)}`
+                  : "현재 가격: -";
+            const product = auction.productId
+              ? productMap.get(auction.productId)
+              : undefined;
+            const fileGroupId = product?.fileGroupId;
+            const fileGroup = fileGroupId
+              ? fileGroupMap.get(fileGroupId)
+              : undefined;
+            const coverImage =
+              fileGroup?.files?.[0]?.filePath ??
+              auction.filePath ??
+              "/images/no_image.png";
 
             return (
               <Card
@@ -138,12 +204,21 @@ const AuctionList: React.FC<AuctionListProps> = ({
                   flexDirection: "column",
                 }}
               >
-                <CardMedia
-                  component="img"
-                  height="200"
-                  image={auction.filePath ?? "/images/no_image.png"}
-                  alt={auction.productName}
-                />
+                {isImageLoading ? (
+                  <Skeleton
+                    variant="rectangular"
+                    height={220}
+                    sx={{ borderBottom: "1px solid", borderColor: "divider" }}
+                  />
+                ) : (
+                  <CardMedia
+                    component="img"
+                    height="220"
+                    image={coverImage}
+                    alt={auction.productName}
+                    sx={{ borderBottom: "1px solid", borderColor: "divider" }}
+                  />
+                )}
                 <CardContent
                   sx={{ flexGrow: 1, display: "flex", flexDirection: "column" }}
                 >
@@ -172,10 +247,7 @@ const AuctionList: React.FC<AuctionListProps> = ({
                         mb: 0.5,
                       }}
                     >
-                      최고입찰가:{" "}
-                      {hasBid
-                        ? formatWon(auction.currentBid)
-                        : "-"}
+                      {bidText}
                     </Typography>
                     <Typography
                       variant="caption"
@@ -213,22 +285,18 @@ const AuctionList: React.FC<AuctionListProps> = ({
                         />
                       )}
                     </Typography>
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        color: "text.secondary",
-                        textAlign: "right",
-                        display: "block",
-                        mt: 0.5,
-                      }}
-                    >
-                      상태: {getAuctionStatusText(auction.status)}
-                    </Typography>
                   </Box>
                 </CardContent>
                 <Button
                   size="small"
                   color="primary"
+                  variant={
+                    linkDestination === "product"
+                      ? "outlined"
+                      : auction.status === AuctionStatus.IN_PROGRESS
+                        ? "contained"
+                        : "outlined"
+                  }
                   component={RouterLink}
                   to={
                     linkDestination === "product"
@@ -238,9 +306,9 @@ const AuctionList: React.FC<AuctionListProps> = ({
                   sx={{ m: 1 }}
                 >
                   {linkDestination === "product"
-                    ? "상품 상세보기"
+                    ? "상품 보러가기"
                     : auction.status === AuctionStatus.IN_PROGRESS
-                      ? "경매 참여하기"
+                      ? "경매 바로 참여하기"
                       : "경매 상세보기"}
                 </Button>
               </Card>

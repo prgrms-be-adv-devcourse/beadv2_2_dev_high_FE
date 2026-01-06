@@ -22,6 +22,8 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { auctionApi } from "../apis/auctionApi";
 import { depositApi } from "../apis/depositApi";
+import { fileApi } from "../apis/fileApi";
+import { productApi } from "../apis/productApi";
 import {
   type InfiniteData,
   useInfiniteQuery,
@@ -89,7 +91,8 @@ const AuctionDetail: React.FC = () => {
       return res.data as AuctionDetailResponse;
     },
     enabled: !!auctionId,
-    staleTime: 30_000,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const participationQuery = useQuery({
@@ -110,6 +113,7 @@ const AuctionDetail: React.FC = () => {
     isWithdrawn: false,
     isRefund: false,
   };
+  const productId = auctionDetail?.productId;
 
   const getProductImageUrls = useCallback(() => {
     const raw: unknown = (auctionDetail as any)?.files;
@@ -166,6 +170,33 @@ const AuctionDetail: React.FC = () => {
     return [trimmed];
   }, [auctionDetail]);
 
+  const productDetailQuery = useQuery({
+    queryKey: ["products", "detail", productId],
+    queryFn: async () => {
+      const response = await productApi.getProductById(productId as string);
+      return response.data;
+    },
+    enabled: !!productId,
+    staleTime: 30_000,
+  });
+
+  const productFileGroupId = productDetailQuery.data?.fileGroupId;
+  const fileGroupQuery = useQuery({
+    queryKey: ["files", "group", productFileGroupId],
+    queryFn: () => fileApi.getFiles(String(productFileGroupId)),
+    enabled: !!productFileGroupId,
+    staleTime: 30_000,
+  });
+
+  const productImageUrls = useMemo(() => {
+    const fileGroup = fileGroupQuery.data?.data;
+    const fileUrls =
+      fileGroup?.files
+        ?.map((file) => file.filePath)
+        .filter((path): path is string => !!path && path.length > 0) ?? [];
+    return fileUrls.length > 0 ? fileUrls : getProductImageUrls();
+  }, [fileGroupQuery.data, getProductImageUrls]);
+
   const bidHistoryQuery = useInfiniteQuery<
     PagedBidHistoryResponse,
     Error,
@@ -185,7 +216,7 @@ const AuctionDetail: React.FC = () => {
       return response.data;
     },
     initialPageParam: 0,
-    enabled: !!auctionId,
+    enabled: !!auctionId && isAuthenticated,
     getNextPageParam: (lastPage) =>
       lastPage.last ? undefined : (lastPage.number ?? 0) + 1,
     staleTime: 30_000,
@@ -222,14 +253,14 @@ const AuctionDetail: React.FC = () => {
   }, [participationQuery.error, participationQuery.isError]);
 
   const bidHistoryErrorMessage = useMemo(() => {
-    if (!bidHistoryQuery.isError) return null;
+    if (!isAuthenticated || !bidHistoryQuery.isError) return null;
     const err: any = bidHistoryQuery.error;
     return (
       err?.data?.message ??
       err?.message ??
       "실시간 입찰 내역을 불러오지 못했습니다."
     );
-  }, [bidHistoryQuery.error, bidHistoryQuery.isError]);
+  }, [bidHistoryQuery.error, bidHistoryQuery.isError, isAuthenticated]);
 
   useEffect(() => {
     const highestUserId = auctionDetail?.highestUserId ?? undefined;
@@ -614,6 +645,10 @@ const AuctionDetail: React.FC = () => {
                 <CardContent>
                   {participationErrorMessage ? (
                     <Alert severity="error">{participationErrorMessage}</Alert>
+                  ) : !isAuthenticated ? (
+                    <Alert severity="info">
+                      로그인 후 참여 현황을 확인할 수 있습니다.
+                    </Alert>
                   ) : canRenderDetail ? (
                     <AuctionParticipationStatus
                       participationStatus={participationStatus}
@@ -660,8 +695,6 @@ const AuctionDetail: React.FC = () => {
                     isAuctionInProgress={isAuctionInProgress}
                     isConnected={isConnected}
                     isRetrying={isRetrying}
-                    canEdit={canEdit || false}
-                    auctionId={auctionId!}
                   />
                 ) : (
                   <Alert severity="error">
@@ -843,9 +876,15 @@ const AuctionDetail: React.FC = () => {
             </Button>
           </Stack>
           <ProductInfo
-            imageUrls={getProductImageUrls()}
-            productName={auctionDetail?.productName ?? ""}
-            description={auctionDetail?.description ?? ""}
+            imageUrls={productImageUrls}
+            productName={
+              productDetailQuery.data?.name ?? auctionDetail?.productName ?? ""
+            }
+            description={
+              productDetailQuery.data?.description ??
+              auctionDetail?.description ??
+              ""
+            }
           />
         </Stack>
       </Drawer>

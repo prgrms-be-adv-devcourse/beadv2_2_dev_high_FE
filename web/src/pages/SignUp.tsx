@@ -3,7 +3,6 @@ import {
   Box,
   Button,
   CircularProgress,
-  Dialog,
   Link as MuiLink,
   TextField,
   Typography,
@@ -11,7 +10,6 @@ import {
 import React, { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
-import DaumPostcode from "react-daum-postcode";
 import { useMutation } from "@tanstack/react-query";
 import { userApi } from "../apis/userApi";
 import FormContainer from "../components/FormContainer";
@@ -29,7 +27,6 @@ const SignUp: React.FC = () => {
     watch,
     formState: { errors },
     getValues,
-    setValue,
   } = useForm<SignUpFormValues>({
     // SignUpFormValues 타입 적용
     defaultValues: {
@@ -39,10 +36,6 @@ const SignUp: React.FC = () => {
       name: "",
       nickname: "",
       phone_number: "",
-      zip_code: "",
-      state: "",
-      city: "",
-      detail: "",
     },
   });
 
@@ -60,9 +53,6 @@ const SignUp: React.FC = () => {
   const [nicknameAvailable, setNicknameAvailable] = useState<boolean | null>(
     null
   );
-
-  // 우편번호 검색 상태 관리
-  const [openAddressModal, setOpenAddressModal] = useState(false);
 
   const sendCodeMutation = useMutation({
     mutationFn: (email: string) => userApi.sendVerificationEmail(email),
@@ -182,14 +172,6 @@ const SignUp: React.FC = () => {
         error.response?.data?.message || "인증번호가 올바르지 않습니다."
       );
     }
-  };
-
-  const handleAddressComplete = (data: any) => {
-    setValue("zip_code", data.zonecode);
-    setValue("state", data.sido);
-    setValue("city", data.sigungu);
-    setValue("detail", data.roadname);
-    setOpenAddressModal(false);
   };
 
   const onSubmit = async (data: SignUpFormValues) => {
@@ -585,108 +567,6 @@ const SignUp: React.FC = () => {
           />
         </Box>
 
-        {/* 우편번호 & 검색 버튼 (8:4 비율) */}
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: "2fr 1fr",
-            gap: 2,
-            mb: 3,
-          }}
-        >
-          <Controller
-            name="zip_code"
-            control={control}
-            rules={{ required: "우편번호는 필수 항목입니다." }}
-            render={({ field }) => (
-              <TextField
-                {...field}
-                required
-                fullWidth
-                label="우편번호"
-                autoComplete="postal-code"
-                error={!!errors.zip_code}
-                helperText={errors.zip_code?.message}
-                inputProps={{ maxLength: 10 }}
-              />
-            )}
-          />
-          <Button
-            type="button"
-            fullWidth
-            variant="outlined"
-            sx={{ py: 1 }}
-            onClick={() => setOpenAddressModal(true)}
-          >
-            검색
-          </Button>
-        </Box>
-
-        {/* 시/도 & 시/군/구 (1:1) */}
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 2,
-            mb: 3,
-          }}
-        >
-          <Controller
-            name="state"
-            control={control}
-            rules={{ required: "시/도는 필수 항목입니다." }}
-            render={({ field }) => (
-              <TextField
-                {...field}
-                required
-                fullWidth
-                label="시/도"
-                autoComplete="address-level1"
-                error={!!errors.state}
-                helperText={errors.state?.message}
-                inputProps={{ maxLength: 30 }}
-              />
-            )}
-          />
-          <Controller
-            name="city"
-            control={control}
-            rules={{ required: "시/군/구는 필수 항목입니다." }}
-            render={({ field }) => (
-              <TextField
-                {...field}
-                required
-                fullWidth
-                label="시/군/구"
-                autoComplete="address-level2"
-                error={!!errors.city}
-                helperText={errors.city?.message}
-                inputProps={{ maxLength: 30 }}
-              />
-            )}
-          />
-        </Box>
-
-        {/* 상세주소 (1열) */}
-        <Box sx={{ mb: 3 }}>
-          <Controller
-            name="detail"
-            control={control}
-            rules={{ required: "상세주소는 필수 항목입니다." }}
-            render={({ field }) => (
-              <TextField
-                {...field}
-                required
-                fullWidth
-                label="상세주소"
-                autoComplete="street-address"
-                error={!!errors.detail}
-                helperText={errors.detail?.message}
-                inputProps={{ maxLength: 100 }}
-              />
-            )}
-          />
-        </Box>
 
         {/* 회원가입 버튼 */}
         <Button
@@ -706,15 +586,6 @@ const SignUp: React.FC = () => {
           </MuiLink>
         </Box>
 
-        {/* 우편번호 검색 다이얼로그 */}
-        <Dialog
-          open={openAddressModal}
-          onClose={() => setOpenAddressModal(false)}
-          maxWidth="sm"
-          fullWidth
-        >
-          <DaumPostcode onComplete={handleAddressComplete} />
-        </Dialog>
       </Box>
     </FormContainer>
   );

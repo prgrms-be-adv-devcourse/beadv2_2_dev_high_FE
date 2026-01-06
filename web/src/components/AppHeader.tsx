@@ -8,6 +8,8 @@ import {
   Badge,
   Container,
   Tooltip,
+  Menu,
+  MenuItem,
   Popover,
   List,
   ListItemButton,
@@ -28,6 +30,8 @@ import {
   FavoriteBorder as FavoriteBorderIcon, // 찜화면 아이콘 추가
   Receipt as ReceiptIcon, // 결제대기(주문서) 아이콘 추가
   Gavel as GavelIcon,
+  Settings as SettingsIcon,
+  ManageAccounts as ManageAccountsIcon,
   Logout as LogoutIcon,
 } from "@mui/icons-material";
 import { Link as RouterLink } from "react-router-dom";
@@ -38,6 +42,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { notificationApi } from "../apis/notificationApi";
 import { orderApi } from "../apis/orderApi";
 import { depositApi } from "../apis/depositApi";
+import { userApi } from "../apis/userApi";
 import { OrderStatus, type NotificationInfo } from "@moreauction/types";
 import { formatWon } from "@moreauction/utils";
 import { useNavigate } from "react-router-dom";
@@ -48,6 +53,8 @@ export const AppHeader: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [notificationAnchorEl, setNotificationAnchorEl] =
+    useState<HTMLElement | null>(null);
+  const [accountAnchorEl, setAccountAnchorEl] =
     useState<HTMLElement | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedNotification, setSelectedNotification] =
@@ -230,9 +237,30 @@ export const AppHeader: React.FC = () => {
     navigate("/notifications");
   };
 
-  const handleLogout = () => {
-    logout();
-    alert("로그아웃 되었습니다.");
+  const handleLogout = async () => {
+    try {
+      await userApi.logout();
+    } catch (err) {
+      console.warn("로그아웃 API 실패(무시):", err);
+    } finally {
+      logout();
+      alert("로그아웃 되었습니다.");
+    }
+  };
+
+  const handleOpenAccountMenu = (
+    event: React.MouseEvent<HTMLElement>
+  ) => {
+    setAccountAnchorEl(event.currentTarget);
+  };
+
+  const handleCloseAccountMenu = () => {
+    setAccountAnchorEl(null);
+  };
+
+  const handleGoAccount = (path: string) => {
+    navigate(path);
+    handleCloseAccountMenu();
   };
 
   return (
@@ -353,13 +381,9 @@ export const AppHeader: React.FC = () => {
                     </Badge>
                   </IconButton>
                 </Tooltip>
-                <Tooltip title="마이페이지">
-                  <IconButton
-                    component={RouterLink}
-                    to="/mypage"
-                    color="inherit"
-                  >
-                    <AccountCircle />
+                <Tooltip title="설정">
+                  <IconButton color="inherit" onClick={handleOpenAccountMenu}>
+                    <ManageAccountsIcon />
                   </IconButton>
                 </Tooltip>
 
@@ -467,6 +491,39 @@ export const AppHeader: React.FC = () => {
           </Button>
         </Box>
       </Popover>
+      <Menu
+        open={Boolean(accountAnchorEl)}
+        anchorEl={accountAnchorEl}
+        onClose={handleCloseAccountMenu}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+        PaperProps={{
+          sx: {
+            mt: 1,
+            minWidth: 180,
+            borderRadius: 2,
+            border: "1px solid",
+            borderColor: "divider",
+            boxShadow:
+              "0 10px 30px rgba(15, 23, 42, 0.15), 0 2px 8px rgba(15, 23, 42, 0.08)",
+          },
+        }}
+      >
+        <MenuItem
+          onClick={() => handleGoAccount("/mypage")}
+          sx={{ px: 2, py: 1.25, fontWeight: 600, gap: 1 }}
+        >
+          <AccountCircle fontSize="small" />
+          마이페이지
+        </MenuItem>
+        <MenuItem
+          onClick={() => handleGoAccount("/settings")}
+          sx={{ px: 2, py: 1.25, fontWeight: 600, gap: 1 }}
+        >
+          <SettingsIcon fontSize="small" />
+          설정
+        </MenuItem>
+      </Menu>
       <Dialog open={detailOpen} onClose={() => setDetailOpen(false)} fullWidth>
         <DialogTitle>{selectedNotification?.title}</DialogTitle>
         <DialogContent dividers>

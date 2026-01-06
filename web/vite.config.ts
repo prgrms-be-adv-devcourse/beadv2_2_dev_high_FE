@@ -5,6 +5,9 @@ import path from "node:path";
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  server: {
+    port: 3000,
+  },
   resolve: {
     alias: {
       "@moreauction/api-client": path.resolve(__dirname, "../packages/api-client/src"),

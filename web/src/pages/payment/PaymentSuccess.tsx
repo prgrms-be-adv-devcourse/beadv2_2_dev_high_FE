@@ -27,7 +27,7 @@ export default function PaymentSuccess() {
   );
   const [action, setAction] = useState<{ label: string; path: string }>({
     label: "마이페이지로 바로가기",
-    path: "/mypage?tab=1",
+    path: "/mypage?tab=0",
   });
   const queryClient = useQueryClient();
 
@@ -56,7 +56,7 @@ export default function PaymentSuccess() {
 
   useEffect(() => {
     const approvePayment = async () => {
-      let redirectPath = "/mypage?tab=1";
+      let redirectPath = "/mypage?tab=0";
       const params = new URLSearchParams(window.location.search);
       const paymentKey = params.get("paymentKey");
       const orderId = params.get("orderId");
@@ -229,14 +229,14 @@ export default function PaymentSuccess() {
         setDescription(
           "예치금이 충전되었습니다. 마이페이지에서 잔액과 내역을 확인할 수 있어요."
         );
-        setAction({ label: "마이페이지로 바로가기", path: "/mypage?tab=1" });
+        setAction({ label: "마이페이지로 바로가기", path: "/mypage?tab=0" });
       } catch (err) {
         setStatus("error");
         setTitle("결제 승인에 실패했어요");
         setDescription(
           "결제가 정상적으로 승인되지 않았습니다. 결제 내역을 확인하거나 잠시 후 다시 시도해 주세요."
         );
-        setAction({ label: "마이페이지로 바로가기", path: "/mypage?tab=1" });
+        setAction({ label: "마이페이지로 바로가기", path: "/mypage?tab=0" });
       }
 
       setTimeout(() => {

@@ -47,7 +47,7 @@ import {
   ToggleButtonGroup,
   Typography,
 } from "@mui/material";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
@@ -160,6 +160,7 @@ const ProductRegistration: React.FC = () => {
   const isEditMode = !!productId;
   const navigate = useNavigate();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const {
     register,
     handleSubmit,
@@ -201,14 +202,18 @@ const ProductRegistration: React.FC = () => {
     staleTime: 5 * 60_000,
   });
 
-  const productDetailQuery = useQuery({
+  const productDetailQuery = useQuery<Product | null>({
     queryKey: ["products", "detail", productId],
-    queryFn: () => productApi.getProductById(productId as string),
+    queryFn: async () => {
+      const response = await productApi.getProductById(productId as string);
+      const data = response.data as Product | null;
+      return data;
+    },
     enabled: !!productId,
     staleTime: 30_000,
   });
 
-  const productFileGroupId = productDetailQuery.data?.data?.fileGroupId;
+  const productFileGroupId = productDetailQuery.data?.fileGroupId;
   const fileGroupQuery = useQuery({
     queryKey: ["files", "group", productFileGroupId],
     queryFn: () => fileApi.getFiles(String(productFileGroupId)),
@@ -267,7 +272,7 @@ const ProductRegistration: React.FC = () => {
   }, [productId]);
 
   useEffect(() => {
-    const productResponse = productDetailQuery.data?.data;
+    const productResponse = productDetailQuery.data;
     if (!productResponse) return;
     const productData = productResponse as Product | undefined;
 
@@ -277,7 +282,11 @@ const ProductRegistration: React.FC = () => {
       return;
     }
 
-    if (user?.userId !== productData.sellerId) {
+    if (!user?.userId) {
+      return;
+    }
+
+    if (user.userId !== productData.sellerId) {
       alert("수정할 권한이 없습니다.");
       navigate(-1);
       return;
@@ -359,8 +368,12 @@ const ProductRegistration: React.FC = () => {
       useExistingImages &&
       (fileGrpId ?? null) &&
       localFiles.length === 0;
-    let finalFileGroupId: number | string | undefined = canReuseExistingImages
+    const isClearingImages =
+      isEditMode && !useExistingImages && localFiles.length === 0;
+    let finalFileGroupId: string | null | undefined = canReuseExistingImages
       ? fileGrpId ?? undefined
+      : isClearingImages
+      ? null
       : undefined;
 
     try {
@@ -378,7 +391,8 @@ const ProductRegistration: React.FC = () => {
         const productData: ProductUpdateRequest = {
           name: data.name,
           description: data.description,
-          fileGrpId: finalFileGroupId ?? undefined,
+          fileGrpId:
+            finalFileGroupId === undefined ? undefined : finalFileGroupId,
           categoryIds: selectedCategoryIds,
         };
         const productResponse = await productApi.updateProduct(
@@ -387,6 +401,13 @@ const ProductRegistration: React.FC = () => {
         );
 
         const createdProduct = productResponse.data;
+        await queryClient.invalidateQueries({ queryKey: ["products"] });
+        await queryClient.invalidateQueries({
+          queryKey: ["products", "detail", productId],
+        });
+        await queryClient.invalidateQueries({
+          queryKey: ["products", "mine", user?.userId],
+        });
         alert("상품이 성공적으로 수정되었습니다.");
         navigate(`/products/${createdProduct?.id ?? productId}`);
       } else {
@@ -400,6 +421,10 @@ const ProductRegistration: React.FC = () => {
 
         const productResponse = await productApi.createProduct(productData);
         const createdProduct = productResponse.data;
+        await queryClient.invalidateQueries({ queryKey: ["products"] });
+        await queryClient.invalidateQueries({
+          queryKey: ["products", "mine", user?.userId],
+        });
         alert("상품이 성공적으로 등록되었습니다.");
         navigate(`/products/${createdProduct?.id}`);
       }
@@ -408,36 +433,6 @@ const ProductRegistration: React.FC = () => {
       setError(err.response?.data?.message || "요청에 실패했습니다.");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleDeleteProduct = async () => {
-    if (!currentProduct?.id) {
-      alert("상품 정보를 찾을 수 없습니다.");
-      return;
-    }
-    const sellerIdForDeletion = currentProduct.sellerId ?? user?.userId;
-    if (!sellerIdForDeletion) {
-      alert("상품 삭제 권한이 없습니다.");
-      return;
-    }
-    if (
-      !window.confirm(
-        "상품을 삭제하시겠습니까? 삭제 후에는 복구할 수 없습니다."
-      )
-    ) {
-      return;
-    }
-    try {
-      setProductDeleteLoading(true);
-      await productApi.deleteProduct(currentProduct.id, sellerIdForDeletion);
-      alert("상품이 삭제되었습니다.");
-      navigate("/products");
-    } catch (err: any) {
-      console.error("상품 삭제 실패:", err);
-      alert(err?.response?.data?.message ?? "상품 삭제에 실패했습니다.");
-    } finally {
-      setProductDeleteLoading(false);
     }
   };
 
@@ -472,7 +467,7 @@ const ProductRegistration: React.FC = () => {
     () => getProductImageUrls(fileGroup),
     [fileGroup]
   );
-  const showExistingImages = isEditMode && existingImageUrls.length > 0;
+  const showExistingImages = isEditMode;
 
   return (
     <Container maxWidth="md">
@@ -486,28 +481,6 @@ const ProductRegistration: React.FC = () => {
           <Typography variant="h4">
             {isEditMode ? "상품 수정" : "상품 등록"}
           </Typography>
-          {isEditMode && (
-            <Box
-              sx={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: { xs: "flex-start", md: "flex-end" },
-                gap: 1,
-                maxWidth: { xs: "100%", md: "auto" },
-              }}
-            >
-              <Stack direction="row" spacing={1} alignItems="center">
-                <Button
-                  variant="contained"
-                  color="error"
-                  onClick={handleDeleteProduct}
-                  disabled={productDeleteLoading || !canDeleteProduct}
-                >
-                  {productDeleteLoading ? "상품 삭제 중..." : "상품 삭제"}
-                </Button>
-              </Stack>
-            </Box>
-          )}
         </Stack>
       </Box>
       <Paper sx={{ p: 4, boxShadow: 2 }}>
@@ -608,41 +581,31 @@ const ProductRegistration: React.FC = () => {
               </Typography>
 
               {showExistingImages && (
-                <Paper
-                  variant="outlined"
-                  sx={{
-                    p: 2,
-                    mb: 2,
-                    backgroundColor: (theme) =>
-                      theme.palette.mode === "dark"
-                        ? "rgba(255,255,255,0.04)"
-                        : "grey.50",
-                  }}
-                >
-                  <Stack spacing={1.5}>
-                    <Stack
-                      direction={{ xs: "column", sm: "row" }}
-                      spacing={1}
-                      alignItems={{ xs: "flex-start", sm: "center" }}
-                      justifyContent="space-between"
-                    >
-                      <Box>
-                        <Stack direction="row" spacing={1} alignItems="center">
-                          <Typography variant="body2" color="text.secondary">
-                            현재 등록된 이미지
-                          </Typography>
-                          <Chip
-                            size="small"
-                            label={`${existingImageUrls.length}장`}
-                            variant="outlined"
-                          />
-                        </Stack>
-                        <Typography variant="caption" color="text.secondary">
-                          기존 이미지는 유지하거나, 새 이미지로 한 번에 교체할
-                          수 있어요.
+                <Stack spacing={1.5} sx={{ mb: 2 }}>
+                  <Stack
+                    direction={{ xs: "column", sm: "row" }}
+                    spacing={1}
+                    alignItems={{ xs: "flex-start", sm: "center" }}
+                    justifyContent="space-between"
+                  >
+                    <Box>
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <Typography variant="body2" color="text.secondary">
+                          현재 등록된 이미지
                         </Typography>
-                      </Box>
+                        <Chip
+                          size="small"
+                          label={`${existingImageUrls.length}장`}
+                          variant="outlined"
+                        />
+                      </Stack>
+                      <Typography variant="caption" color="text.secondary">
+                        기존 이미지는 그대로 유지하거나 새 이미지로 덮어쓸 수
+                        있어요.
+                      </Typography>
+                    </Box>
 
+                    <Stack direction="row" spacing={1}>
                       <ToggleButtonGroup
                         size="small"
                         color="primary"
@@ -653,68 +616,90 @@ const ProductRegistration: React.FC = () => {
                           handleExistingImageModeChange(v === "KEEP");
                         }}
                       >
-                        <ToggleButton value="KEEP">유지</ToggleButton>
-                        <ToggleButton value="REPLACE">교체</ToggleButton>
+                        <ToggleButton value="KEEP">
+                          기존 이미지 유지
+                        </ToggleButton>
+                        <ToggleButton value="REPLACE">
+                          새 이미지로 덮어쓰기
+                        </ToggleButton>
                       </ToggleButtonGroup>
                     </Stack>
+                  </Stack>
 
-                    <Box
-                      sx={{
-                        display: "grid",
-                        gap: 1,
-                        gridTemplateColumns:
-                          "repeat(auto-fill, minmax(120px, 1fr))",
-                        opacity: useExistingImages ? 1 : 0.55,
-                        transition: "opacity 0.15s ease",
-                      }}
-                    >
-                      {existingImageUrls.map((url, idx) => (
-                        <Paper
-                          key={`${url}-${idx}`}
-                          variant="outlined"
-                          sx={{
-                            position: "relative",
-                            overflow: "hidden",
-                            borderRadius: 2,
-                            borderColor: idx === 0 ? "primary.main" : "divider",
-                          }}
-                        >
-                          <Box
-                            component="img"
-                            src={url}
-                            alt={`등록된 이미지 ${idx + 1}`}
+                  <Paper
+                    variant="outlined"
+                    sx={{
+                      p: 2,
+                      backgroundColor: (theme) =>
+                        theme.palette.mode === "dark"
+                          ? "rgba(255,255,255,0.04)"
+                          : "grey.50",
+                    }}
+                  >
+                    {existingImageUrls.length === 0 ? (
+                      <Typography variant="body2" color="text.secondary">
+                        등록된 이미지가 없습니다.
+                      </Typography>
+                    ) : (
+                      <Box
+                        sx={{
+                          display: "grid",
+                          gap: 1,
+                          gridTemplateColumns:
+                            "repeat(auto-fill, minmax(120px, 1fr))",
+                          opacity: useExistingImages ? 1 : 0.55,
+                          transition: "opacity 0.15s ease",
+                        }}
+                      >
+                        {existingImageUrls.map((url, idx) => (
+                          <Paper
+                            key={`${url}-${idx}`}
+                            variant="outlined"
                             sx={{
-                              width: "100%",
-                              height: 120,
-                              objectFit: "cover",
-                              display: "block",
+                              position: "relative",
+                              overflow: "hidden",
+                              borderRadius: 2,
+                              borderColor:
+                                idx === 0 ? "primary.main" : "divider",
                             }}
-                          />
-                          {idx === 0 && (
-                            <Chip
-                              size="small"
-                              icon={<Star sx={{ fontSize: 16 }} />}
-                              label="대표"
-                              color="primary"
+                          >
+                            <Box
+                              component="img"
+                              src={url}
+                              alt={`등록된 이미지 ${idx + 1}`}
                               sx={{
-                                position: "absolute",
-                                top: 8,
-                                left: 8,
-                                fontWeight: 700,
+                                width: "100%",
+                                height: 120,
+                                objectFit: "cover",
+                                display: "block",
                               }}
                             />
-                          )}
-                        </Paper>
-                      ))}
-                    </Box>
-
-                    {!useExistingImages && (
-                      <Alert severity="warning">
-                        새 이미지를 업로드하면 기존 이미지가 모두 대체됩니다.
-                      </Alert>
+                            {idx === 0 && (
+                              <Chip
+                                size="small"
+                                icon={<Star sx={{ fontSize: 16 }} />}
+                                label="대표"
+                                color="primary"
+                                sx={{
+                                  position: "absolute",
+                                  top: 8,
+                                  left: 8,
+                                  fontWeight: 700,
+                                }}
+                              />
+                            )}
+                          </Paper>
+                        ))}
+                      </Box>
                     )}
-                  </Stack>
-                </Paper>
+                  </Paper>
+
+                  {!useExistingImages && (
+                    <Alert severity="warning">
+                      새 이미지를 업로드하지 않으면 기존 이미지는 삭제됩니다.
+                    </Alert>
+                  )}
+                </Stack>
               )}
 
               <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -764,7 +749,7 @@ const ProductRegistration: React.FC = () => {
                         />
                         <Typography variant="subtitle1" fontWeight={700}>
                           {useExistingImages
-                            ? "기존 이미지 유지 중"
+                            ? "기존 이미지를 유지합니다"
                             : localImages.length > 0
                             ? "이미지를 추가로 선택"
                             : "상품 이미지 업로드"}
@@ -776,7 +761,7 @@ const ProductRegistration: React.FC = () => {
                         sx={{ mt: 0.5 }}
                       >
                         {useExistingImages
-                          ? "기존 이미지를 유지하려면 그대로 저장하세요. 교체하려면 ‘이미지 교체하기’를 눌러주세요."
+                          ? "저장 시 기존 이미지를 그대로 유지합니다."
                           : "드래그 앤 드롭 또는 파일 선택으로 여러 장 업로드할 수 있어요."}
                       </Typography>
                     </Box>

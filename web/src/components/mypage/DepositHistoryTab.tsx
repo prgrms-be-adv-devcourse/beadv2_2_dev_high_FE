@@ -24,8 +24,11 @@ type HistoryFilter = "ALL" | "CHARGE" | "USAGE";
 
 interface DepositHistoryTabProps {
   loading: boolean;
+  loadingMore?: boolean;
   error: string | null;
   history: DepositHistory[];
+  hasMore?: boolean;
+  onLoadMore?: () => void;
   balanceInfo: DepositInfo | null;
   balanceLoading: boolean;
   balanceError?: string | null;
@@ -58,8 +61,11 @@ const getHistoryTypeText = (type: DepositType) => {
 
 export const DepositHistoryTab: React.FC<DepositHistoryTabProps> = ({
   loading,
+  loadingMore = false,
   error,
   history,
+  hasMore = false,
+  onLoadMore,
   balanceInfo,
   balanceLoading,
   balanceError,
@@ -75,6 +81,7 @@ export const DepositHistoryTab: React.FC<DepositHistoryTabProps> = ({
   }, [history, filter]);
 
   const showSkeleton = loading && !error && history.length === 0;
+  const canLoadMore = !!onLoadMore && hasMore && !loadingMore;
 
   // 에러가 있는 경우에는 목록 대신 에러만 표시
   if (error) {
@@ -181,21 +188,51 @@ export const DepositHistoryTab: React.FC<DepositHistoryTabProps> = ({
       ) : filtered.length === 0 ? (
         <Alert severity="info">{typeMap[filter]} 내역이 없습니다.</Alert>
       ) : (
-        <List>
-          {filtered.map((hst) => (
-            <React.Fragment key={hst.id}>
-              <ListItem>
-                <ListItemText
-                  primary={`${new Date(hst.createdAt).toLocaleString()}`}
-                  secondary={`${
-                    getHistoryTypeText(hst.type)
-                  } 금액: ${formatNumber(hst.amount)}원 (잔액: ${formatNumber(hst.balance)}원)`}
-                />
-              </ListItem>
-              <Divider />
-            </React.Fragment>
-          ))}
-        </List>
+        <Box
+          sx={{ maxHeight: 480, overflowY: "auto" }}
+          onScroll={(event) => {
+            if (!canLoadMore) return;
+            const target = event.currentTarget;
+            const remaining =
+              target.scrollHeight - target.scrollTop - target.clientHeight;
+            if (remaining < 120) {
+              onLoadMore?.();
+            }
+          }}
+        >
+          <List>
+            {filtered.map((hst) => (
+              <React.Fragment key={hst.id}>
+                <ListItem>
+                  <ListItemText
+                    primary={`${new Date(hst.createdAt).toLocaleString()}`}
+                    secondary={`${
+                      getHistoryTypeText(hst.type)
+                    } 금액: ${formatNumber(hst.amount)}원 (잔액: ${formatNumber(
+                      hst.balance
+                    )}원)`}
+                  />
+                </ListItem>
+                <Divider />
+              </React.Fragment>
+            ))}
+            {loadingMore && (
+              <>
+                {Array.from({ length: 2 }).map((_, idx) => (
+                  <React.Fragment key={`loading-${idx}`}>
+                    <ListItem>
+                      <ListItemText
+                        primary={<Skeleton width="50%" />}
+                        secondary={<Skeleton width="80%" />}
+                      />
+                    </ListItem>
+                    <Divider />
+                  </React.Fragment>
+                ))}
+              </>
+            )}
+          </List>
+        </Box>
       )}
     </Paper>
   );

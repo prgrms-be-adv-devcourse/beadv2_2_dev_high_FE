@@ -11,7 +11,7 @@ import { client } from "./client";
 
 // 상품 목록 조회 시 사용될 쿼리 파라미터 인터페이스 (필요에 따라 확장)
 interface ProductLatestAuctionUpdateRequest {
-  latestAuctionId: string;
+  latestAuctionId: string | null;
 }
 
 /**
@@ -108,14 +108,20 @@ export const productApi = {
    * @param productId - 삭제할 상품의 ID
    * @param sellerId - 판매자 ID (검증용)
    */
-  deleteProduct: async (
-    productId: string,
-    sellerId: string
-  ): Promise<ApiResponseDto<void>> => {
+  deleteProduct: async (productId: string): Promise<ApiResponseDto<void>> => {
     console.log(`상품 삭제 API 호출 (ID: ${productId})`);
-    const response = await client.delete(`/products/${productId}`, {
-      params: { sellerId },
-    });
+    const response = await client.delete(`/products/${productId}`);
+    return response.data;
+  },
+
+  /**
+   * 여러 상품 ID로 상품 정보 조회
+   */
+  getProductsByIds: async (
+    productIds: string[]
+  ): Promise<ApiResponseDto<Product[]>> => {
+    const ids = productIds.filter(Boolean).map(encodeURIComponent).join(",");
+    const response = await client.get(`/products/${ids}/many`);
     return response.data;
   },
 
@@ -124,7 +130,7 @@ export const productApi = {
    */
   updateLatestAuctionId: async (
     productId: string,
-    latestAuctionId: string
+    latestAuctionId: string | null
   ): Promise<ApiResponseDto<void>> => {
     const payload: ProductLatestAuctionUpdateRequest = { latestAuctionId };
     const response = await client.put(

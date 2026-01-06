@@ -47,4 +47,12 @@ export const fileApi = {
     const response = await client.get(`/files/groups/${fileGroupId}`);
     return response.data;
   },
+
+  getFileGroupsByIds: async (
+    fileGroupIds: string[]
+  ): Promise<ApiResponseDto<FileGroup[]>> => {
+    const ids = fileGroupIds.filter(Boolean).map(encodeURIComponent).join(",");
+    const response = await client.get(`/files/groups/${ids}/many`);
+    return response.data;
+  },
 };

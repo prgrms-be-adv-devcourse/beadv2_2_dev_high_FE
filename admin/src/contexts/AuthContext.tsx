@@ -72,9 +72,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const login = (data: LoginResponse) => {
-    const { accessToken, refreshToken, ...rest } = data;
+    const { accessToken, ...rest } = data;
     localStorage.setItem("accessToken", accessToken);
-    localStorage.setItem("refreshToken", refreshToken as string);
     localStorage.setItem("user", JSON.stringify(rest));
     setToken(accessToken);
     setUser(rest);
