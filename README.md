@@ -1,73 +1,168 @@
-# React + TypeScript + Vite
+# 🏷️ More Auction Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+사용자 웹과 어드민을 함께 관리하는 프론트엔드 모노레포입니다. 경매/상품/주문/예치금 등 핵심 도메인 UI를 제공하고, 실시간 경매 상태는 웹소켓으로 처리합니다.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## 📦 Monorepo
 
-## React Compiler
+- `web/` 사용자 웹 (경매/상품/마이페이지)
+- `admin/` 어드민 웹
+- `packages/` 공용 패키지
+  - `@moreauction/types`
+  - `@moreauction/utils`
+  - `@moreauction/api-client`
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+---
 
-## Expanding the ESLint configuration
+## 🧰 Tech Stack
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- Runtime: React 19, TypeScript, Vite
+- UI: MUI, Emotion
+- Data: TanStack Query, Axios
+- Routing: React Router
+- Forms: React Hook Form
+- Realtime: STOMP + SockJS
+- Utils: date-fns, qs
+- Package Manager: pnpm (workspace)
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+---
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## 🚀 Getting Started
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+pnpm install
+pnpm dev        # web
+pnpm dev:admin  # admin
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Build / Lint
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+pnpm build
+pnpm build:admin
+pnpm lint:web
+pnpm lint:admin
 ```
+
+---
+
+## 🗂️ Structure (Domain-first)
+
+```
+web/src
+  features/
+    auctions/        # 경매
+      components/
+      pages/
+    products/
+      pages/
+    mypage/
+      components/
+      pages/
+    auth/
+      pages/
+      pages/oauth/
+    orders/
+      pages/
+    notifications/
+      pages/
+    search/
+      pages/
+    wishlist/
+      pages/
+    profile/
+      pages/
+    settings/
+      pages/
+    home/
+      pages/
+    payments/
+      pages/payment/
+    chat/
+      components/
+      hooks/
+  shared/
+    components/      # 공용 UI
+    utils/           # 공용 유틸
+  apis/
+  contexts/
+  hooks/
+  queries/
+  routes/
+  theme.ts
+  main.tsx
+  App.tsx
+```
+
+---
+
+## 🔗 Import Alias
+
+- Web/Admin 모두 `@/` 기준으로 import
+- 예:
+
+```ts
+import AuctionList from "@/features/auctions/components/AuctionList";
+```
+
+설정 파일
+- `web/tsconfig.app.json`, `web/vite.config.ts`
+- `admin/tsconfig.app.json`, `admin/vite.config.ts`
+
+---
+
+## ✨ Web Features
+
+- 경매 목록/상세, 실시간 입찰 내역
+- 상품 등록/수정/상세
+- 주문/예치금/정산 관리
+- 알림/찜/검색
+- OAuth 로그인
+
+---
+
+## ⚡ Realtime
+
+- 진행 중 경매(`IN_PROGRESS`)만 웹소켓 연결
+- 연결 상태는 뱃지로 표현
+- 오프라인 감지 시 실패 상태 전환
+
+---
+
+## 🤖 AI Chatbot MVP (Skeleton)
+
+- 플로팅 FAB + 패널 UI
+- 메시지 상태 관리 훅
+- `POST /chat/messages` API 스텁
+
+관련 파일
+- `web/src/features/chat/components/ChatWidget.tsx`
+- `web/src/features/chat/components/ChatPanel.tsx`
+- `web/src/features/chat/hooks/useChat.ts`
+- `web/src/apis/chatApi.ts`
+
+간단 예시 (hook 사용)
+
+```ts
+const { messages, sendMessage } = useChat();
+sendMessage("경매 참여 방법 알려줘");
+```
+
+---
+
+## 🔐 Environment Variables
+
+```bash
+VITE_API_BASE_URL=http://localhost:8000
+VITE_WS_BASE_URL=http://localhost:8000
+```
+
+---
+
+## ✅ Conventions
+
+- 도메인별 `features` 폴더에서 페이지/컴포넌트 관리
+- 공용 UI는 `shared/components`
+- 공용 유틸은 `shared/utils`
+- 모든 import는 `@/` alias 사용
