@@ -86,7 +86,6 @@ export const useStomp = ({ topic, onMessage }: UseStompProps) => {
   }, []);
 
   const connect = useCallback(() => {
-    // - VITE_WS_BASE_URL 없으면 http://localhost:8000
     // - /ws-auction은 공통으로 붙음
     const WS_ORIGIN = (import.meta.env.VITE_WS_BASE_URL ??
       "http://localhost:8000")!.replace(/\/$/, "");
