@@ -7,6 +7,7 @@ import {
   Typography,
   useTheme,
   Paper,
+  Skeleton,
 } from "@mui/material";
 import { Gavel as GavelIcon } from "@mui/icons-material";
 import { Link as RouterLink } from "react-router-dom";
@@ -169,6 +170,98 @@ const Home: React.FC = () => {
               </Box>
             </Box>
           </Stack>
+        </Container>
+      </Box>
+
+      <Box sx={{ py: 6 }}>
+        <Container maxWidth="lg">
+          <Stack
+            direction={{ xs: "column", md: "row" }}
+            justifyContent="space-between"
+            alignItems={{ xs: "flex-start", md: "center" }}
+            spacing={2}
+            sx={{ mb: 3 }}
+          >
+            <Box>
+              <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
+                AI 맞춤 추천
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                관심 상품과 활동을 바탕으로 추천 경매를 보여줄 예정입니다.
+              </Typography>
+            </Box>
+            <Button size="small" disabled>
+              추천 더 보기 (준비 중)
+            </Button>
+          </Stack>
+
+          {isAuthenticated ? (
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: {
+                  xs: "1fr",
+                  sm: "repeat(2, 1fr)",
+                  md: "repeat(3, 1fr)",
+                  lg: "repeat(4, 1fr)",
+                },
+                gap: 4,
+              }}
+            >
+              {Array.from({ length: 4 }).map((_, idx) => (
+                <Paper
+                  key={`ai-reco-${idx}`}
+                  elevation={0}
+                  sx={{
+                    borderRadius: 3,
+                    border: "1px solid",
+                    borderColor:
+                      theme.palette.mode === "light"
+                        ? "rgba(15, 23, 42, 0.08)"
+                        : "rgba(148, 163, 184, 0.2)",
+                    overflow: "hidden",
+                    display: "flex",
+                    flexDirection: "column",
+                  }}
+                >
+                  <Skeleton variant="rectangular" height={200} />
+                  <Box sx={{ p: 2 }}>
+                    <Skeleton variant="text" width="80%" />
+                    <Skeleton variant="text" width="60%" />
+                    <Skeleton variant="text" width="50%" />
+                  </Box>
+                </Paper>
+              ))}
+            </Box>
+          ) : (
+            <Paper
+              elevation={0}
+              sx={{
+                p: 3,
+                borderRadius: 3,
+                border: "1px dashed",
+                borderColor:
+                  theme.palette.mode === "light"
+                    ? "rgba(15, 23, 42, 0.25)"
+                    : "rgba(148, 163, 184, 0.3)",
+              }}
+            >
+              <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
+                로그인하고 맞춤 추천을 확인하세요
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                로그인하면 관심 경매와 유사한 상품을 더 빠르게 찾을 수 있어요.
+              </Typography>
+              <Button
+                component={RouterLink}
+                to="/login"
+                variant="contained"
+                sx={{ mt: 2 }}
+              >
+                로그인하기
+              </Button>
+            </Paper>
+          )}
         </Container>
       </Box>
 

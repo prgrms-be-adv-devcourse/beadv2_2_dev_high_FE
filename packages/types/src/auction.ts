@@ -93,9 +93,11 @@ export interface AuctionDetailResponse {
 }
 
 export interface AuctionParticipationResponse {
+  auctionId?: string;
   isParticipated: boolean;
   isWithdrawn: boolean;
   isRefund: boolean;
+  depositAmount?: number; // BigDecimal → number
   withdrawnAt?: string; // LocalDateTime → ISO 문자열
   refundAt?: string; // LocalDateTime → ISO 문자열
   lastBidPrice?: number; // BigDecimal → number

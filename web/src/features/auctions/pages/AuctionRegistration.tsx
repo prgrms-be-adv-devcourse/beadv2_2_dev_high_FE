@@ -55,6 +55,7 @@ const AuctionRegistration: React.FC = () => {
     handleSubmit,
     watch,
     control,
+    setValue,
     formState: { errors },
     reset,
   } = useForm<AuctionFormData>();
@@ -237,6 +238,11 @@ const AuctionRegistration: React.FC = () => {
   const selectedProduct = isEditMode
     ? ((productForEditQuery.data ?? null) as Product | null)
     : ((productForRegisterQuery.data ?? null) as Product | null);
+  const aiStartBidSuggestion = null as null | {
+    min: number;
+    max: number;
+    median: number;
+  };
 
   const onSubmit = async (data: AuctionFormData) => {
     if (actionLoading || isCheckingAuction) return;
@@ -474,6 +480,68 @@ const AuctionRegistration: React.FC = () => {
                     />
                   )}
                 />
+                <Paper
+                  variant="outlined"
+                  sx={{
+                    mt: 2,
+                    p: 2,
+                    borderRadius: 2,
+                    backgroundColor: (theme) =>
+                      theme.palette.mode === "light"
+                        ? "rgba(59, 130, 246, 0.06)"
+                        : "rgba(59, 130, 246, 0.12)",
+                    borderColor: (theme) =>
+                      theme.palette.mode === "light"
+                        ? "rgba(59, 130, 246, 0.3)"
+                        : "rgba(148, 163, 184, 0.25)",
+                  }}
+                >
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 2,
+                    }}
+                  >
+                    <Box>
+                      <Typography variant="subtitle1" fontWeight={700}>
+                        AI 시작가 추천
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        유사 경매 데이터로 적정 시작가를 안내할 예정입니다.
+                      </Typography>
+                    </Box>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      disabled={!aiStartBidSuggestion}
+                      onClick={() => {
+                        if (!aiStartBidSuggestion) return;
+                        setValue("startBid", aiStartBidSuggestion.median, {
+                          shouldDirty: true,
+                          shouldValidate: true,
+                        });
+                      }}
+                    >
+                      추천가 적용
+                    </Button>
+                  </Box>
+                  <Box sx={{ mt: 2 }}>
+                    {aiStartBidSuggestion ? (
+                      <Typography variant="body2">
+                        추천 범위: {aiStartBidSuggestion.min}원 ~{" "}
+                        {aiStartBidSuggestion.max}원 (중앙값{" "}
+                        {aiStartBidSuggestion.median}원)
+                      </Typography>
+                    ) : (
+                      <>
+                        <Skeleton width="65%" height={22} />
+                        <Skeleton width="45%" height={20} />
+                      </>
+                    )}
+                  </Box>
+                </Paper>
                 <TextField
                   margin="normal"
                   required

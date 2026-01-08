@@ -3,6 +3,8 @@ import CloseIcon from "@mui/icons-material/Close";
 import {
   Alert,
   Box,
+  Card,
+  CardContent,
   Container,
   IconButton,
   List,
@@ -183,6 +185,48 @@ const Wishlist: React.FC = () => {
         <Typography variant="h4" component="h1" sx={{ mb: 2 }}>
           찜 목록 (Wishlist)
         </Typography>
+        <Box sx={{ mb: 3 }}>
+          <Box sx={{ mb: 1.5 }}>
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>
+              찜 기반 추천
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              찜한 상품과 비슷한 경매를 추천할 예정입니다.
+            </Typography>
+          </Box>
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: {
+                xs: "1fr",
+                sm: "repeat(2, 1fr)",
+              },
+              gap: 3,
+            }}
+          >
+            {Array.from({ length: 2 }).map((_, idx) => (
+              <Card
+                key={`wishlist-reco-${idx}`}
+                sx={{ height: "100%", display: "flex", flexDirection: "column" }}
+              >
+                <Skeleton variant="rectangular" height={180} />
+                <CardContent
+                  sx={{
+                    flexGrow: 1,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 1,
+                    mt: 1,
+                  }}
+                >
+                  <Skeleton variant="text" width="80%" />
+                  <Skeleton variant="text" width="60%" />
+                  <Skeleton variant="text" width="50%" />
+                </CardContent>
+              </Card>
+            ))}
+          </Box>
+        </Box>
         <Paper sx={{ p: 2 }}>
           {wishlistQuery.isLoading &&
             products.length === 0 &&

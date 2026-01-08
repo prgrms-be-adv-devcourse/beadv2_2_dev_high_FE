@@ -81,6 +81,14 @@ export const auctionApi = {
     return res.data;
   },
 
+  // 내 경매 참여 이력 조회
+  getParticipationHistory: async (): Promise<
+    ApiResponseDto<AuctionParticipationResponse[]>
+  > => {
+    const res = await client.get("/auctions/participation/me");
+    return res.data;
+  },
+
   createParticipation: async (
     auctionId: string,
     params: any

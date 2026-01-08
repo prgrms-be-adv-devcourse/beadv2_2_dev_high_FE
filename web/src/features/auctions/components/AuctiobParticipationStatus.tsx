@@ -19,18 +19,26 @@ const AuctionParticipationStatus: React.FC<{
   participationStatus: AuctionParticipationResponse;
   depositAmount: number;
   auctionStatus: AuctionStatus;
+  highestUserId?: string | null;
+  currentUserId?: string | null;
   setOpenPopup: () => void;
   refundRequest: () => void;
 }> = ({
   participationStatus,
   depositAmount,
   auctionStatus,
+  highestUserId,
+  currentUserId,
   setOpenPopup,
   refundRequest,
 }) => {
   const { isParticipated, isWithdrawn, isRefund, lastBidPrice } =
     participationStatus;
 
+  const isAuctionEnded =
+    auctionStatus === AuctionStatus.COMPLETED ||
+    auctionStatus === AuctionStatus.FAILED ||
+    auctionStatus === AuctionStatus.CANCELLED;
   let statusChip;
   if (isWithdrawn && isRefund) {
     statusChip = <Chip label="참여 포기 + 환급 완료" color="success" />;
@@ -38,6 +46,14 @@ const AuctionParticipationStatus: React.FC<{
     statusChip = <Chip label="참여 포기" color="warning" />;
   } else if (isRefund) {
     statusChip = <Chip label="보증금 환급 완료" color="success" />;
+  } else if (isAuctionEnded) {
+    if (highestUserId && currentUserId && highestUserId === currentUserId) {
+      statusChip = <Chip label="낙찰" color="success" />;
+    } else if (isParticipated) {
+      statusChip = <Chip label="낙찰 실패" color="default" />;
+    } else {
+      statusChip = <Chip label="경매 종료" color="default" />;
+    }
   } else if (isParticipated) {
     if (lastBidPrice && lastBidPrice > 0) {
       statusChip = <Chip label="참여중" color="secondary" />;
@@ -47,11 +63,6 @@ const AuctionParticipationStatus: React.FC<{
   } else {
     statusChip = <Chip label="미참여" color="default" />;
   }
-
-  const isAuctionEnded =
-    auctionStatus === AuctionStatus.COMPLETED ||
-    auctionStatus === AuctionStatus.FAILED ||
-    auctionStatus === AuctionStatus.CANCELLED;
 
   const statusMessage = (() => {
     if (isWithdrawn) {

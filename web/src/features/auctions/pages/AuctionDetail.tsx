@@ -822,6 +822,8 @@ const AuctionDetail: React.FC = () => {
                         participationStatus={participationStatus}
                         depositAmount={auctionDetail.depositAmount}
                         auctionStatus={auctionDetail.status}
+                        highestUserId={auctionDetail.highestUserId}
+                        currentUserId={user?.userId}
                         setOpenPopup={() => setOpenWithdrawnPopup(true)}
                         refundRequest={refundRequest}
                       />
@@ -923,6 +925,68 @@ const AuctionDetail: React.FC = () => {
             </CardContent>
           </Card>
         </Grid>
+      </Container>
+
+      <Container
+        maxWidth={false}
+        sx={{
+          px: { xs: 2, md: 4 },
+          mb: 6,
+        }}
+      >
+        <Stack
+          direction={{ xs: "column", md: "row" }}
+          justifyContent="space-between"
+          alignItems={{ xs: "flex-start", md: "center" }}
+          spacing={2}
+          sx={{ mb: 3 }}
+        >
+          <Box>
+            <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
+              비슷한 경매
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              AI 추천 기반 유사 경매가 여기에 표시됩니다.
+            </Typography>
+          </Box>
+          <Button size="small" disabled>
+            더 보기 (준비 중)
+          </Button>
+        </Stack>
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: {
+              xs: "1fr",
+              sm: "repeat(2, 1fr)",
+              md: "repeat(3, 1fr)",
+              lg: "repeat(4, 1fr)",
+            },
+            gap: 4,
+          }}
+        >
+          {Array.from({ length: 4 }).map((_, idx) => (
+            <Card
+              key={`similar-auction-${idx}`}
+              sx={{ height: "100%", display: "flex", flexDirection: "column" }}
+            >
+              <Skeleton variant="rectangular" height={200} />
+              <CardContent
+                sx={{
+                  flexGrow: 1,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 1,
+                  mt: 1,
+                }}
+              >
+                <Skeleton variant="text" width="80%" />
+                <Skeleton variant="text" width="60%" />
+                <Skeleton variant="text" width="50%" />
+              </CardContent>
+            </Card>
+          ))}
+        </Box>
       </Container>
 
       <AuctionDialogs

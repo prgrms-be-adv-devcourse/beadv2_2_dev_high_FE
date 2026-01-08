@@ -263,7 +263,7 @@ const Notifications: React.FC = () => {
                 variant="text"
                 onClick={() => markAllAsReadMutation.mutate()}
                 disabled={
-                  markAllAsReadMutation.isLoading ||
+                  markAllAsReadMutation.isPending ||
                   notifications.every((n) => n.readYn)
                 }
               >

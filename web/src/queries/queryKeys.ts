@@ -32,6 +32,12 @@ export const queryKeys = {
         "participation",
         auctionId ?? "unknown",
       ] as const,
+    participationHistory: (userId?: string | null) =>
+      [
+        ...queryKeys.auctions.all,
+        "participationHistory",
+        userId ?? "anonymous",
+      ] as const,
     bidHistory: (auctionId?: string | null) =>
       [...queryKeys.auctions.all, "bidHistory", auctionId ?? "unknown"] as const,
     featured: (status?: string | null) =>

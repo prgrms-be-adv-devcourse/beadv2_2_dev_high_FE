@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { DepositHistoryTab } from "@/features/mypage/components/DepositHistoryTab";
 import { DepositPaymentHistoryTab } from "@/features/mypage/components/DepositPaymentHistoryTab";
 import { DepositSummaryTab } from "@/features/mypage/components/DepositSummaryTab";
+import { AuctionParticipationTab } from "@/features/mypage/components/AuctionParticipationTab";
 import { MyProductsTab } from "@/features/mypage/components/MyProductsTab";
 import { OrdersTab } from "@/features/mypage/components/OrdersTab";
 import { SettlementTab } from "@/features/mypage/components/SettlementTab";
@@ -18,7 +19,7 @@ const MyPage: React.FC = () => {
 
   const isSeller = hasRole(user?.roles, UserRole.SELLER);
 
-  const maxTabIndex = isSeller ? 6 : 2;
+  const maxTabIndex = isSeller ? 7 : 3;
   const parsedTab = useMemo(() => {
     const params = new URLSearchParams(location.search);
     const tabParam = params.get("tab");
@@ -53,6 +54,7 @@ const MyPage: React.FC = () => {
           <Tab label="예치금 내역" />
           <Tab label="결제 내역" />
           <Tab label="구매 내역" />
+          <Tab label="경매 참여 내역" />
           {isSeller && <Tab label="판매 내역" />}
           {isSeller && <Tab label="정산 계좌" />}
           {isSeller && <Tab label="정산 내역" />}
@@ -74,18 +76,19 @@ const MyPage: React.FC = () => {
             showAdditionalPayment
           />
         )}
-        {safeTabValue === 3 && isSeller && (
+        {safeTabValue === 3 && <AuctionParticipationTab />}
+        {safeTabValue === 4 && isSeller && (
           <OrdersTab
             title="판매 내역"
             status="sold"
             emptyText="판매한 주문이 없습니다."
           />
         )}
-        {safeTabValue === 4 && isSeller && (
+        {safeTabValue === 5 && isSeller && (
           <DepositSummaryTab />
         )}
-        {safeTabValue === 5 && isSeller && <SettlementTab />}
-        {safeTabValue === 6 && isSeller && (
+        {safeTabValue === 6 && isSeller && <SettlementTab />}
+        {safeTabValue === 7 && isSeller && (
           <MyProductsTab />
         )}
       </Box>
