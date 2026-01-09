@@ -13,12 +13,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { auctionApi } from "@/apis/auctionApi";
 import { fileApi } from "@/apis/fileApi";
 import { productApi } from "@/apis/productApi";
-import {
-  type AuctionQueryParams,
-  type PagedAuctionResponse,
-  type Product,
-  AuctionStatus,
-} from "@moreauction/types";
+import { type PagedAuctionResponse, type Product, AuctionStatus } from "@moreauction/types";
 import type { ApiResponseDto, FileGroup } from "@moreauction/types";
 import { formatWon } from "@moreauction/utils";
 import { getAuctionStatusText } from "@moreauction/utils";
@@ -28,21 +23,8 @@ import { seedFileGroupCache } from "@/queries/seedFileGroupCache";
 import { ImageWithFallback } from "@/shared/components/common/ImageWithFallback";
 import { getErrorMessage } from "@/utils/getErrorMessage";
 
-type AuctionSortOption =
-  | "ENDING_SOON"
-  | "START_SOON"
-  | "NEWEST"
-  | "HIGHEST_BID";
-
-const sortMap: Record<AuctionSortOption, string[]> = {
-  ENDING_SOON: ["auctionEndAt,ASC"],
-  START_SOON: ["auctionStartAt,ASC"],
-  NEWEST: ["createdAt,DESC"],
-  HIGHEST_BID: ["currentBid,DESC"],
-};
-
-interface AuctionListProps extends AuctionQueryParams {
-  sortOption?: AuctionSortOption;
+interface AuctionListProps {
+  status: AuctionStatus[];
   /** 최대 표시 개수 (예: 홈에서는 4개만) */
   limit?: number;
   /**
@@ -57,8 +39,7 @@ interface AuctionListProps extends AuctionQueryParams {
 }
 
 const AuctionList: React.FC<AuctionListProps> = ({
-  status = [],
-  sortOption = "ENDING_SOON",
+  status,
   limit = 4,
   linkDestination = "auction",
   showEmptyState = false,
@@ -68,15 +49,9 @@ const AuctionList: React.FC<AuctionListProps> = ({
   const statusKey = Array.isArray(status) ? status.join(",") : "";
 
   const auctionQuery = useQuery({
-    queryKey: queryKeys.auctions.list(statusKey, sortOption, limit),
+    queryKey: queryKeys.auctions.list(statusKey, "simple", limit),
     queryFn: async () => {
-      const params: AuctionQueryParams = {
-        page: 0,
-        size: limit,
-        status,
-        sort: sortMap[sortOption],
-      };
-      const response = await auctionApi.getAuctions(params);
+      const response = await auctionApi.getAuctionsByStatus(status, limit);
       return response.data as PagedAuctionResponse;
     },
     staleTime: 30_000,

@@ -1,13 +1,22 @@
-import type { ApiResponseDto } from "@moreauction/types";
+import type { ApiResponseDto, PagedApiResponse } from "@moreauction/types";
 import type { OrderResponse, OrderStatus } from "@moreauction/types";
 import { client } from "@/apis/client";
 
 export const orderApi = {
   getOrderByStatus: async (
     type: "sold" | "bought",
-    status?: OrderStatus
-  ): Promise<ApiResponseDto<OrderResponse[]>> => {
-    const res = await client.get("/orders", { params: { status, type } });
+    status?: OrderStatus,
+    params?: { page?: number; size?: number; sort?: string | string[] }
+  ): Promise<ApiResponseDto<PagedApiResponse<OrderResponse>>> => {
+    const res = await client.get("/orders", {
+      params: {
+        status,
+        type,
+        page: params?.page,
+        size: params?.size,
+        sort: params?.sort,
+      },
+    });
     return res.data;
   },
 

@@ -65,11 +65,7 @@ const ProductDetail: React.FC = () => {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [isDeleted, setIsDeleted] = useState(false);
 
-  const deletableAuctionStatuses: AuctionStatus[] = [
-    AuctionStatus.READY,
-    AuctionStatus.FAILED,
-    AuctionStatus.CANCELLED,
-  ];
+  const deletableAuctionStatuses: AuctionStatus[] = [AuctionStatus.READY];
   const productQuery = useQuery({
     queryKey: queryKeys.products.detail(productId),
     queryFn: async () => {

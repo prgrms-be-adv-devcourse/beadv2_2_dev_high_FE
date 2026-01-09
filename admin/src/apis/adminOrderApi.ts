@@ -2,10 +2,22 @@ import type { ApiResponseDto, PagedApiResponse } from "@moreauction/types";
 import type { OrderResponse, OrderStatus } from "@moreauction/types";
 import { client } from "@/apis/client";
 
+export type OrderAdminSearchFilter = {
+  orderId?: string;
+  sellerId?: string;
+  buyerId?: string;
+  auctionId?: string;
+  status?: OrderStatus;
+  payYn?: string;
+  createdFrom?: string;
+  createdTo?: string;
+};
+
 type OrderListParams = {
   page?: number;
   size?: number;
-  status?: string;
+  sort?: string | string[];
+  filter?: OrderAdminSearchFilter;
 };
 
 type OrderUpdateRequest = {
@@ -23,7 +35,14 @@ export const adminOrderApi = {
   getOrders: async (
     params: OrderListParams
   ): Promise<PagedApiResponse<OrderResponse>> => {
-    const response = await client.get("/admin/orders", { params });
+    const response = await client.get("/admin/orders", {
+      params: {
+        page: params.page,
+        size: params.size,
+        sort: params.sort,
+        ...(params.filter ?? {}),
+      },
+    });
     return extractData<PagedApiResponse<OrderResponse>>(response.data);
   },
   updateOrder: async (

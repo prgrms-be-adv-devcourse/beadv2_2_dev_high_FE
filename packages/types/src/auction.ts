@@ -89,7 +89,7 @@ export interface AuctionDetailResponse {
   auctionStartAt: string; // LocalDateTime → ISO 문자열
   auctionEndAt: string; // LocalDateTime → ISO 문자열
   depositAmount: number; // BigDecimal → number
-  deletedYn: boolean;
+  deletedYn: boolean | "Y" | "N";
 }
 
 export interface AuctionParticipationResponse {

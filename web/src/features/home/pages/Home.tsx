@@ -293,7 +293,6 @@ const Home: React.FC = () => {
 
           <AuctionList
             status={[AuctionStatus.IN_PROGRESS]}
-            sortOption="ENDING_SOON"
             showEmptyState
             emptyTitle="현재 진행 중인 경매가 없습니다"
             emptyDescription="곧 새로운 경매가 열릴 예정입니다. 알림을 켜두고 가장 먼저 확인해보세요."
@@ -327,7 +326,6 @@ const Home: React.FC = () => {
 
           <AuctionList
             status={[AuctionStatus.READY]}
-            sortOption="START_SOON"
             showEmptyState
             emptyTitle="곧 시작하는 경매가 없습니다"
             emptyDescription="원하는 상품을 검색하거나 찜을 등록해두면 시작 알림을 받아볼 수 있습니다."

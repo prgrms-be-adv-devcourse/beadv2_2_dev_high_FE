@@ -5,6 +5,7 @@ import type {
   AuctionDetailResponse,
   AuctionParticipationResponse,
   AuctionQueryParams,
+  AuctionStatus,
   AuctionUpdateRequest,
   PagedAuctionDocument,
   PagedAuctionResponse,
@@ -177,5 +178,27 @@ export const auctionApi = {
     console.log(`경매 삭제 API 호출: ${auctionId}`);
     const response = await client.delete(`/auctions/${auctionId}`);
     return response.data;
+  },
+
+  getTopAuctions: async (): Promise<ApiResponseDto<AuctionDetailResponse>> => {
+    console.log(`최고 경매 조회 API 호출`);
+    const response = await client.get(`/auctions/top`);
+    return response.data;
+  },
+  /**
+   * 상태 기준 경매 목록 조회 (간단 조회용)
+   */
+  getAuctionsByStatus: async (
+    status: AuctionStatus[],
+    size = 4
+  ): Promise<ApiResponseDto<PagedAuctionResponse>> => {
+    const res = await client.get("/auctions", {
+      params: {
+        page: 0,
+        size,
+        status,
+      },
+    });
+    return res.data;
   },
 };

@@ -3,6 +3,7 @@ import AdminLayout from "@/components/AdminLayout";
 import Login from "@/pages/Login";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminOrders from "@/pages/admin/AdminOrders";
+import AdminAuctions from "@/pages/admin/AdminAuctions";
 import AdminSettlements from "@/pages/admin/AdminSettlements";
 import AdminPlaceholder from "@/pages/admin/AdminPlaceholder";
 import ProtectedRoute from "@/routes/ProtectedRoute";
@@ -36,12 +37,7 @@ export const router = createBrowserRouter([
           },
           {
             path: "auctions",
-            element: (
-              <AdminPlaceholder
-                title="경매 관리"
-                description="경매 현황 모니터링 및 중단 기능을 준비 중입니다."
-              />
-            ),
+            element: <AdminAuctions />,
           },
           {
             path: "products",

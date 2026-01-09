@@ -5,10 +5,25 @@ import type {
 } from "@moreauction/types";
 import { client } from "@/apis/client";
 
+export type SettlementAdminSearchFilter = {
+  settlementId?: string;
+  orderId?: string;
+  sellerId?: string;
+  buyerId?: string;
+  auctionId?: string;
+  status?: SettlementStatus;
+  completeYn?: string;
+  createdFrom?: string;
+  createdTo?: string;
+  completeFrom?: string;
+  completeTo?: string;
+};
+
 type SettlementListParams = {
   page?: number;
   size?: number;
-  status?: string;
+  sort?: string | string[];
+  filter?: SettlementAdminSearchFilter;
 };
 
 type SettlementUpdateRequest = {
@@ -26,7 +41,14 @@ export const adminSettlementApi = {
   getSettlements: async (
     params: SettlementListParams
   ): Promise<PagedApiResponse<SettlementResponse>> => {
-    const response = await client.get("/admin/settles", { params });
+    const response = await client.get("/admin/settles", {
+      params: {
+        page: params.page,
+        size: params.size,
+        sort: params.sort,
+        ...(params.filter ?? {}),
+      },
+    });
     return extractData<PagedApiResponse<SettlementResponse>>(response.data);
   },
   updateSettlement: async (

@@ -38,8 +38,19 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
     queryKey: queryKeys.orders.history(status, user?.userId),
     queryFn: async () => {
       if (!user?.userId) return [];
-      const response = await orderApi.getOrderByStatus(status);
-      return Array.isArray(response.data) ? response.data : [];
+      const response = await orderApi.getOrderByStatus(status, undefined, {
+        page: 0,
+        size: 50,
+        sort: "updatedAt,desc",
+      });
+      const payload: any = response.data;
+      if (payload?.content && Array.isArray(payload.content)) {
+        return payload.content as OrderResponse[];
+      }
+      if (payload?.data?.content && Array.isArray(payload.data.content)) {
+        return payload.data.content as OrderResponse[];
+      }
+      return [];
     },
     staleTime: 30_000,
   });

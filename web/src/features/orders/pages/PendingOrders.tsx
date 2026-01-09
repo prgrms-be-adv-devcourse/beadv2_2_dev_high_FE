@@ -60,8 +60,19 @@ const PendingOrders: React.FC = () => {
   const pendingQuery = useQuery({
     queryKey: queryKeys.orders.pending(user?.userId),
     queryFn: async () => {
-      const res = await orderApi.getOrderByStatus("bought", OrderStatus.UNPAID);
-      return Array.isArray(res.data) ? res.data : [];
+      const res = await orderApi.getOrderByStatus(
+        "bought",
+        OrderStatus.UNPAID,
+        { page: 0, size: 50, sort: "updatedAt,desc" }
+      );
+      const payload: any = res.data;
+      if (payload?.content && Array.isArray(payload.content)) {
+        return payload.content as OrderResponse[];
+      }
+      if (payload?.data?.content && Array.isArray(payload.data.content)) {
+        return payload.data.content as OrderResponse[];
+      }
+      return [];
     },
     enabled: isAuthenticated,
     staleTime: 30_000,

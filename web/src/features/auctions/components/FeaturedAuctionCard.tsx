@@ -13,7 +13,11 @@ import React, { useMemo } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { auctionApi } from "@/apis/auctionApi";
-import { AuctionStatus, type PagedAuctionResponse } from "@moreauction/types";
+import {
+  AuctionStatus,
+  type AuctionDetailResponse,
+  type PagedAuctionResponse,
+} from "@moreauction/types";
 import { getAuctionStatusText } from "@moreauction/utils";
 import RemainingTime from "@/shared/components/RemainingTime";
 import { formatWon } from "@moreauction/utils";
@@ -29,13 +33,8 @@ const FeaturedAuctionCard: React.FC = () => {
   const topAuctionQuery = useQuery({
     queryKey: queryKeys.auctions.featured(AuctionStatus.IN_PROGRESS),
     queryFn: async () => {
-      const res = await auctionApi.getAuctions({
-        page: 0,
-        size: 1,
-        status: [AuctionStatus.IN_PROGRESS],
-        sort: ["currentBid,DESC"],
-      });
-      return res.data as PagedAuctionResponse;
+      const res = await auctionApi.getTopAuctions();
+      return res.data as AuctionDetailResponse;
     },
     staleTime: 30_000,
   });
@@ -48,7 +47,7 @@ const FeaturedAuctionCard: React.FC = () => {
     );
   }, [topAuctionQuery.error, topAuctionQuery.isError]);
 
-  const auction = topAuctionQuery.data?.content?.[0];
+  const auction = topAuctionQuery.data;
   const hasBid = (auction?.currentBid ?? 0) > 0;
   const highestBidPrice = hasBid ? (auction?.currentBid as number) : null;
 
