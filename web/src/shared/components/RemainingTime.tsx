@@ -47,9 +47,7 @@ const RemainingTime: React.FC<RemainingTimeProps> = ({
       const seconds = Math.floor((diff % (1000 * 60)) / 1000);
 
       setTimeString(
-        `${
-          days > 0 ? `${days}일 ` : ""
-        }${hours}시간 ${minutes}분 ${seconds}초 남음`
+        `${days > 0 ? `${days}일 ` : ""}${hours}시간 ${minutes}분 ${seconds}초`
       );
     };
 

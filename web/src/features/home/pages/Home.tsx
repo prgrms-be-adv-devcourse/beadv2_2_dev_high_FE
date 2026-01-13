@@ -318,12 +318,9 @@ const Home: React.FC = () => {
                   border: "1px solid",
                   borderColor:
                     theme.palette.mode === "light"
-                      ? "rgba(15, 23, 42, 0.12)"
-                      : "rgba(148, 163, 184, 0.25)",
-                  boxShadow:
-                    theme.palette.mode === "light"
-                      ? "inset 0 0 0 1.5px rgba(59, 130, 246, 0.2), inset 0 0 10px rgba(59, 130, 246, 0.08)"
-                      : "inset 0 0 0 1.5px rgba(96, 165, 250, 0.32), inset 0 0 10px rgba(96, 165, 250, 0.12)",
+                      ? "rgba(15, 23, 42, 0.04)"
+                      : "rgba(148, 163, 184, 0.12)",
+                  boxShadow: "none",
                   background:
                     theme.palette.mode === "light"
                       ? "linear-gradient(140deg, rgba(255,255,255,0.96), rgba(239,246,255,0.92))"
@@ -419,6 +416,10 @@ const Home: React.FC = () => {
                           const absOffset = Math.abs(offset);
                           const isActive = offset === 0;
                           const isHovered = hoveredIndex === idx && isActive;
+                          const currentBidValue =
+                            auction.currentBid != null && auction.currentBid > 0
+                              ? auction.currentBid
+                              : auction.startBid;
                           const scale =
                             absOffset === 0
                               ? 1.01
@@ -451,18 +452,17 @@ const Home: React.FC = () => {
                                 left: 0,
                                 width: "100%",
                                 height: `${effectiveSlideHeight}px`,
-                                p: 2,
+                                p: 2.25,
                                 borderRadius: 3,
                                 border: "1px solid",
                                 borderColor: isHovered
                                   ? theme.palette.primary.main
                                   : theme.palette.mode === "light"
-                                  ? "rgba(59, 130, 246, 0.18)"
-                                  : "rgba(96, 165, 250, 0.3)",
-                                boxShadow:
-                                  theme.palette.mode === "light"
-                                    ? "inset 0 0 0 1.5px rgba(59, 130, 246, 0.2), inset 0 0 8px rgba(59, 130, 246, 0.08)"
-                                    : "inset 0 0 0 1.5px rgba(96, 165, 250, 0.32), inset 0 0 8px rgba(96, 165, 250, 0.12)",
+                                  ? "rgba(148, 163, 184, 0.35)"
+                                  : "rgba(148, 163, 184, 0.35)",
+                                boxShadow: isHovered
+                                  ? "0 14px 28px rgba(15, 23, 42, 0.12)"
+                                  : "none",
                                 background:
                                   theme.palette.mode === "light"
                                     ? "rgba(255, 255, 255, 0.96)"
@@ -470,10 +470,7 @@ const Home: React.FC = () => {
                                 transform: `translate3d(0px, ${yOffset}px, ${depth}px) scale(${scale})`,
                                 opacity,
                                 zIndex,
-                                outline: isHovered
-                                  ? `2px solid ${theme.palette.primary.main}55`
-                                  : "2px solid transparent",
-                                outlineOffset: 2,
+                                outline: "none",
                                 cursor: isActive ? "pointer" : "default",
                                 pointerEvents: isActive ? "auto" : "none",
                                 transition: isAnimating
@@ -492,55 +489,87 @@ const Home: React.FC = () => {
                                 if (id) navigate(`/auctions/${id}`);
                               }}
                             >
-                              <Typography
-                                variant="overline"
-                                color="primary"
-                                sx={{ fontWeight: 700 }}
+                              <Stack
+                                direction="row"
+                                alignItems="center"
+                                justifyContent="space-between"
+                                sx={{ mb: 0.5 }}
                               >
-                                {label}
-                              </Typography>
-                              {isActive && isCarouselHover && (
-                                <Box
-                                  sx={{
-                                    mt: 0.5,
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    gap: 0.5,
-                                    px: 1,
-                                    py: 0.25,
-                                    borderRadius: 999,
-                                    fontSize: 11,
-                                    fontWeight: 700,
-                                    color: "text.secondary",
-                                    background:
-                                      theme.palette.mode === "light"
-                                        ? "rgba(226, 232, 240, 0.8)"
-                                        : "rgba(30, 41, 59, 0.8)",
-                                  }}
+                                <Stack
+                                  direction="row"
+                                  alignItems="center"
+                                  spacing={1}
                                 >
-                                  자동 회전 일시정지
-                                </Box>
-                              )}
+                                  <Typography
+                                    variant="overline"
+                                    color="primary"
+                                    sx={{ fontWeight: 700 }}
+                                  >
+                                    {label}
+                                  </Typography>
+                                  {isActive && isCarouselHover && (
+                                    <Typography
+                                      variant="caption"
+                                      color="text.secondary"
+                                      sx={{ fontWeight: 700 }}
+                                    >
+                                      자동 회전 일시정지
+                                    </Typography>
+                                  )}
+                                </Stack>
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                >
+                                  조회 {item.viewCount ?? 0}
+                                </Typography>
+                              </Stack>
                               <Typography
                                 variant="h6"
-                                sx={{ fontWeight: 800, mb: 0.5 }}
-                                noWrap
+                                sx={{
+                                  fontWeight: 800,
+                                  mb: 0.75,
+                                  display: "-webkit-box",
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: "vertical",
+                                  overflow: "hidden",
+                                }}
                               >
                                 {auction.productName ?? "상품명 미확인"}
                               </Typography>
-                              <Typography
-                                variant="body2"
-                                color="text.secondary"
+                              <Stack
+                                direction="row"
+                                spacing={1}
+                                alignItems="center"
                               >
-                                {getAuctionStatusText(auction.status)} · 남은
-                                시간{" "}
-                                <RemainingTime
-                                  auctionStartAt={auction.auctionStartAt}
-                                  auctionEndAt={auction.auctionEndAt}
-                                  status={auction.status}
-                                />
-                              </Typography>
-                              <Box sx={{ mt: 2 }}>
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                >
+                                  남은 시간
+                                </Typography>
+                                <Typography
+                                  variant="caption"
+                                  sx={{ fontWeight: 700 }}
+                                >
+                                  <RemainingTime
+                                    auctionStartAt={auction.auctionStartAt}
+                                    auctionEndAt={auction.auctionEndAt}
+                                    status={auction.status}
+                                  />
+                                </Typography>
+                              </Stack>
+                              <Box
+                                sx={{
+                                  mt: 1.5,
+                                  p: 1.5,
+                                  borderRadius: 2,
+                                  bgcolor:
+                                    theme.palette.mode === "light"
+                                      ? "rgba(59, 130, 246, 0.08)"
+                                      : "rgba(59, 130, 246, 0.18)",
+                                }}
+                              >
                                 <Typography
                                   variant="subtitle1"
                                   sx={{
@@ -548,17 +577,29 @@ const Home: React.FC = () => {
                                     color: "primary.main",
                                   }}
                                 >
-                                  현재가{" "}
-                                  {formatWon(
-                                    auction.currentBid ?? auction.startBid
-                                  )}
+                                  현재가 {formatWon(currentBidValue)}
                                 </Typography>
-                                <Typography
-                                  variant="body2"
-                                  color="text.secondary"
+                                <Stack
+                                  direction="row"
+                                  justifyContent="space-between"
+                                  sx={{ mt: 0.5 }}
                                 >
-                                  시작가 {formatWon(auction.startBid)}
-                                </Typography>
+                                  <Typography
+                                    variant="caption"
+                                    color="text.secondary"
+                                  >
+                                    시작가 {formatWon(auction.startBid)}
+                                  </Typography>
+                                  <Typography
+                                    variant="caption"
+                                    color="text.secondary"
+                                  >
+                                    보증금{" "}
+                                    {auction.depositAmount != null
+                                      ? formatWon(auction.depositAmount)
+                                      : "-"}
+                                  </Typography>
+                                </Stack>
                               </Box>
                             </Paper>
                           );
