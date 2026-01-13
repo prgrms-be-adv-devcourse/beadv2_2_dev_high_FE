@@ -16,21 +16,14 @@ import {
 import { Search as SearchIcon } from "@mui/icons-material";
 import React, { useEffect, useMemo, useState } from "react";
 import { Link as RouterLink, useLocation, useNavigate } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { auctionApi } from "@/apis/auctionApi";
-import { fileApi } from "@/apis/fileApi";
-import type {
-  ApiResponseDto,
-  AuctionDocument,
-  FileGroup,
-  ProductCategory,
-} from "@moreauction/types";
+import type { AuctionDocument, ProductCategory } from "@moreauction/types";
 import { categoryApi } from "@/apis/categoryApi";
 import { getAuctionStatusText } from "@moreauction/utils";
 import { AuctionStatus } from "@moreauction/types";
 import { formatWon } from "@moreauction/utils";
 import { queryKeys } from "@/shared/queries/queryKeys";
-import { seedFileGroupCache } from "@/shared/queries/seedFileGroupCache";
 import { ImageWithFallback } from "@/shared/components/common/ImageWithFallback";
 import { getErrorMessage } from "@/shared/utils/getErrorMessage";
 
@@ -53,7 +46,7 @@ const SearchPage: React.FC = () => {
   // URL 쿼리에서 초기 검색 조건 읽기
   const initialKeyword = params.get("keyword") ?? "";
   const initialStatus = params.get("status") ?? "";
-  const initialCategoryIds = params.getAll("categories");
+  const initialCategoryNames = params.getAll("categories");
   const initialMinStartPrice = params.get("minStartPrice") ?? "";
   const initialMaxStartPrice = params.get("maxStartPrice") ?? "";
   const initialStartFrom = params.get("startFrom") ?? "";
@@ -63,8 +56,8 @@ const SearchPage: React.FC = () => {
   // 입력용 상태 (폼에 바인딩)
   const [inputKeyword, setInputKeyword] = useState(initialKeyword);
   const [pendingStatus, setPendingStatus] = useState(initialStatus);
-  const [pendingCategoryIds, setPendingCategoryIds] =
-    useState<string[]>(initialCategoryIds);
+  const [pendingCategoryNames, setPendingCategoryNames] =
+    useState<string[]>(initialCategoryNames);
   const [pendingMinStartPrice, setPendingMinStartPrice] =
     useState(initialMinStartPrice);
   const [pendingMaxStartPrice, setPendingMaxStartPrice] =
@@ -75,8 +68,8 @@ const SearchPage: React.FC = () => {
   // 실제 검색에 사용되는 적용 상태
   const [keyword, setKeyword] = useState(initialKeyword);
   const [status, setStatus] = useState(initialStatus);
-  const [selectedCategoryIds, setSelectedCategoryIds] =
-    useState<string[]>(initialCategoryIds);
+  const [selectedCategoryNames, setSelectedCategoryNames] =
+    useState<string[]>(initialCategoryNames);
   const [minStartPrice, setMinStartPrice] = useState(initialMinStartPrice);
   const [maxStartPrice, setMaxStartPrice] = useState(initialMaxStartPrice);
   const [startFrom, setStartFrom] = useState(initialStartFrom);
@@ -87,7 +80,7 @@ const SearchPage: React.FC = () => {
     () =>
       !!keyword ||
       !!status ||
-      selectedCategoryIds.length > 0 ||
+      selectedCategoryNames.length > 0 ||
       !!minStartPrice ||
       !!maxStartPrice ||
       !!startFrom ||
@@ -95,7 +88,7 @@ const SearchPage: React.FC = () => {
     [
       keyword,
       status,
-      selectedCategoryIds.length,
+      selectedCategoryNames.length,
       minStartPrice,
       maxStartPrice,
       startFrom,
@@ -117,8 +110,10 @@ const SearchPage: React.FC = () => {
     const newParams = new URLSearchParams();
     if (keyword) newParams.set("keyword", keyword);
     if (status) newParams.set("status", status);
-    if (selectedCategoryIds.length > 0) {
-      selectedCategoryIds.forEach((id) => newParams.append("categories", id));
+    if (selectedCategoryNames.length > 0) {
+      selectedCategoryNames.forEach((name) =>
+        newParams.append("categories", name)
+      );
     }
     if (minStartPrice) newParams.set("minStartPrice", minStartPrice);
     if (maxStartPrice) newParams.set("maxStartPrice", maxStartPrice);
@@ -135,7 +130,7 @@ const SearchPage: React.FC = () => {
   }, [
     keyword,
     status,
-    selectedCategoryIds,
+    selectedCategoryNames,
     minStartPrice,
     maxStartPrice,
     startFrom,
@@ -148,7 +143,7 @@ const SearchPage: React.FC = () => {
     queryKey: queryKeys.search.auctions(
       keyword,
       status,
-      selectedCategoryIds.join(","),
+      selectedCategoryNames.join(","),
       minStartPrice,
       maxStartPrice,
       startFrom,
@@ -180,7 +175,7 @@ const SearchPage: React.FC = () => {
         keyword: keyword || undefined,
         status: status || undefined,
         categories:
-          selectedCategoryIds.length > 0 ? selectedCategoryIds : undefined,
+          selectedCategoryNames.length > 0 ? selectedCategoryNames : undefined,
         minStartPrice: parseOptionalNumber(minStartPrice),
         maxStartPrice: parseOptionalNumber(maxStartPrice),
         startFrom: normalizeDateTimeLocal(startFrom),
@@ -210,47 +205,6 @@ const SearchPage: React.FC = () => {
     );
   }, [searchQuery.error, searchQuery.isError]);
 
-  const fileGroupIds = useMemo(
-    () =>
-      result.content
-        .map((doc) => (doc as { fileGroupId?: string | number }).fileGroupId)
-        .filter((id): id is string | number => id != null && id !== "")
-        .map((id) => String(id)),
-    [result.content]
-  );
-
-  const queryClient = useQueryClient();
-  const cachedFileGroups = fileGroupIds
-    .map(
-      (id) =>
-        queryClient.getQueryData<ApiResponseDto<FileGroup>>(
-          queryKeys.files.group(id)
-        )?.data
-    )
-    .filter((group): group is FileGroup => !!group);
-  const cachedFileGroupIds = new Set(
-    cachedFileGroups.map((group) => String(group.fileGroupId))
-  );
-  const missingFileGroupIds = fileGroupIds.filter(
-    (id) => !cachedFileGroupIds.has(id)
-  );
-  const fileGroupsQuery = useQuery({
-    queryKey: queryKeys.files.searchGroups(missingFileGroupIds),
-    queryFn: async () => {
-      const response = await fileApi.getFileGroupsByIds(missingFileGroupIds);
-      seedFileGroupCache(queryClient, response);
-      return response.data ?? [];
-    },
-    enabled: missingFileGroupIds.length > 0,
-    staleTime: 30_000,
-  });
-
-  const fileGroupMap = useMemo(() => {
-    const list = [...cachedFileGroups, ...(fileGroupsQuery.data ?? [])];
-    return new Map(list.map((group) => [String(group.fileGroupId), group]));
-  }, [cachedFileGroups, fileGroupsQuery.data]);
-  const isImageLoading = fileGroupsQuery.isLoading;
-
   // 입력 핸들러들 (아직 검색 조건에는 적용하지 않음)
   const handleInputKeywordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputKeyword(e.target.value);
@@ -260,11 +214,19 @@ const SearchPage: React.FC = () => {
     setPendingStatus((prev) => (prev === value ? "" : value));
   };
 
-  const handlePendingCategoryClick = (id: string) => {
-    setPendingCategoryIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
+  const handlePendingCategoryClick = (name: string) => {
+    setPendingCategoryNames((prev) => {
+      if (prev.includes(name)) {
+        return prev.filter((x) => x !== name);
+      }
+      if (prev.length >= 3) {
+        return prev;
+      }
+      return [...prev, name];
+    });
   };
+
+  const isCategorySelectionFull = pendingCategoryNames.length >= 3;
 
   // 검색 버튼 / 폼 제출 시 실제 검색 조건을 적용
   const handleSubmit = (e: React.FormEvent) => {
@@ -274,7 +236,7 @@ const SearchPage: React.FC = () => {
     const hasFilter =
       !!trimmed ||
       !!pendingStatus ||
-      pendingCategoryIds.length > 0 ||
+      pendingCategoryNames.length > 0 ||
       !!pendingMinStartPrice.trim() ||
       !!pendingMaxStartPrice.trim() ||
       !!pendingStartFrom.trim() ||
@@ -287,7 +249,7 @@ const SearchPage: React.FC = () => {
 
     setKeyword(trimmed);
     setStatus(pendingStatus);
-    setSelectedCategoryIds(pendingCategoryIds);
+    setSelectedCategoryNames(pendingCategoryNames);
     setMinStartPrice(pendingMinStartPrice.trim());
     setMaxStartPrice(pendingMaxStartPrice.trim());
     setStartFrom(pendingStartFrom.trim());
@@ -305,7 +267,7 @@ const SearchPage: React.FC = () => {
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Typography variant="h4" sx={{ mb: 3, fontWeight: 700 }}>
-        상품 / 경매 검색
+        상품 검색
       </Typography>
 
       {/* 검색어 + 검색 버튼 */}
@@ -425,9 +387,15 @@ const SearchPage: React.FC = () => {
                 label={cat.categoryName}
                 clickable
                 color={
-                  pendingCategoryIds.includes(cat.id) ? "secondary" : "default"
+                  pendingCategoryNames.includes(cat.categoryName)
+                    ? "secondary"
+                    : "default"
                 }
-                onClick={() => handlePendingCategoryClick(cat.id)}
+                disabled={
+                  isCategorySelectionFull &&
+                  !pendingCategoryNames.includes(cat.categoryName)
+                }
+                onClick={() => handlePendingCategoryClick(cat.categoryName)}
                 sx={{ mb: 0.5 }}
               />
             ))}
@@ -504,17 +472,8 @@ const SearchPage: React.FC = () => {
           }}
         >
           {result.content.map((doc) => {
-            const fileGroupId = doc.fileGroupId;
-            const fileGroup = fileGroupId
-              ? fileGroupMap.get(fileGroupId)
-              : undefined;
-            const coverImage =
-              fileGroup?.files?.[0]?.filePath || doc.imageUrl || "";
-            const hasFileGroupId = fileGroupId != null && fileGroupId !== "";
-            const emptyImage =
-              fileGroupsQuery.isError && hasFileGroupId
-                ? "/images/fallback.png"
-                : "/images/no_image.png";
+            const coverImage = doc.imageUrl || "";
+            const emptyImage = "/images/no_image.png";
 
             return (
               <Card
@@ -539,7 +498,7 @@ const SearchPage: React.FC = () => {
                     src={coverImage}
                     alt={doc.productName}
                     height={150}
-                    loading={isImageLoading}
+                    loading={loading}
                     emptySrc={emptyImage}
                     sx={{ objectFit: "cover", width: "100%" }}
                     skeletonSx={{ width: "100%" }}

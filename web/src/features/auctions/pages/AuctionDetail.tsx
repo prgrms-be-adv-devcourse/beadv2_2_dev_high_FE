@@ -13,17 +13,27 @@ import {
   DialogTitle,
   Grid,
   Drawer,
+  IconButton,
   Skeleton,
   Stack,
   Typography,
 } from "@mui/material";
+import FavoriteIcon from "@mui/icons-material/Favorite";
+import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
 import type { IMessage } from "@stomp/stompjs";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { auctionApi } from "@/apis/auctionApi";
 import { depositApi } from "@/apis/depositApi";
 import { fileApi } from "@/apis/fileApi";
 import { productApi } from "@/apis/productApi";
+import { wishlistApi, type WishlistEntry } from "@/apis/wishlistApi";
 import { userApi } from "@/apis/userApi";
 import {
   type InfiniteData,
@@ -50,6 +60,7 @@ import {
   type AuctionParticipationResponse,
   type PagedBidHistoryResponse,
   AuctionStatus,
+  type Product,
   type User,
 } from "@moreauction/types";
 import { DepositType } from "@moreauction/types";
@@ -72,6 +83,13 @@ const AuctionDetail: React.FC = () => {
   const [openLoginPrompt, setOpenLoginPrompt] = useState(false);
   const [openDepositPrompt, setOpenDepositPrompt] = useState(false);
   const [openWithdrawnPopup, setOpenWithdrawnPopup] = useState(false);
+
+  const [isWish, setIsWish] = useState(false);
+  const [wishLoading, setWishLoading] = useState(false);
+  const wishActionSeqRef = useRef(0);
+  const wishInFlightRef = useRef(false);
+  const wishDesiredRef = useRef(false);
+  const wishServerRef = useRef(false);
 
   const [bidLoading, setBidLoading] = useState(false);
   const [withdrawLoading, setWithdrawLoading] = useState(false);
@@ -120,6 +138,123 @@ const AuctionDetail: React.FC = () => {
     isRefund: false,
   };
   const productId = auctionDetail?.productId;
+
+  const wishlistQuery = useQuery({
+    queryKey: queryKeys.wishlist.detail(user?.userId, productId),
+    queryFn: async () => {
+      if (!productId) return null;
+      try {
+        const res = await wishlistApi.getWishlistByProductId(productId);
+        return res.data;
+      } catch (err: any) {
+        if (err?.response?.status === 404) {
+          return null;
+        }
+        throw err;
+      }
+    },
+    enabled: !!productId && !!user?.userId,
+    staleTime: 30_000,
+    retry: false,
+  });
+
+  const productDetailQuery = useQuery({
+    queryKey: queryKeys.products.detail(productId),
+    queryFn: async () => {
+      const response = await productApi.getProductById(productId as string);
+      return response.data;
+    },
+    enabled: !!productId,
+    staleTime: 30_000,
+  });
+
+  const updateWishlistCaches = useCallback(
+    (nextDesired: boolean) => {
+      if (!user?.userId || !productId) return;
+      const userId = user.userId;
+      const now = new Date().toISOString();
+      const buildEntry = (
+        overrides?: Partial<WishlistEntry>
+      ): WishlistEntry => ({
+        id: overrides?.id ?? `optimistic-${userId}-${productId}`,
+        userId,
+        productId,
+        deletedYn: overrides?.deletedYn ?? "N",
+        deletedAt: overrides?.deletedAt ?? null,
+        createdBy: overrides?.createdBy ?? userId,
+        createdAt: overrides?.createdAt ?? now,
+        updatedBy: overrides?.updatedBy ?? userId,
+        updatedAt: overrides?.updatedAt ?? now,
+      });
+
+      queryClient.setQueryData(
+        queryKeys.wishlist.detail(userId, productId),
+        (prev?: WishlistEntry | null) => {
+          if (!nextDesired) return null;
+          const base = prev ?? buildEntry();
+          return {
+            ...base,
+            deletedYn: "N",
+            deletedAt: null,
+            updatedAt: now,
+            updatedBy: userId,
+          };
+        }
+      );
+
+      queryClient.setQueryData(
+        queryKeys.wishlist.list(userId),
+        (
+          prev:
+            | {
+                entries: WishlistEntry[];
+                products: Product[];
+              }
+            | undefined
+        ) => {
+          if (!prev) return prev;
+          if (nextDesired) {
+            const exists = prev.entries.some(
+              (entry) => entry.productId === productId
+            );
+            const nextEntries = exists
+              ? prev.entries
+              : [buildEntry(), ...prev.entries];
+            const productForList = productDetailQuery.data;
+            const nextProducts =
+              productForList &&
+              !prev.products.some((product) => product.id === productId)
+                ? [productForList, ...prev.products]
+                : prev.products;
+            return { entries: nextEntries, products: nextProducts };
+          }
+          return {
+            entries: prev.entries.filter(
+              (entry) => entry.productId !== productId
+            ),
+            products: prev.products.filter(
+              (product) => product.id !== productId
+            ),
+          };
+        }
+      );
+    },
+    [productDetailQuery.data, productId, queryClient, user?.userId]
+  );
+
+  useEffect(() => {
+    if (!productId) return;
+    if (!user) {
+      setIsWish(false);
+      wishDesiredRef.current = false;
+      wishServerRef.current = false;
+      return;
+    }
+    const exists = !!wishlistQuery.data && wishlistQuery.data.deletedYn !== "Y";
+    setIsWish(exists);
+    wishDesiredRef.current = exists;
+    wishServerRef.current = exists;
+  }, [productId, user, wishlistQuery.data]);
 
   const getProductImageUrls = useCallback(() => {
     const raw: unknown = (auctionDetail as any)?.files;
@@ -175,16 +310,6 @@ const AuctionDetail: React.FC = () => {
 
     return [trimmed];
   }, [auctionDetail]);
-
-  const productDetailQuery = useQuery({
-    queryKey: queryKeys.products.detail(productId),
-    queryFn: async () => {
-      const response = await productApi.getProductById(productId as string);
-      return response.data;
-    },
-    enabled: !!productId,
-    staleTime: 30_000,
-  });
 
   const productFileGroupId = productDetailQuery.data?.fileGroupId;
   const fileGroupQuery = useQuery({
@@ -1101,10 +1226,16 @@ const AuctionDetail: React.FC = () => {
         open={productDrawerOpen}
         onClose={() => setProductDrawerOpen(false)}
         PaperProps={{
-          sx: { width: { xs: "100%", sm: 420 }, p: 2 },
+          sx: {
+            width: { xs: "100%", sm: 420 },
+            p: 2,
+            display: "flex",
+            flexDirection: "column",
+            height: "100%",
+          },
         }}
       >
-        <Stack spacing={2}>
+        <Stack spacing={2} sx={{ flex: 1, minHeight: 0 }}>
           <Stack direction="row" justifyContent="space-between">
             <Button
               variant="outlined"
@@ -1148,6 +1279,69 @@ const AuctionDetail: React.FC = () => {
                   productDetailQuery.data?.description ??
                   auctionDetail?.description ??
                   ""
+                }
+                action={
+                  <IconButton
+                    size="small"
+                    onClick={async () => {
+                      if (!user) {
+                        alert("로그인 후 찜하기를 사용할 수 있습니다.");
+                        navigate("/login");
+                        return;
+                      }
+                      if (!productId) return;
+
+                      wishActionSeqRef.current += 1;
+                      const seqAtClick = wishActionSeqRef.current;
+
+                      const nextDesired = !wishDesiredRef.current;
+                      wishDesiredRef.current = nextDesired;
+                      setIsWish(nextDesired);
+                      updateWishlistCaches(nextDesired);
+
+                      if (wishInFlightRef.current) return;
+                      wishInFlightRef.current = true;
+                      setWishLoading(true);
+
+                      try {
+                        while (
+                          wishServerRef.current !== wishDesiredRef.current
+                        ) {
+                          const target = wishDesiredRef.current;
+                          if (target) {
+                            await wishlistApi.add(productId);
+                          } else {
+                            await wishlistApi.remove(productId);
+                          }
+                          wishServerRef.current = target;
+                          updateWishlistCaches(target);
+                        }
+                      } catch (err: any) {
+                        console.error("찜 토글 실패:", err);
+                        if (wishActionSeqRef.current === seqAtClick) {
+                          wishDesiredRef.current = wishServerRef.current;
+                          setIsWish(wishServerRef.current);
+                          updateWishlistCaches(wishServerRef.current);
+                        }
+                        alert(
+                          err?.response?.data?.message ??
+                            "찜하기 처리 중 오류가 발생했습니다."
+                        );
+                      } finally {
+                        wishInFlightRef.current = false;
+                        if (wishActionSeqRef.current === seqAtClick) {
+                          setWishLoading(false);
+                        }
+                      }
+                    }}
+                    disabled={wishLoading}
+                  >
+                    {isWish ? (
+                      <FavoriteIcon color="error" fontSize="small" />
+                    ) : (
+                      <FavoriteBorderIcon fontSize="small" />
+                    )}
+                  </IconButton>
                 }
               />
             </>

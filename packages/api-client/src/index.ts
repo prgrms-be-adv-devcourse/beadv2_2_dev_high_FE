@@ -1,4 +1,4 @@
-import axios, { type AxiosInstance } from "axios";
+import axios, { type AxiosInstance, type AxiosRequestHeaders } from "axios";
 import type { ApiResponseDto } from "@moreauction/types";
 
 interface CreateApiClientOptions {
@@ -45,6 +45,10 @@ export const createApiClient = ({
 
   client.interceptors.request.use(
     (config) => {
+      if (config.data instanceof FormData) {
+        delete (config.headers as any)?.["Content-Type"];
+        delete (config.headers as any)?.["content-type"];
+      }
       const skipAuth = (config as { skipAuth?: boolean }).skipAuth;
       if (!skipAuth) {
         const token = localStorage.getItem("accessToken");

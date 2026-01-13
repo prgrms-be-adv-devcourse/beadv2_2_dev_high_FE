@@ -92,6 +92,16 @@ export interface AuctionDetailResponse {
   deletedYn: boolean | "Y" | "N";
 }
 
+export type AuctionResponse = AuctionDetailResponse;
+
+export interface AuctionRankingResponse {
+  bidCount: number;
+  viewCount: number;
+  bidderCount: number;
+  score: number;
+  auction: AuctionResponse;
+}
+
 export interface AuctionParticipationResponse {
   auctionId?: string;
   isParticipated: boolean;

@@ -27,12 +27,12 @@ import {
   Typography,
 } from "@mui/material";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import { auctionApi } from "@/apis/auctionApi";
 import { fileApi } from "@/apis/fileApi";
 import { productApi } from "@/apis/productApi";
-import { wishlistApi } from "@/apis/wishlistApi";
+import { wishlistApi, type WishlistEntry } from "@/apis/wishlistApi";
 import RemainingTime from "@/shared/components/RemainingTime";
 import { useAuth } from "@moreauction/auth";
 import { queryKeys } from "@/shared/queries/queryKeys";
@@ -266,6 +266,12 @@ const ProductDetail: React.FC = () => {
   const canReregisterAuction =
     ((!activeAuction && auctions.length > 0) || auctions.length === 0) &&
     isOwner;
+  const canReregisterFromActiveAuction =
+    isOwner &&
+    !!product?.id &&
+    !!activeAuction &&
+    (activeAuction.status === AuctionStatus.FAILED ||
+      activeAuction.status === AuctionStatus.CANCELLED);
   const canRegisterAuction =
     isOwner && !!product?.id && !latestAuctionId && !hasBlockingAuction;
 
@@ -425,15 +431,97 @@ const ProductDetail: React.FC = () => {
   };
 
   const wishlistQuery = useQuery({
-    queryKey: queryKeys.wishlist.list(user?.userId),
+    queryKey: queryKeys.wishlist.detail(user?.userId, productId),
     queryFn: async () => {
-      const res = await wishlistApi.getMyWishlist({ page: 0, size: 100 });
-      return res.data;
+      if (!productId) return null;
+      try {
+        const res = await wishlistApi.getWishlistByProductId(productId);
+        return res.data;
+      } catch (err: any) {
+        if (err?.response?.status === 404) {
+          return null;
+        }
+        throw err;
+      }
     },
-    enabled: false,
+    enabled: !!productId && !!user?.userId,
     staleTime: 30_000,
-    retryOnMount: false,
+    retry: false,
   });
+
+  const updateWishlistCaches = useCallback(
+    (nextDesired: boolean) => {
+      if (!user?.userId || !product) return;
+      const userId = user.userId;
+      const productId = product.id;
+      const now = new Date().toISOString();
+      const buildEntry = (
+        overrides?: Partial<WishlistEntry>
+      ): WishlistEntry => ({
+        id: overrides?.id ?? `optimistic-${userId}-${productId}`,
+        userId,
+        productId,
+        deletedYn: overrides?.deletedYn ?? "N",
+        deletedAt: overrides?.deletedAt ?? null,
+        createdBy: overrides?.createdBy ?? userId,
+        createdAt: overrides?.createdAt ?? now,
+        updatedBy: overrides?.updatedBy ?? userId,
+        updatedAt: overrides?.updatedAt ?? now,
+      });
+
+      queryClient.setQueryData(
+        queryKeys.wishlist.detail(userId, productId),
+        (prev?: WishlistEntry | null) => {
+          if (!nextDesired) return null;
+          const base = prev ?? buildEntry();
+          return {
+            ...base,
+            deletedYn: "N",
+            deletedAt: null,
+            updatedAt: now,
+            updatedBy: userId,
+          };
+        }
+      );
+
+      queryClient.setQueryData(
+        queryKeys.wishlist.list(userId),
+        (
+          prev:
+            | {
+                entries: WishlistEntry[];
+                products: Product[];
+              }
+            | undefined
+        ) => {
+          if (!prev) return prev;
+          if (nextDesired) {
+            const exists = prev.entries.some(
+              (entry) => entry.productId === productId
+            );
+            const nextEntries = exists
+              ? prev.entries
+              : [buildEntry(), ...prev.entries];
+            const nextProducts = prev.products.some(
+              (existing) => existing.id === productId
+            )
+              ? prev.products
+              : [product, ...prev.products];
+            return { entries: nextEntries, products: nextProducts };
+          }
+          return {
+            entries: prev.entries.filter(
+              (entry) => entry.productId !== productId
+            ),
+            products: prev.products.filter(
+              (existing) => existing.id !== productId
+            ),
+          };
+        }
+      );
+    },
+    [product, queryClient, user?.userId]
+  );
 
   useEffect(() => {
     if (!productId) return;
@@ -443,8 +531,7 @@ const ProductDetail: React.FC = () => {
       wishServerRef.current = false;
       return;
     }
-    const items = wishlistQuery.data?.content ?? [];
-    const exists = items.some((item) => item.productId === productId);
+    const exists = !!wishlistQuery.data && wishlistQuery.data.deletedYn !== "Y";
     setIsWish(exists);
     wishDesiredRef.current = exists;
     wishServerRef.current = exists;
@@ -678,6 +765,7 @@ const ProductDetail: React.FC = () => {
                         const nextDesired = !wishDesiredRef.current;
                         wishDesiredRef.current = nextDesired;
                         setIsWish(nextDesired);
+                        updateWishlistCaches(nextDesired);
 
                         if (wishInFlightRef.current) return;
                         wishInFlightRef.current = true;
@@ -694,12 +782,14 @@ const ProductDetail: React.FC = () => {
                               await wishlistApi.remove(product.id);
                             }
                             wishServerRef.current = target;
+                            updateWishlistCaches(target);
                           }
                         } catch (err: any) {
                           console.error("찜 토글 실패:", err);
                           if (wishActionSeqRef.current === seqAtClick) {
                             wishDesiredRef.current = wishServerRef.current;
                             setIsWish(wishServerRef.current);
+                            updateWishlistCaches(wishServerRef.current);
                           }
                           alert(
                             err?.response?.data?.message ??
@@ -727,7 +817,14 @@ const ProductDetail: React.FC = () => {
                     <Typography
                       variant="body2"
                       color="text.secondary"
-                      sx={{ mt: 0.5, whiteSpace: "pre-line", minHeight: 96 }}
+                      sx={{
+                        mt: 0.5,
+                        whiteSpace: "pre-line",
+                        minHeight: 180,
+                        maxHeight: 280,
+                        overflow: "auto",
+                        pr: 0.5,
+                      }}
                     >
                       {product?.description || "설명 없음"}
                     </Typography>
@@ -872,7 +969,15 @@ const ProductDetail: React.FC = () => {
                           />
                         </Typography>
                       )}
-                      <Box sx={{ mt: 2, textAlign: "right" }}>
+                      <Box
+                        sx={{
+                          mt: 2,
+                          display: "flex",
+                          justifyContent: "flex-end",
+                          gap: 1,
+                          flexWrap: "wrap",
+                        }}
+                      >
                         <Button
                           variant="contained"
                           color="primary"
@@ -887,6 +992,16 @@ const ProductDetail: React.FC = () => {
                             ? "경매 상세보기"
                             : "경매 결과 보기"}
                         </Button>
+                        {canReregisterFromActiveAuction && (
+                          <Button
+                            variant="outlined"
+                            color="primary"
+                            component={RouterLink}
+                            to={`/auctions/new/${product?.id}`}
+                          >
+                            경매 재등록
+                          </Button>
+                        )}
                       </Box>
                     </>
                   ) : (

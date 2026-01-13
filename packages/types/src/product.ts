@@ -64,3 +64,39 @@ export interface ProductUpdateRequest {
 }
 
 export type PagedProductResponse = PagedApiResponse<Product>;
+
+export type AiConditionOverall = "상" | "중" | "하";
+
+/** AI가 이미지/컨텍스트를 바탕으로 생성한 "상품 상세 정보" */
+export interface AiGeneratedProductDetail {
+  category: AiCategorySuggestion;
+  title: string;
+  summary: string;
+  condition: AiProductCondition;
+  features: string[];
+  specs: string[];
+  includedItems: string[];
+  defects: string[];
+  recommendedFor: string[];
+  searchKeywords: string[];
+}
+
+/** AI가 추정한 카테고리(사용자가 최종 선택할 수 있음) */
+export interface AiCategorySuggestion {
+  code: string; // 예: "CAT001"
+  name?: string; // 필요 없으면 optional
+  confidence: number; // 0~1
+  alternatives: AiCategoryAlternative[];
+  evidence: string[];
+}
+
+export interface AiCategoryAlternative {
+  code: string;
+  name?: string;
+  confidence: number; // 0~1
+}
+
+export interface AiProductCondition {
+  overall: AiConditionOverall;
+  details: string[];
+}

@@ -123,6 +123,7 @@ export const useNotificationSse = (options?: {
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
+      let shouldReconnect = true;
 
       try {
         const response = await fetch(
@@ -146,6 +147,11 @@ export const useNotificationSse = (options?: {
           }
           logout();
           return;
+        }
+
+        if (response.status >= 500) {
+          shouldReconnect = false;
+          throw new Error(`SSE 서버 오류: ${response.status}`);
         }
 
         if (!response.ok || !response.body) {
@@ -184,7 +190,7 @@ export const useNotificationSse = (options?: {
           console.warn("알림 SSE 연결 종료:", error);
         }
       } finally {
-        if (!isClosed) scheduleReconnect();
+        if (!isClosed && shouldReconnect) scheduleReconnect();
       }
     };
 

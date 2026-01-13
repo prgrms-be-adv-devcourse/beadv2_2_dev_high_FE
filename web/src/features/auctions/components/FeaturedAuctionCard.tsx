@@ -16,6 +16,7 @@ import { auctionApi } from "@/apis/auctionApi";
 import {
   AuctionStatus,
   type AuctionDetailResponse,
+  type AuctionRankingResponse,
   type PagedAuctionResponse,
 } from "@moreauction/types";
 import { getAuctionStatusText } from "@moreauction/utils";
@@ -33,8 +34,9 @@ const FeaturedAuctionCard: React.FC = () => {
   const topAuctionQuery = useQuery({
     queryKey: queryKeys.auctions.featured(AuctionStatus.IN_PROGRESS),
     queryFn: async () => {
-      const res = await auctionApi.getTopAuctions();
-      return res.data as AuctionDetailResponse;
+      const res = await auctionApi.getTopAuctions(1);
+      const items = res.data as AuctionRankingResponse[];
+      return items[0]?.auction ?? null;
     },
     staleTime: 30_000,
   });
@@ -47,7 +49,7 @@ const FeaturedAuctionCard: React.FC = () => {
     );
   }, [topAuctionQuery.error, topAuctionQuery.isError]);
 
-  const auction = topAuctionQuery.data;
+  const auction = topAuctionQuery.data as AuctionDetailResponse | null;
   const hasBid = (auction?.currentBid ?? 0) > 0;
   const highestBidPrice = hasBid ? (auction?.currentBid as number) : null;
 

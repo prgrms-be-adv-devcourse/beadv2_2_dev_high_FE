@@ -12,12 +12,14 @@ interface ProductInfoProps {
   imageUrls?: string[];
   productName: string;
   description: string;
+  action?: React.ReactNode;
 }
 
 const ProductInfo: React.FC<ProductInfoProps> = ({
   imageUrls,
   productName,
   description,
+  action,
 }) => {
   const urls = useMemo(() => {
     const list = (imageUrls ?? []).filter(
@@ -30,7 +32,7 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
   const selectedUrl = urls[Math.min(selectedIndex, urls.length - 1)];
 
   return (
-    <Stack spacing={3}>
+    <Stack spacing={3} sx={{ flex: 1, minHeight: 0 }}>
       <Paper sx={{ p: 2 }}>
         <ImageWithFallback
           src={selectedUrl}
@@ -86,19 +88,47 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
           </Box>
         )}
       </Paper>
-      <Paper sx={{ p: 3 }}>
-        <Typography
-          variant="h5"
-          gutterBottom
-          noWrap
-          textOverflow={"ellipsis"}
-          overflow={"hidden"}
-          title={productName}
+      <Paper
+        sx={{
+          p: 3,
+          display: "flex",
+          flexDirection: "column",
+          flex: 1,
+          minHeight: 240,
+        }}
+      >
+        <Stack
+          direction="row"
+          alignItems="center"
+          justifyContent="space-between"
+          spacing={1}
+          sx={{ mb: 1 }}
         >
-          {productName}
-        </Typography>
+          <Typography
+            variant="h5"
+            noWrap
+            textOverflow={"ellipsis"}
+            overflow={"hidden"}
+            title={productName}
+            sx={{ flex: 1, minWidth: 0 }}
+          >
+            {productName}
+          </Typography>
+          {action}
+        </Stack>
         <Divider />
-        <Typography variant="body1">{description} </Typography>
+        <Typography
+          variant="body1"
+          sx={{
+            mt: 1.5,
+            whiteSpace: "pre-line",
+            flex: 1,
+            overflow: "auto",
+            pr: 0.5,
+          }}
+        >
+          {description}
+        </Typography>
       </Paper>
     </Stack>
   );

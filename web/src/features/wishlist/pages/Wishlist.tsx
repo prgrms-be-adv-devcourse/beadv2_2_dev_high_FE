@@ -1,27 +1,32 @@
-import type { Product } from "@moreauction/types";
-import CloseIcon from "@mui/icons-material/Close";
+import type { ApiResponseDto, FileGroup, Product } from "@moreauction/types";
+import { getProductImageUrls } from "@moreauction/utils";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import {
   Alert,
   Box,
+  Button,
   Card,
   CardContent,
+  Chip,
   Container,
+  CircularProgress,
   IconButton,
-  List,
-  ListItem,
-  ListItemText,
   Paper,
   Skeleton,
+  Stack,
   Tooltip,
   Typography,
 } from "@mui/material";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { useMemo, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
+import { fileApi } from "@/apis/fileApi";
 import { productApi } from "@/apis/productApi";
 import { wishlistApi, type WishlistEntry } from "@/apis/wishlistApi";
 import { useAuth } from "@moreauction/auth";
+import { ImageWithFallback } from "@/shared/components/common/ImageWithFallback";
 import { queryKeys } from "@/shared/queries/queryKeys";
+import { seedFileGroupCache } from "@/shared/queries/seedFileGroupCache";
 import { getErrorMessage } from "@/shared/utils/getErrorMessage";
 
 const Wishlist: React.FC = () => {
@@ -161,6 +166,57 @@ const Wishlist: React.FC = () => {
     }
   };
 
+  const products = wishlistQuery.data?.products ?? [];
+  const entries = wishlistQuery.data?.entries ?? [];
+  const entryMap = useMemo(
+    () => new Map(entries.map((entry) => [entry.productId, entry])),
+    [entries]
+  );
+
+  const fileGroupIds = useMemo(() => {
+    const ids = products
+      .map((product) => product.fileGroupId)
+      .filter((id): id is string => id != null && id !== "")
+      .map((id) => String(id));
+    return Array.from(new Set(ids));
+  }, [products]);
+
+  const cachedFileGroups = useMemo(
+    () =>
+      fileGroupIds
+        .map(
+          (id) =>
+            queryClient.getQueryData<ApiResponseDto<FileGroup>>(
+              queryKeys.files.group(id)
+            )?.data
+        )
+        .filter((group): group is FileGroup => !!group),
+    [fileGroupIds, queryClient]
+  );
+  const cachedFileGroupIds = useMemo(
+    () => new Set(cachedFileGroups.map((group) => String(group.fileGroupId))),
+    [cachedFileGroups]
+  );
+  const missingFileGroupIds = useMemo(
+    () => fileGroupIds.filter((id) => !cachedFileGroupIds.has(id)),
+    [cachedFileGroupIds, fileGroupIds]
+  );
+  const fileGroupsQuery = useQuery({
+    queryKey: queryKeys.files.groups(missingFileGroupIds),
+    queryFn: async () => {
+      const response = await fileApi.getFileGroupsByIds(missingFileGroupIds);
+      seedFileGroupCache(queryClient, response);
+      return response.data ?? [];
+    },
+    enabled: missingFileGroupIds.length > 0,
+    staleTime: 30_000,
+  });
+  const fileGroupMap = useMemo(() => {
+    const list = [...cachedFileGroups, ...(fileGroupsQuery.data ?? [])];
+    return new Map(list.map((group) => [String(group.fileGroupId), group]));
+  }, [cachedFileGroups, fileGroupsQuery.data]);
+  const isImageLoading = wishlistQuery.isLoading || fileGroupsQuery.isLoading;
+
   if (!isAuthenticated) {
     return (
       <Container maxWidth="md">
@@ -178,16 +234,233 @@ const Wishlist: React.FC = () => {
     );
   }
 
-  const products = wishlistQuery.data?.products ?? [];
-  const entries = wishlistQuery.data?.entries ?? [];
-
   return (
     <Container maxWidth="md">
       <Box sx={{ my: 4 }}>
-        <Typography variant="h4" component="h1" sx={{ mb: 2 }}>
-          찜 목록 (Wishlist)
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          alignItems={{ xs: "flex-start", sm: "center" }}
+          justifyContent="space-between"
+          spacing={1}
+          sx={{ mb: 1.5 }}
+        >
+          <Typography variant="h4" component="h1">
+            찜 목록 (Wishlist)
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            총 {entries.length}개
+          </Typography>
+        </Stack>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+          찜한 상품을 모아보고, 관심 경매 시작 알림을 받아보세요.
         </Typography>
-        <Box sx={{ mb: 3 }}>
+        <Paper sx={{ p: { xs: 2, sm: 3 }, borderRadius: 3 }}>
+          {wishlistQuery.isLoading &&
+            products.length === 0 &&
+            !errorMessage && (
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: {
+                    xs: "1fr",
+                    sm: "repeat(2, 1fr)",
+                  },
+                  gap: 3,
+                }}
+              >
+                {Array.from({ length: 4 }).map((_, idx) => (
+                  <Card
+                    key={`wishlist-skeleton-${idx}`}
+                    sx={{ overflow: "hidden", borderRadius: 3 }}
+                  >
+                    <Skeleton variant="rectangular" height={180} />
+                    <CardContent
+                      sx={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 1,
+                      }}
+                    >
+                      <Skeleton width="70%" />
+                      <Skeleton width="45%" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </Box>
+            )}
+
+          {!wishlistQuery.isLoading && errorMessage && (
+            <Alert severity="error">{errorMessage}</Alert>
+          )}
+          {!wishlistQuery.isLoading &&
+            !errorMessage &&
+            entries.length === 0 && (
+              <Box
+                sx={{
+                  textAlign: "center",
+                  py: 6,
+                  px: 2,
+                  borderRadius: 3,
+                  border: "1px dashed",
+                  borderColor: "divider",
+                }}
+              >
+                <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
+                  아직 찜한 상품이 없습니다
+                </Typography>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mb: 3 }}
+                >
+                  마음에 드는 상품을 찜해두면 빠르게 확인할 수 있어요.
+                </Typography>
+                <Button component={RouterLink} to="/search" variant="contained">
+                  상품 둘러보기
+                </Button>
+              </Box>
+            )}
+          {!wishlistQuery.isLoading && !errorMessage && products.length > 0 && (
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: {
+                  xs: "1fr",
+                  sm: "repeat(2, 1fr)",
+                },
+                gap: 3,
+              }}
+            >
+              {products.map((product) => {
+                const entry = entryMap.get(product.id);
+                const fileGroupId = product.fileGroupId
+                  ? String(product.fileGroupId)
+                  : null;
+                const imageUrls = fileGroupId
+                  ? getProductImageUrls(fileGroupMap.get(fileGroupId) ?? null)
+                  : [];
+                const coverImage = imageUrls[0];
+                const wishDate = entry?.createdAt
+                  ? new Date(entry.createdAt).toLocaleDateString()
+                  : null;
+                const categoryLabel = (() => {
+                  if (!product.categories?.length) return null;
+                  const first = product.categories[0];
+                  if (typeof first === "string") return first;
+                  return first.categoryName || null;
+                })();
+
+                return (
+                  <Card
+                    key={product.id}
+                    sx={{
+                      height: "100%",
+                      display: "flex",
+                      flexDirection: "column",
+                      borderRadius: 3,
+                      border: "1px solid",
+                      borderColor: "divider",
+                      overflow: "hidden",
+                      position: "relative",
+                    }}
+                  >
+                    <ImageWithFallback
+                      src={coverImage}
+                      alt={product.name}
+                      height={180}
+                      loading={isImageLoading}
+                      sx={{ objectFit: "cover" }}
+                    />
+                    <Tooltip title="찜 해제">
+                      <span>
+                        <IconButton
+                          aria-label="remove"
+                          onClick={() => handleRemoveWishlist(product.id)}
+                          disabled={removingId === product.id}
+                          size="small"
+                          sx={{
+                            position: "absolute",
+                            top: 10,
+                            right: 10,
+                            bgcolor: "error.main",
+                            color: "common.white",
+                            boxShadow: 2,
+                            "&:hover": {
+                              bgcolor: "error.dark",
+                            },
+                          }}
+                        >
+                          <DeleteOutlineIcon fontSize="small" />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                    {removingId === product.id && (
+                      <Box
+                        sx={{
+                          position: "absolute",
+                          inset: 0,
+                          bgcolor: "rgba(255, 255, 255, 0.7)",
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: 1,
+                          zIndex: 1,
+                        }}
+                      >
+                        <CircularProgress size={28} />
+                        <Typography variant="caption" color="text.secondary">
+                          찜 해제 중...
+                        </Typography>
+                      </Box>
+                    )}
+                    <CardContent
+                      sx={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 1,
+                        flexGrow: 1,
+                      }}
+                    >
+                      {categoryLabel && (
+                        <Chip
+                          label={categoryLabel}
+                          size="small"
+                          variant="outlined"
+                          sx={{ alignSelf: "flex-start" }}
+                        />
+                      )}
+                      <Typography
+                        fontWeight={700}
+                        component={RouterLink}
+                        to={`/products/${product.id}`}
+                        sx={{
+                          textDecoration: "none",
+                          color: "inherit",
+                          "&:hover": { textDecoration: "underline" },
+                        }}
+                      >
+                        {product.name}
+                      </Typography>
+                      {wishDate && (
+                        <Typography variant="body2" color="text.secondary">
+                          찜한 날짜: {wishDate}
+                        </Typography>
+                      )}
+                      {product.createdAt && (
+                        <Typography variant="caption" color="text.secondary">
+                          등록일:{" "}
+                          {new Date(product.createdAt).toLocaleDateString()}
+                        </Typography>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </Box>
+          )}
+        </Paper>
+        <Box sx={{ mt: 4 }}>
           <Box sx={{ mb: 1.5 }}>
             <Typography variant="h6" sx={{ fontWeight: 700 }}>
               찜 기반 추천
@@ -233,82 +506,6 @@ const Wishlist: React.FC = () => {
             ))}
           </Box>
         </Box>
-        <Paper sx={{ p: 2 }}>
-          {wishlistQuery.isLoading &&
-            products.length === 0 &&
-            !errorMessage && (
-              <List>
-                {Array.from({ length: 5 }).map((_, idx) => (
-                  <ListItem key={idx} divider>
-                    <ListItemText
-                      primary={<Skeleton width="60%" />}
-                      secondary={<Skeleton width="30%" />}
-                    />
-                  </ListItem>
-                ))}
-              </List>
-            )}
-
-          {!wishlistQuery.isLoading && errorMessage && (
-            <Alert severity="error">{errorMessage}</Alert>
-          )}
-          {!wishlistQuery.isLoading &&
-            !errorMessage &&
-            entries.length === 0 && (
-              <Alert severity="info">
-                찜한 상품이 없습니다. 마음에 드는 상품을 찜해보세요.
-              </Alert>
-            )}
-          {!wishlistQuery.isLoading && !errorMessage && products.length > 0 && (
-            <List>
-              {products.map((product) => (
-                <ListItem
-                  key={product.id}
-                  divider
-                  secondaryAction={
-                    <Tooltip title="찜 삭제">
-                      <span>
-                        <IconButton
-                          edge="end"
-                          aria-label="delete"
-                          onClick={() => handleRemoveWishlist(product.id)}
-                          disabled={removingId === product.id}
-                          size="small"
-                        >
-                          <CloseIcon fontSize="small" />
-                        </IconButton>
-                      </span>
-                    </Tooltip>
-                  }
-                >
-                  <ListItemText
-                    primary={
-                      <Typography
-                        fontWeight={600}
-                        component={RouterLink}
-                        to={`/products/${product.id}`}
-                        sx={{
-                          textDecoration: "none",
-                          color: "inherit",
-                          "&:hover": { textDecoration: "underline" },
-                        }}
-                      >
-                        {product.name}
-                      </Typography>
-                    }
-                    secondary={
-                      product.createdAt
-                        ? `등록일: ${new Date(
-                            product.createdAt
-                          ).toLocaleDateString()}`
-                        : undefined
-                    }
-                  />
-                </ListItem>
-              ))}
-            </List>
-          )}
-        </Paper>
       </Box>
     </Container>
   );

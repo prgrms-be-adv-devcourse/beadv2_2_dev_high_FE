@@ -97,3 +97,7 @@ file as the project-specific guide for changes, commands, and conventions.
 - Prefer small, incremental changes (one domain/page at a time) and keep builds green (`pnpm lint:*`, `pnpm build:*`).
 - Extract components/hooks first, then move files; use temporary re-exports (bridge files) to minimize import churn.
 - Preserve type safety and UX states (loading/skeleton/empty/error) during refactors.
+
+## React safety notes
+
+- Avoid using `const`/`let` functions before their declaration in a component body; define handlers/helpers before any `useEffect`/`useMemo`/JSX that calls them to prevent temporal dead zone runtime errors.

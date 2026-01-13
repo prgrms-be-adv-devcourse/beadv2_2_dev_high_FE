@@ -1,5 +1,6 @@
 import {
   Alert,
+  Box,
   Chip,
   ListItemButton,
   Skeleton,
@@ -20,6 +21,13 @@ import { queryKeys } from "@/shared/queries/queryKeys";
 import { getErrorMessage } from "@/shared/utils/getErrorMessage";
 
 export const MyProductsTab: React.FC = () => {
+  const formatDateTime = (value?: string | null) => {
+    if (!value) return "-";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return value;
+    return d.toLocaleString();
+  };
+
   const { user } = useAuth();
   const productsQuery = useQuery({
     queryKey: queryKeys.products.mine(user?.userId),
@@ -90,16 +98,25 @@ export const MyProductsTab: React.FC = () => {
                         variant: "subtitle1",
                         fontWeight: 600,
                       }}
-                      secondary={product.description || "상품 설명이 없습니다."}
-                      secondaryTypographyProps={{
-                        variant: "body2",
-                        color: "text.secondary",
-                        sx: {
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        },
-                      }}
+                      secondary={
+                        <Box sx={{ display: "flex", flexDirection: "column" }}>
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {product.description || "상품 설명이 없습니다."}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            등록일: {formatDateTime(product.createdAt)} · 수정일:{" "}
+                            {formatDateTime(product.updatedAt)}
+                          </Typography>
+                        </Box>
+                      }
                     />
                     <Chip label="상세보기" size="small" />
                   </ListItemButton>

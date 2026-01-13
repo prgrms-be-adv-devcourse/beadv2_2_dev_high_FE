@@ -42,6 +42,8 @@ export const queryKeys = {
       [...queryKeys.auctions.all, "bidHistory", auctionId ?? "unknown"] as const,
     featured: (status?: string | null) =>
       [...queryKeys.auctions.all, "featured", status ?? "all"] as const,
+    topToday: (limit?: number | null) =>
+      [...queryKeys.auctions.all, "topToday", limit ?? "default"] as const,
   },
   products: {
     all: ["products"] as const,
@@ -139,6 +141,13 @@ export const queryKeys = {
     all: ["wishlist"] as const,
     list: (userId?: string | null) =>
       [...queryKeys.wishlist.all, userId ?? "anonymous"] as const,
+    detail: (userId?: string | null, productId?: string | null) =>
+      [
+        ...queryKeys.wishlist.all,
+        "detail",
+        userId ?? "anonymous",
+        productId ?? "unknown",
+      ] as const,
   },
   user: {
     all: ["user"] as const,

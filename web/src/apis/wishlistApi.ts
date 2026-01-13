@@ -6,7 +6,15 @@ export interface WishlistEntry {
   id: string;
   userId: string;
   productId: string;
+  deletedYn: string;
+  deletedAt: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedBy: string;
+  updatedAt: string;
 }
+
+export type WishlistDetail = WishlistEntry;
 
 export type PagedWishlistResponse = PagedApiResponse<WishlistEntry>;
 
@@ -26,6 +34,12 @@ export const wishlistApi = {
     size?: number;
   }): Promise<ApiResponseDto<PagedWishlistResponse>> => {
     const res = await client.get("/users/wishlist", { params });
+    return res.data;
+  },
+  getWishlistByProductId: async (
+    productId: string
+  ): Promise<ApiResponseDto<WishlistDetail>> => {
+    const res = await client.get(`/users/wishlist/${productId}`);
     return res.data;
   },
 };

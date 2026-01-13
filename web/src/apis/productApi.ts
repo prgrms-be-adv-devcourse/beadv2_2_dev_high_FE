@@ -1,4 +1,5 @@
 import type {
+  AiGeneratedProductDetail,
   ApiResponseDto,
   PagedProductResponse,
   Product,
@@ -138,5 +139,24 @@ export const productApi = {
       payload
     );
     return response.data;
+  },
+
+  generateProductDetailDraftFromImages: async (params: {
+    files: File[];
+    retryCount?: number;
+  }): Promise<ApiResponseDto<AiGeneratedProductDetail>> => {
+    const form = new FormData();
+
+    // 서버는 @RequestPart("file") MultipartFile[] files 이므로 key를 "file"로 반복 append
+    params.files.forEach((f) => form.append("file", f));
+
+    const res = await client.post<ApiResponseDto<AiGeneratedProductDetail>>(
+      `/products/generate-detail-draft-from-images?retryCount=${
+        params.retryCount ?? 0
+      }`,
+      form
+    );
+
+    return res.data;
   },
 };
