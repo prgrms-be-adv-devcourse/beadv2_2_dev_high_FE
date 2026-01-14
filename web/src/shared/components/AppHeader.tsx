@@ -91,7 +91,11 @@ export const AppHeader: React.FC = () => {
     queryKey: queryKeys.notifications.headerList(user?.userId, "unread"),
     queryFn: () =>
       notificationApi.getUnreadNotifications({ page: 0, size: 50 }),
-    enabled: isAuthenticated && !!user?.userId && isNotificationOpen,
+    enabled:
+      isAuthenticated &&
+      !!user?.userId &&
+      isNotificationOpen &&
+      (unreadQuery.data ?? 0) > 0,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
   });
@@ -106,6 +110,11 @@ export const AppHeader: React.FC = () => {
         return bTime - aTime;
       });
   }, [notificationsQuery.data?.content]);
+
+  const unreadCount =
+    typeof unreadQuery.data === "number"
+      ? unreadQuery.data
+      : unreadNotifications.length;
 
   const visibleNotifications = unreadNotifications;
 
@@ -200,6 +209,21 @@ export const AppHeader: React.FC = () => {
 
   const safeText = (value?: unknown) =>
     typeof value === "string" ? value : "";
+
+  const formatNotificationTime = (value?: string) => {
+    if (!value) return "";
+    const date = new Date(value);
+    const time = date.getTime();
+    if (Number.isNaN(time)) return value;
+    const diffMinutes = Math.floor((now - time) / 60000);
+    if (diffMinutes < 1) return "방금 전";
+    if (diffMinutes < 60) return `${diffMinutes}분 전`;
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) return `${diffHours}시간 전`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays}일 전`;
+    return date.toLocaleDateString();
+  };
 
   useEffect(() => {
     if (toastNotification || toastQueue.length === 0) return;
@@ -522,58 +546,138 @@ export const AppHeader: React.FC = () => {
         onClose={handleCloseNotifications}
         anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
         transformOrigin={{ vertical: "top", horizontal: "right" }}
-        PaperProps={{ sx: { width: 360, p: 2 } }}
+        PaperProps={{
+          sx: {
+            width: 380,
+            borderRadius: 2.5,
+            border: "1px solid",
+            borderColor: "divider",
+            boxShadow:
+              "0 14px 32px rgba(15, 23, 42, 0.18), 0 4px 12px rgba(15, 23, 42, 0.12)",
+            overflow: "hidden",
+          },
+        }}
       >
-        <Box display="flex" alignItems="center" justifyContent="space-between">
-          <Typography variant="subtitle1" fontWeight={700}>
-            읽지 않은 알림
-          </Typography>
+        <Box
+          sx={{
+            px: 2,
+            py: 1.5,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            backgroundColor: (theme) =>
+              theme.palette.mode === "light"
+                ? "rgba(59, 130, 246, 0.08)"
+                : "rgba(59, 130, 246, 0.16)",
+          }}
+        >
+          <Box>
+            <Typography variant="subtitle1" fontWeight={700}>
+              읽지 않은 알림
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {unreadCount}건
+            </Typography>
+          </Box>
           <Button
             size="small"
+            variant="text"
             onClick={handleMarkAllRead}
-            disabled={unreadNotifications.length === 0}
+            disabled={unreadCount === 0}
           >
             모두읽기
           </Button>
         </Box>
-        <Divider sx={{ my: 1.5 }} />
-        <Box sx={{ maxHeight: 320, overflowY: "auto" }}>
+        <Divider />
+        <Box sx={{ maxHeight: 320, overflowY: "auto", px: 2, py: 1.5 }}>
           {notificationsQuery.isLoading &&
             Array.from({ length: 3 }).map((_, idx) => (
               <Box key={idx} sx={{ mb: 1.5 }}>
-                <Skeleton width="80%" />
-                <Skeleton width="95%" />
+                <Skeleton width="65%" />
+                <Skeleton width="85%" />
               </Box>
             ))}
           {!notificationsQuery.isLoading &&
             visibleNotifications.length === 0 && (
-              <Typography variant="body2" color="text.secondary">
-                새로운 알림이 없습니다.
-              </Typography>
+              <Box
+                sx={{
+                  py: 4,
+                  textAlign: "center",
+                }}
+              >
+                <Typography variant="body2" color="text.secondary">
+                  새로운 알림이 없습니다.
+                </Typography>
+              </Box>
             )}
           {!notificationsQuery.isLoading && visibleNotifications.length > 0 && (
-            <List disablePadding>
+            <List disablePadding sx={{ display: "grid", gap: 1.25 }}>
               {visibleNotifications.map((notification) => (
                 <ListItemButton
                   key={notification.id ?? notification.createdAt}
                   onClick={() => handleClickNotification(notification)}
+                  sx={{
+                    borderRadius: 2,
+                    border: "1px solid",
+                    borderColor: notification.readYn
+                      ? "divider"
+                      : "rgba(59, 130, 246, 0.35)",
+                    bgcolor: notification.readYn
+                      ? "background.paper"
+                      : "rgba(59, 130, 246, 0.08)",
+                    alignItems: "flex-start",
+                    gap: 1.5,
+                    transition:
+                      "background-color 160ms ease, border-color 160ms ease",
+                    "&:hover": {
+                      bgcolor: notification.readYn
+                        ? "action.hover"
+                        : "rgba(59, 130, 246, 0.14)",
+                    },
+                  }}
                 >
-                  <ListItemText
-                    primary={safeText(notification.title)}
-                    secondary={safeText(notification.content)}
-                    primaryTypographyProps={{ fontWeight: 600 }}
-                    secondaryTypographyProps={{
-                      noWrap: true,
-                      color: "text.secondary",
-                    }}
-                  />
+                  <Box sx={{ minWidth: 0, flex: 1 }}>
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 1,
+                      }}
+                    >
+                      <Typography
+                        variant="subtitle2"
+                        fontWeight={notification.readYn ? 600 : 700}
+                        sx={{ minWidth: 0 }}
+                        noWrap
+                      >
+                        {safeText(notification.title)}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {formatNotificationTime(notification.createdAt)}
+                      </Typography>
+                    </Box>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ mt: 0.5 }}
+                      noWrap
+                    >
+                      {safeText(notification.content)}
+                    </Typography>
+                  </Box>
                 </ListItemButton>
               ))}
             </List>
           )}
         </Box>
-        <Divider sx={{ my: 1.5 }} />
-        <Box display="flex" justifyContent="flex-end" gap={1}>
+        <Divider />
+        <Box
+          display="flex"
+          justifyContent="flex-end"
+          gap={1}
+          sx={{ px: 2, py: 1.5 }}
+        >
           <Button
             size="small"
             variant="outlined"

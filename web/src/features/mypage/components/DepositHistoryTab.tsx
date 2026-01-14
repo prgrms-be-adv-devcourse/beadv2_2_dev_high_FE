@@ -158,8 +158,8 @@ export const DepositHistoryTab: React.FC = () => {
     try {
       const depositOrder = await depositApi.createDepositOrder(amount);
 
-      if (depositOrder?.data?.orderId) {
-        requestTossPayment(depositOrder.data.orderId, depositOrder.data.amount);
+      if (depositOrder?.data?.id) {
+        requestTossPayment(depositOrder.data.id, depositOrder.data.amount);
         handleCloseChargeDialog();
       } else {
         setChargeError("주문 생성에 실패했습니다.");

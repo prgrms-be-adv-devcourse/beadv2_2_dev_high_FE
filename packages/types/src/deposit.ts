@@ -31,7 +31,7 @@ export interface DepositHstRequest {
 }
 
 export interface DepositOrderInfo {
-  orderId: string;
+  id: string;
   userId: String;
   amount: number;
   status: DepositOrderStatus;

@@ -6,6 +6,7 @@ import type {
   AuctionParticipationResponse,
   AuctionQueryParams,
   AuctionRankingResponse,
+  AuctionRecommendationResponse,
   AuctionStatus,
   AuctionUpdateRequest,
   PagedAuctionDocument,
@@ -184,9 +185,18 @@ export const auctionApi = {
   getTopAuctions: async (
     limit = 10
   ): Promise<ApiResponseDto<AuctionRankingResponse[]>> => {
-    console.log(`최고 경매 조회 API 호출`);
+    console.log(`인기 경매 조회 API 호출`);
     const response = await client.get(`/auctions/top/today`, {
       params: { limit },
+    });
+    return response.data;
+  },
+  getAuctionRecommendation: async (
+    productId: string
+  ): Promise<ApiResponseDto<AuctionRecommendationResponse>> => {
+    console.log(`경매 추천 조회 API 호출: ${productId}`);
+    const response = await client.get("/auctions/recommendation", {
+      params: { productId },
     });
     return response.data;
   },

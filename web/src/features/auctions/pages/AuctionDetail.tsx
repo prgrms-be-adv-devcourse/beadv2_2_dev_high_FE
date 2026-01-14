@@ -1192,7 +1192,7 @@ const AuctionDetail: React.FC = () => {
           setChargeError(null);
           try {
             const depositOrder = await depositApi.createDepositOrder(amount);
-            if (depositOrder?.data?.orderId && auctionId) {
+            if (depositOrder?.data?.id && auctionId) {
               const depositAmount = Number(auctionDetail?.depositAmount ?? 0);
               const bidPrice = Number(newBidAmount);
               sessionStorage.setItem(
@@ -1205,7 +1205,7 @@ const AuctionDetail: React.FC = () => {
                 })
               );
               requestTossPayment(
-                depositOrder.data.orderId,
+                depositOrder.data.id,
                 depositOrder.data.amount
               );
               setChargeOpen(false);

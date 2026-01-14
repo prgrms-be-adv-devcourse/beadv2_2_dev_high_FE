@@ -7,10 +7,10 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  List,
-  ListItem,
-  ListItemText,
+  Divider,
   Paper,
+  Skeleton,
+  Stack,
   Typography,
 } from "@mui/material";
 import { format } from "date-fns";
@@ -202,61 +202,133 @@ const PendingOrders: React.FC = () => {
           주문서
         </Typography>
 
-        <Paper sx={{ p: 2 }}>
-          {pendingQuery.isLoading ? (
-            <Typography>로딩 중...</Typography>
-          ) : pendingErrorMessage ? (
-            <Alert severity="error">{pendingErrorMessage}</Alert>
-          ) : orders.length === 0 ? (
-            <Alert severity="info">구매 대기 중인 주문이 없습니다.</Alert>
-          ) : (
-            <List>
-              {orders.map((order) => {
-                const payableAmount =
-                  typeof order.depositAmount === "number"
-                    ? order.winningAmount - order.depositAmount
-                    : order.winningAmount;
-
-                return (
-                  <ListItem
-                    key={order.id}
-                    secondaryAction={
-                      <Box sx={{ display: "flex", gap: 1 }}>
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          component={RouterLink}
-                          to={`/orders/${order.id}`}
-                        >
-                          상세보기
-                        </Button>
-                        <Button
-                          variant="contained"
-                          size="small"
-                          disabled={actionLoadingId === order.id}
-                          onClick={() => handleCompleteByDeposit(order.id)}
-                        >
-                          {actionLoadingId === order.id
-                            ? "처리 중..."
-                            : "예치금으로 구매"}
-                        </Button>
-                      </Box>
-                    }
+        <Paper sx={{ p: { xs: 2, md: 3 } }}>
+          <Stack spacing={2}>
+            <Box>
+              <Typography variant="subtitle1" fontWeight={700}>
+                구매 대기 주문
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                기한 내 결제를 완료하고 상품을 안전하게 배송받으세요.
+              </Typography>
+            </Box>
+            <Divider />
+            {pendingQuery.isLoading ? (
+              <Stack spacing={1.5}>
+                {Array.from({ length: 3 }).map((_, idx) => (
+                  <Paper
+                    key={`pending-skeleton-${idx}`}
+                    variant="outlined"
+                    sx={{ p: 2, borderRadius: 2 }}
                   >
-                    <ListItemText
-                      primary={`${
-                        order.productName ?? "주문"
-                      } · 추가 결제금액: ${formatWon(payableAmount)}`}
-                      secondary={format(
-                        new Date(order.createdAt),
-                        "yyyy-MM-dd HH:mm"
-                      )}
-                    />
-                  </ListItem>
-                );
-              })}
-            </List>
-          )}
+                    <Skeleton width="55%" />
+                    <Skeleton width="35%" />
+                    <Skeleton width="70%" />
+                  </Paper>
+                ))}
+              </Stack>
+            ) : pendingErrorMessage ? (
+              <Alert severity="error">{pendingErrorMessage}</Alert>
+            ) : orders.length === 0 ? (
+              <Alert severity="info">구매 대기 중인 주문이 없습니다.</Alert>
+            ) : (
+              <Stack spacing={2}>
+                {orders.map((order) => {
+                  const payableAmount =
+                    typeof order.depositAmount === "number"
+                      ? order.winningAmount - order.depositAmount
+                      : order.winningAmount;
+                  const createdAt = format(
+                    new Date(order.createdAt),
+                    "yyyy-MM-dd HH:mm"
+                  );
+
+                  return (
+                    <Paper
+                      key={order.id}
+                      variant="outlined"
+                      component={RouterLink}
+                      to={`/orders/${order.id}`}
+                      sx={{
+                        p: 2,
+                        borderRadius: 2,
+                        borderColor: "rgba(148, 163, 184, 0.4)",
+                        backgroundColor: "rgba(148, 163, 184, 0.04)",
+                        textDecoration: "none",
+                        color: "inherit",
+                        cursor: "pointer",
+                        transition:
+                          "transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease",
+                        "&:hover": {
+                          transform: "translateY(-2px)",
+                          boxShadow: "0 10px 24px rgba(15, 23, 42, 0.12)",
+                          borderColor: "rgba(59, 130, 246, 0.4)",
+                        },
+                      }}
+                    >
+                      <Stack spacing={1.5}>
+                        <Box
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 2,
+                          }}
+                        >
+                          <Box>
+                            <Typography variant="subtitle1" fontWeight={700}>
+                              {order.productName ?? "주문"}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              주문일시 · {createdAt}
+                            </Typography>
+                          </Box>
+                        </Box>
+                        <Box
+                          sx={{
+                            display: "grid",
+                            gridTemplateColumns: {
+                              xs: "1fr",
+                              sm: "repeat(3, 1fr)",
+                            },
+                            gap: 1.5,
+                          }}
+                        >
+                          <Box>
+                            <Typography variant="caption" color="text.secondary">
+                              낙찰가
+                            </Typography>
+                            <Typography variant="body2" fontWeight={600}>
+                              {formatWon(order.winningAmount)}
+                            </Typography>
+                          </Box>
+                          <Box>
+                            <Typography variant="caption" color="text.secondary">
+                              예치금 차감
+                            </Typography>
+                            <Typography variant="body2" fontWeight={600}>
+                              {formatWon(order.depositAmount ?? 0)}
+                            </Typography>
+                          </Box>
+                          <Box>
+                            <Typography variant="caption" color="text.secondary">
+                              추가 결제금액
+                            </Typography>
+                            <Typography variant="body2" fontWeight={700}>
+                              {formatWon(payableAmount)}
+                            </Typography>
+                          </Box>
+                        </Box>
+                        <Typography variant="caption" color="text.secondary">
+                          자세한 결제는 주문 상세에서 진행할 수 있습니다.
+                        </Typography>
+                      </Stack>
+                    </Paper>
+                  );
+                })}
+              </Stack>
+            )}
+          </Stack>
         </Paper>
       </Box>
 
@@ -320,7 +392,7 @@ const PendingOrders: React.FC = () => {
           setChargeError(null);
           try {
             const depositOrder = await depositApi.createDepositOrder(amount);
-            if (depositOrder?.data?.orderId) {
+            if (depositOrder?.data?.id) {
               if (autoPurchaseTarget) {
                 sessionStorage.setItem(
                   "autoPurchaseAfterCharge",
@@ -332,7 +404,7 @@ const PendingOrders: React.FC = () => {
                 );
               }
               requestTossPayment(
-                depositOrder.data.orderId,
+                depositOrder.data.id,
                 depositOrder.data.amount
               );
               setChargeOpen(false);

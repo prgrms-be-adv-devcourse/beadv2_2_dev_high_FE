@@ -32,6 +32,7 @@ export interface OrderResponse {
   confirmDate?: string | null;
   status: OrderStatus;
   payCompleteDate?: string | null;
+  payLimitDate?: string | null;
   createdAt: string;
   updatedAt: string;
   depositAmount?: number;

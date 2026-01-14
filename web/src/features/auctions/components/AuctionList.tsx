@@ -14,10 +14,8 @@ import { Link as RouterLink } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { auctionApi } from "@/apis/auctionApi";
 import { fileApi } from "@/apis/fileApi";
-import { productApi } from "@/apis/productApi";
 import {
   type PagedAuctionResponse,
-  type Product,
   AuctionStatus,
 } from "@moreauction/types";
 import type { ApiResponseDto, FileGroup } from "@moreauction/types";
@@ -79,66 +77,17 @@ const AuctionList: React.FC<AuctionListProps> = ({
     !errorMessage &&
     auctions.length === 0;
 
-  const productIds = useMemo(() => {
-    const ids = auctions
-      .map((auction) => auction.productId)
-      .filter((id): id is string => !!id);
-    return Array.from(new Set(ids));
-  }, [auctions]);
-
   const queryClient = useQueryClient();
-  const cachedProducts = useMemo(
-    () =>
-      productIds
-        .map((productId) =>
-          queryClient.getQueryData<Product>(
-            queryKeys.products.detail(productId)
-          )
-        )
-        .filter((product): product is Product => !!product),
-    [productIds, queryClient]
-  );
-  const cachedProductIds = useMemo(
-    () => new Set(cachedProducts.map((product) => product.id)),
-    [cachedProducts]
-  );
-  const missingProductIds = useMemo(
-    () => productIds.filter((id) => !cachedProductIds.has(id)),
-    [cachedProductIds, productIds]
-  );
-  const productsQuery = useQuery({
-    queryKey: queryKeys.products.many(missingProductIds),
-    queryFn: async () => {
-      const response = await productApi.getProductsByIds(missingProductIds);
-      const products = (response.data ?? []) as Product[];
-      products.forEach((product) => {
-        queryClient.setQueryData(
-          queryKeys.products.detail(product.id),
-          product
-        );
-      });
-      return products;
-    },
-    enabled: missingProductIds.length > 0,
-    staleTime: 30_000,
-  });
-
-  const mergedProducts = useMemo(
-    () => [...cachedProducts, ...(productsQuery.data ?? [])],
-    [cachedProducts, productsQuery.data]
-  );
-  const productMap = useMemo(() => {
-    const list = mergedProducts;
-    return new Map(list.map((product) => [product.id, product]));
-  }, [mergedProducts]);
 
   const fileGroupIds = useMemo(() => {
-    const ids = mergedProducts
-      .map((product) => product.fileGroupId)
-      .filter((id) => id != null && id !== "" && id !== undefined)
+    const ids = auctions
+      .map((auction) =>
+        auction.productFileGroupId ?? auction.fileGroupId ?? null
+      )
+      .filter((id): id is string | number => id != null && id !== "")
       .map((id) => String(id));
     return Array.from(new Set(ids));
-  }, [mergedProducts]);
+  }, [auctions]);
 
   const cachedFileGroups = useMemo(
     () =>
@@ -175,7 +124,7 @@ const AuctionList: React.FC<AuctionListProps> = ({
     const list = [...cachedFileGroups, ...(fileGroupsQuery.data ?? [])];
     return new Map(list.map((group) => [String(group.fileGroupId), group]));
   }, [cachedFileGroups, fileGroupsQuery.data]);
-  const isImageLoading = productsQuery.isLoading || fileGroupsQuery.isLoading;
+  const isImageLoading = fileGroupsQuery.isLoading;
 
   return (
     <Box
@@ -256,23 +205,16 @@ const AuctionList: React.FC<AuctionListProps> = ({
               auction.currentBid != null && auction.currentBid > 0
                 ? auction.currentBid
                 : auction.startBid;
-            const product = auction.productId
-              ? productMap.get(auction.productId)
-              : undefined;
-            const displayName =
-              auction.productName ?? product?.name ?? "상품명 미확인";
+            const displayName = auction.productName ?? "상품명 미확인";
             const fileGroupId =
-              product?.fileGroupId != null
-                ? String(product.fileGroupId)
-                : undefined;
+              auction.productFileGroupId ?? auction.fileGroupId;
             const fileGroup = fileGroupId
-              ? fileGroupMap.get(fileGroupId)
+              ? fileGroupMap.get(String(fileGroupId))
               : undefined;
             const coverImage = fileGroup?.files?.[0]?.filePath ?? "";
             const hasFileGroupId = !!fileGroupId;
             const emptyImage =
-              productsQuery.isError ||
-              (fileGroupsQuery.isError && hasFileGroupId)
+              fileGroupsQuery.isError && hasFileGroupId
                 ? "/images/fallback.png"
                 : "/images/no_image.png";
 

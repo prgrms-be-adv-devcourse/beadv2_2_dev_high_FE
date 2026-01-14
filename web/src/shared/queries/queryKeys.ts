@@ -26,6 +26,12 @@ export const queryKeys = {
       [...queryKeys.auctions.all, "detail", auctionId ?? "unknown"] as const,
     byProduct: (productId?: string | null) =>
       [...queryKeys.auctions.all, "byProduct", productId ?? "unknown"] as const,
+    recommendation: (productId?: string | null) =>
+      [
+        ...queryKeys.auctions.all,
+        "recommendation",
+        productId ?? "unknown",
+      ] as const,
     participation: (auctionId?: string | null) =>
       [
         ...queryKeys.auctions.all,
@@ -81,6 +87,13 @@ export const queryKeys = {
     unreadCount: () => [...queryKeys.notifications.all, "unreadCount"] as const,
     list: (userId?: string | null) =>
       [...queryKeys.notifications.all, "list", userId ?? "anonymous"] as const,
+    unreadList: (userId?: string | null) =>
+      [
+        ...queryKeys.notifications.all,
+        "list",
+        "unread",
+        userId ?? "anonymous",
+      ] as const,
     headerListBase: (userId?: string | null) =>
       [
         ...queryKeys.notifications.all,

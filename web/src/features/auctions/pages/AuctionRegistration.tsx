@@ -1,5 +1,6 @@
 import type {
   AuctionDetailResponse,
+  AuctionRecommendationResponse,
   AuctionUpdateRequest,
   Product,
 } from "@moreauction/types";
@@ -10,11 +11,18 @@ import {
   Button,
   CircularProgress,
   Container,
+  Divider,
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Paper,
   Skeleton,
+  Stack,
   TextField,
   Typography,
 } from "@mui/material";
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
@@ -40,6 +48,25 @@ interface AuctionFormData {
   auctionStartAt: string;
   auctionEndAt: string;
 }
+
+const amountFormatter = new Intl.NumberFormat("ko-KR");
+
+const formatAmount = (value?: number | null) => {
+  if (value == null || Number.isNaN(value)) return "-";
+  return `${amountFormatter.format(value)}원`;
+};
+
+const formatCount = (value?: number | null) => {
+  if (value == null || Number.isNaN(value)) return "0";
+  return amountFormatter.format(value);
+};
+
+const formatDateTime = (value?: string | null) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return format(date, "yyyy.MM.dd HH:mm", { locale: ko });
+};
 
 const AuctionRegistration: React.FC = () => {
   const { auctionId, productId } = useParams<{
@@ -239,11 +266,26 @@ const AuctionRegistration: React.FC = () => {
   const selectedProduct = isEditMode
     ? ((productForEditQuery.data ?? null) as Product | null)
     : ((productForRegisterQuery.data ?? null) as Product | null);
-  const aiStartBidSuggestion = null as null | {
-    min: number;
-    max: number;
-    median: number;
-  };
+  const recommendationProductId =
+    selectedProduct?.id ?? auctionDetailQuery.data?.productId ?? productId;
+  const recommendationQuery = useQuery({
+    queryKey: queryKeys.auctions.recommendation(recommendationProductId),
+    queryFn: async () => {
+      const response = await auctionApi.getAuctionRecommendation(
+        recommendationProductId as string
+      );
+      return response.data;
+    },
+    enabled: !!recommendationProductId,
+    staleTime: 60_000,
+  });
+  const recommendation = (recommendationQuery.data ??
+    null) as AuctionRecommendationResponse | null;
+  const startBidRecommendationValue =
+    recommendation?.recommendedStartBid ??
+    recommendation?.aiResult?.price ??
+    null;
+  const canApplyStartBid = !!startBidRecommendationValue;
 
   const onSubmit = async (data: AuctionFormData) => {
     if (actionLoading || isCheckingAuction) return;
@@ -264,6 +306,7 @@ const AuctionRegistration: React.FC = () => {
     try {
       if (isEditMode && auctionId) {
         const auctionData: AuctionUpdateRequest = {
+          productName: selectedProduct?.name,
           startBid: Number(data.startBid),
           auctionStartAt: auctionStart,
           auctionEndAt: auctionEnd,
@@ -317,6 +360,7 @@ const AuctionRegistration: React.FC = () => {
       } else if (!isEditMode && selectedProduct) {
         const auctionData = {
           productId: selectedProduct.id,
+          productName: selectedProduct.name,
           startBid: Number(data.startBid),
           auctionStartAt: auctionStart,
           auctionEndAt: auctionEnd,
@@ -427,7 +471,7 @@ const AuctionRegistration: React.FC = () => {
           <Typography variant="h6">
             선택된 상품: {selectedProduct.name}
           </Typography>
-          <Paper sx={{ p: 4, mt: 2 }}>
+          <Paper sx={{ p: 3, mt: 1 }}>
             <Box
               component="form"
               onSubmit={handleSubmit(onSubmit)}
@@ -439,6 +483,252 @@ const AuctionRegistration: React.FC = () => {
                 disabled={actionLoading}
                 sx={{ border: 0, p: 0, m: 0, minInlineSize: 0 }}
               >
+                <Box component="section" sx={{ mt: 0 }}>
+                  <Accordion
+                    defaultExpanded={false}
+                    disableGutters
+                    sx={{
+                      backgroundColor: (theme) =>
+                        theme.palette.mode === "light"
+                          ? "rgba(59, 130, 246, 0.06)"
+                          : "rgba(59, 130, 246, 0.12)",
+                      boxShadow: "none",
+                      borderRadius: 2,
+                      px: 2,
+                      py: 0.5,
+                      border: (theme) =>
+                        `1px solid ${
+                          theme.palette.mode === "light"
+                            ? "rgba(148, 163, 184, 0.4)"
+                            : "rgba(148, 163, 184, 0.25)"
+                        }`,
+                      "&::before": {
+                        display: "none",
+                      },
+                    }}
+                  >
+                    <AccordionSummary
+                      expandIcon={<ExpandMoreIcon />}
+                      sx={{
+                        minHeight: 0,
+                        px: 0,
+                        py: 0.5,
+                        "& .MuiAccordionSummary-content": {
+                          my: 0,
+                          alignItems: "center",
+                        },
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          width: "100%",
+                          gap: 2,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <Box
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 1.5,
+                          }}
+                        >
+                          <AutoAwesomeIcon
+                            sx={{
+                              color: (theme) =>
+                                theme.palette.mode === "light"
+                                  ? "rgba(37, 99, 235, 0.9)"
+                                  : "rgba(191, 219, 254, 0.9)",
+                            }}
+                          />
+                          <Box>
+                            <Typography variant="subtitle1" fontWeight={700}>
+                              AI 시작가 추천
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              AI 추천 가격을 확인해보세요.
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </Box>
+                    </AccordionSummary>
+                    <AccordionDetails sx={{ pt: 1.5, pb: 1.5, px: 0.5 }}>
+                      <Stack spacing={2}>
+                        <Divider />
+                        <Stack
+                          direction={{ xs: "column", sm: "row" }}
+                          spacing={1.5}
+                          alignItems={{ xs: "flex-start", sm: "center" }}
+                          justifyContent="space-between"
+                        >
+                          <Typography variant="body2" color="text.secondary">
+                            유사 경매 데이터를 기반으로 적정 시작가를 안내합니다.
+                          </Typography>
+                          <Button
+                            size="small"
+                            variant="contained"
+                            disabled={!canApplyStartBid}
+                            onClick={() => {
+                              if (!startBidRecommendationValue) return;
+                              setValue("startBid", startBidRecommendationValue, {
+                                shouldDirty: true,
+                                shouldValidate: true,
+                              });
+                            }}
+                          >
+                            추천가 적용
+                          </Button>
+                        </Stack>
+                        {recommendationQuery.isLoading ? (
+                          <Box>
+                            <Skeleton width="45%" height={22} />
+                            <Skeleton width="70%" height={20} />
+                            <Skeleton width="55%" height={20} />
+                          </Box>
+                        ) : recommendationQuery.error ? (
+                          <Alert severity="warning">
+                            추천 정보를 불러오지 못했습니다.
+                          </Alert>
+                        ) : (
+                          <Stack spacing={2}>
+                            {recommendation?.available === false &&
+                              !recommendation?.message && (
+                                <Alert severity="info">
+                                  데이터가 부족해 추천 정보가 제한될 수 있습니다.
+                                </Alert>
+                              )}
+                            {!recommendation?.available &&
+                              recommendation?.message && (
+                                <Alert severity="info">
+                                  {recommendation.message}
+                                </Alert>
+                              )}
+                            <Box
+                              sx={{
+                                display: "grid",
+                                gridTemplateColumns: {
+                                  xs: "1fr",
+                                  sm: "repeat(3, 1fr)",
+                                },
+                                gap: 2,
+                              }}
+                            >
+                              <Box
+                                sx={{
+                                  p: 1.5,
+                                  borderRadius: 1.5,
+                                  backgroundColor: (theme) =>
+                                    theme.palette.mode === "light"
+                                      ? "rgba(37, 99, 235, 0.08)"
+                                      : "rgba(59, 130, 246, 0.18)",
+                                }}
+                              >
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                >
+                                  추천 시작가
+                                </Typography>
+                                <Typography variant="subtitle1" fontWeight={700}>
+                                  {formatAmount(startBidRecommendationValue)}
+                                </Typography>
+                              </Box>
+                              <Box
+                                sx={{
+                                  p: 1.5,
+                                  borderRadius: 1.5,
+                                  backgroundColor: (theme) =>
+                                    theme.palette.mode === "light"
+                                      ? "rgba(37, 99, 235, 0.08)"
+                                      : "rgba(59, 130, 246, 0.18)",
+                                }}
+                              >
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                >
+                                  가격 범위
+                                </Typography>
+                                <Typography variant="body2">
+                                  {recommendation?.priceRangeMin == null &&
+                                  recommendation?.priceRangeMax == null
+                                    ? "정보 없음"
+                                    : `${formatAmount(
+                                        recommendation?.priceRangeMin
+                                      )} ~ ${formatAmount(
+                                        recommendation?.priceRangeMax
+                                      )}`}
+                                </Typography>
+                              </Box>
+                              <Box
+                                sx={{
+                                  p: 1.5,
+                                  borderRadius: 1.5,
+                                  backgroundColor: (theme) =>
+                                    theme.palette.mode === "light"
+                                      ? "rgba(37, 99, 235, 0.08)"
+                                      : "rgba(59, 130, 246, 0.18)",
+                                }}
+                              >
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                >
+                                  기준 시세
+                                </Typography>
+                                <Typography variant="body2">
+                                  {recommendation?.referencePrice == null
+                                    ? "정보 없음"
+                                    : formatAmount(
+                                        recommendation?.referencePrice
+                                      )}
+                                </Typography>
+                              </Box>
+                            </Box>
+                            <Typography variant="caption" color="text.secondary">
+                              유사 상품{" "}
+                              {formatCount(recommendation?.similarProductCount)}건
+                              · 경매{" "}
+                              {formatCount(recommendation?.auctionCount)}건 ·
+                              낙찰{" "}
+                              {formatCount(recommendation?.winningOrderCount)}건
+                              · 구매 완료{" "}
+                              {formatCount(
+                                recommendation?.winningOrderCountPaidLike
+                              )}
+                              건
+                            </Typography>
+                            <Box
+                              sx={{
+                                p: 2,
+                                borderRadius: 1.5,
+                                backgroundColor: (theme) =>
+                                  theme.palette.mode === "light"
+                                    ? "rgba(37, 99, 235, 0.08)"
+                                    : "rgba(59, 130, 246, 0.18)",
+                              }}
+                            >
+                              <Typography variant="subtitle2" fontWeight={700}>
+                                추천 이유
+                              </Typography>
+                              <Typography
+                                variant="body2"
+                                sx={{ whiteSpace: "pre-line", mt: 0.5 }}
+                              >
+                                {recommendation?.aiResult?.reason?.trim() ||
+                                  recommendation?.message?.trim() ||
+                                  "추천 근거가 제공되지 않았습니다."}
+                              </Typography>
+                            </Box>
+                          </Stack>
+                        )}
+                      </Stack>
+                    </AccordionDetails>
+                  </Accordion>
+                </Box>
                 <Controller
                   name="startBid"
                   control={control}
@@ -482,68 +772,6 @@ const AuctionRegistration: React.FC = () => {
                     />
                   )}
                 />
-                <Paper
-                  variant="outlined"
-                  sx={{
-                    mt: 2,
-                    p: 2,
-                    borderRadius: 2,
-                    backgroundColor: (theme) =>
-                      theme.palette.mode === "light"
-                        ? "rgba(59, 130, 246, 0.06)"
-                        : "rgba(59, 130, 246, 0.12)",
-                    borderColor: (theme) =>
-                      theme.palette.mode === "light"
-                        ? "rgba(59, 130, 246, 0.3)"
-                        : "rgba(148, 163, 184, 0.25)",
-                  }}
-                >
-                  <Box
-                    sx={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      gap: 2,
-                    }}
-                  >
-                    <Box>
-                      <Typography variant="subtitle1" fontWeight={700}>
-                        AI 시작가 추천
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        유사 경매 데이터로 적정 시작가를 안내할 예정입니다.
-                      </Typography>
-                    </Box>
-                    <Button
-                      size="small"
-                      variant="contained"
-                      disabled={!aiStartBidSuggestion}
-                      onClick={() => {
-                        if (!aiStartBidSuggestion) return;
-                        setValue("startBid", aiStartBidSuggestion.median, {
-                          shouldDirty: true,
-                          shouldValidate: true,
-                        });
-                      }}
-                    >
-                      추천가 적용
-                    </Button>
-                  </Box>
-                  <Box sx={{ mt: 2 }}>
-                    {aiStartBidSuggestion ? (
-                      <Typography variant="body2">
-                        추천 범위: {aiStartBidSuggestion.min}원 ~{" "}
-                        {aiStartBidSuggestion.max}원 (중앙값{" "}
-                        {aiStartBidSuggestion.median}원)
-                      </Typography>
-                    ) : (
-                      <>
-                        <Skeleton width="65%" height={22} />
-                        <Skeleton width="45%" height={20} />
-                      </>
-                    )}
-                  </Box>
-                </Paper>
                 <TextField
                   margin="normal"
                   required

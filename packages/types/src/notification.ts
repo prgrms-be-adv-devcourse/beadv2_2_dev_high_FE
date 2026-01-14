@@ -17,3 +17,6 @@ export interface NotificationInfo {
 
 export type PagedNotificationResponse = PagedApiResponse<NotificationInfo>;
 
+export interface NotificationCountResponse {
+  count: number;
+}

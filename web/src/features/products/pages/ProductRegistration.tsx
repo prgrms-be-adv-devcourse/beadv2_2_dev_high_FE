@@ -27,6 +27,7 @@ import {
   Close,
   ExpandMore,
   InfoOutlined,
+  AutoAwesome,
   Star,
 } from "@mui/icons-material";
 import {
@@ -765,69 +766,96 @@ const ProductRegistration: React.FC = () => {
             </Typography>
 
             <Box sx={{ mb: 3 }}>
-              <Stack
-                direction={{ xs: "column", sm: "row" }}
-                spacing={1.5}
-                alignItems={{ xs: "flex-start", sm: "center" }}
-                justifyContent="space-between"
-                sx={{ mb: 2 }}
+              <Box
+                sx={{
+                  p: 2,
+                  borderRadius: 2,
+                  backgroundColor: (theme) =>
+                    theme.palette.mode === "dark"
+                      ? "rgba(59, 130, 246, 0.12)"
+                      : "rgba(59, 130, 246, 0.08)",
+                  border: "1px solid",
+                  borderColor: (theme) =>
+                    theme.palette.mode === "dark"
+                      ? "rgba(148, 163, 184, 0.3)"
+                      : "rgba(59, 130, 246, 0.2)",
+                  mb: 2,
+                }}
               >
-                <Box>
-                  <Typography variant="subtitle1" fontWeight={700}>
-                    AI 상세설명 초안
-                  </Typography>
-                  <Stack direction="row" spacing={0.5} alignItems="center">
-                    <Typography variant="caption" color="text.secondary">
-                      현재 선택한 이미지 기준으로 생성됩니다.
-                    </Typography>
-                    {aiDraft && (
-                      <Tooltip
-                        title="AI 초안은 참고용입니다. 필요한 내용을 보완해 주세요."
-                        arrow
-                        placement="top"
-                        componentsProps={{
-                          tooltip: {
-                            sx: {
-                              bgcolor: "grey.900",
-                              color: "common.white",
-                              fontSize: 12,
-                              borderRadius: 1,
-                              px: 1,
-                              py: 0.5,
-                            },
-                          },
-                          arrow: {
-                            sx: { color: "grey.900" },
-                          },
-                        }}
-                      >
-                        <IconButton
-                          size="small"
-                          aria-label="AI 초안 안내"
-                          sx={{ color: "text.secondary" }}
-                        >
-                          <InfoOutlined fontSize="inherit" />
-                        </IconButton>
-                      </Tooltip>
-                    )}
-                  </Stack>
-                </Box>
-                <Button
-                  variant="contained"
-                  onClick={handleGenerateAiDraft}
-                  disabled={
-                    !canGenerateAiDraft ||
-                    aiDraftLoading ||
-                    !canRegenerateAfterApply
-                  }
+                <Stack
+                  direction={{ xs: "column", sm: "row" }}
+                  spacing={1.5}
+                  alignItems={{ xs: "flex-start", sm: "center" }}
+                  justifyContent="space-between"
                 >
-                  {aiDraftLoading
-                    ? "이미지 분석 중..."
-                    : aiDraft
-                    ? "AI 초안 다시 생성"
-                    : "AI로 초안 생성"}
-                </Button>
-              </Stack>
+                  <Box>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <AutoAwesome
+                        sx={{
+                          fontSize: 22,
+                          color: (theme) =>
+                            theme.palette.mode === "light"
+                              ? "rgba(37, 99, 235, 0.95)"
+                              : "rgba(191, 219, 254, 0.95)",
+                        }}
+                      />
+                      <Typography variant="subtitle1" fontWeight={800}>
+                        AI 상세설명 초안
+                      </Typography>
+                    </Stack>
+                    <Stack direction="row" spacing={0.5} alignItems="center">
+                      <Typography variant="caption" color="text.secondary">
+                        현재 선택한 이미지 기준으로 생성됩니다.
+                      </Typography>
+                      {aiDraft && (
+                        <Tooltip
+                          title="AI 초안은 참고용입니다. 필요한 내용을 보완해 주세요."
+                          arrow
+                          placement="top"
+                          componentsProps={{
+                            tooltip: {
+                              sx: {
+                                bgcolor: "grey.900",
+                                color: "common.white",
+                                fontSize: 12,
+                                borderRadius: 1,
+                                px: 1,
+                                py: 0.5,
+                              },
+                            },
+                            arrow: {
+                              sx: { color: "grey.900" },
+                            },
+                          }}
+                        >
+                          <IconButton
+                            size="small"
+                            aria-label="AI 초안 안내"
+                            sx={{ color: "text.secondary" }}
+                          >
+                            <InfoOutlined fontSize="inherit" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </Stack>
+                  </Box>
+                  <Button
+                    variant="contained"
+                    onClick={handleGenerateAiDraft}
+                    disabled={
+                      !canGenerateAiDraft ||
+                      aiDraftLoading ||
+                      !canRegenerateAfterApply
+                    }
+                  >
+                    {aiDraftLoading
+                      ? "이미지 분석 중..."
+                      : aiDraft
+                      ? "AI 초안 다시 생성"
+                      : "AI로 초안 생성"}
+                  </Button>
+                </Stack>
+              </Box>
 
               <Paper
                 variant="outlined"
