@@ -4,6 +4,7 @@ import type {
   AuctionCreationRequest,
   AuctionDetailResponse,
   AuctionParticipationResponse,
+  PagedAuctionParticipationResponse,
   AuctionQueryParams,
   AuctionRankingResponse,
   AuctionRecommendationResponse,
@@ -85,10 +86,12 @@ export const auctionApi = {
   },
 
   // 내 경매 참여 이력 조회
-  getParticipationHistory: async (): Promise<
-    ApiResponseDto<AuctionParticipationResponse[]>
-  > => {
-    const res = await client.get("/auctions/participation/me");
+  getParticipationHistory: async (params?: {
+    page?: number;
+    size?: number;
+    sort?: string;
+  }): Promise<ApiResponseDto<PagedAuctionParticipationResponse>> => {
+    const res = await client.get("/auctions/participation/me", { params });
     return res.data;
   },
 

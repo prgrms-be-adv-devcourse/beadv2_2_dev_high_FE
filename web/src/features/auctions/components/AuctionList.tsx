@@ -14,11 +14,18 @@ import { Link as RouterLink } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { auctionApi } from "@/apis/auctionApi";
 import { fileApi } from "@/apis/fileApi";
+import { productApi } from "@/apis/productApi";
+import { userApi } from "@/apis/userApi";
 import {
   type PagedAuctionResponse,
   AuctionStatus,
 } from "@moreauction/types";
-import type { ApiResponseDto, FileGroup } from "@moreauction/types";
+import type {
+  ApiResponseDto,
+  FileGroup,
+  Product,
+  User,
+} from "@moreauction/types";
 import { formatWon } from "@moreauction/utils";
 import { getAuctionStatusText } from "@moreauction/utils";
 import RemainingTime from "@/shared/components/RemainingTime";
@@ -26,6 +33,7 @@ import { queryKeys } from "@/shared/queries/queryKeys";
 import { seedFileGroupCache } from "@/shared/queries/seedFileGroupCache";
 import { ImageWithFallback } from "@/shared/components/common/ImageWithFallback";
 import { getErrorMessage } from "@/shared/utils/getErrorMessage";
+import { getUserLabel } from "@/shared/utils/getUserLabel";
 
 interface AuctionListProps {
   status: AuctionStatus[];
@@ -79,15 +87,71 @@ const AuctionList: React.FC<AuctionListProps> = ({
 
   const queryClient = useQueryClient();
 
+  const productIds = useMemo(() => {
+    const ids = auctions
+      .map((auction) => auction.productId)
+      .filter((id): id is string => !!id && id.trim().length > 0);
+    return Array.from(new Set(ids));
+  }, [auctions]);
+
+  const cachedProducts = useMemo(() => {
+    const map = new Map<string, Product>();
+    productIds.forEach((id) => {
+      const cached = queryClient.getQueryData<Product>(
+        queryKeys.products.detail(id)
+      );
+      if (cached) {
+        map.set(id, cached);
+      }
+    });
+    return map;
+  }, [productIds, queryClient]);
+
+  const missingProductIds = useMemo(() => {
+    return productIds.filter((id) => {
+      const cached = cachedProducts.get(id);
+      return !cached?.fileGroupId;
+    });
+  }, [cachedProducts, productIds]);
+
+  const productsQuery = useQuery({
+    queryKey: queryKeys.products.many(missingProductIds),
+    queryFn: async () => {
+      const response = await productApi.getProductsByIds(missingProductIds);
+      const products = response.data ?? [];
+      products.forEach((product) => {
+        if (!product?.id) return;
+        queryClient.setQueryData(queryKeys.products.detail(product.id), product);
+      });
+      return products;
+    },
+    enabled: missingProductIds.length > 0,
+    staleTime: 5 * 60_000,
+  });
+
+  const productMap = useMemo(() => {
+    const map = new Map(cachedProducts);
+    (productsQuery.data ?? []).forEach((product) => {
+      if (!product?.id) return;
+      map.set(product.id, product);
+    });
+    return map;
+  }, [cachedProducts, productsQuery.data]);
+
   const fileGroupIds = useMemo(() => {
     const ids = auctions
-      .map((auction) =>
-        auction.productFileGroupId ?? auction.fileGroupId ?? null
-      )
+      .map((auction) => {
+        return (
+          auction.productFileGroupId ??
+          auction.fileGroupId ??
+          productMap.get(auction.productId)?.fileGroupId ??
+          null
+        );
+      })
       .filter((id): id is string | number => id != null && id !== "")
       .map((id) => String(id));
     return Array.from(new Set(ids));
-  }, [auctions]);
+  }, [auctions, productMap]);
 
   const cachedFileGroups = useMemo(
     () =>
@@ -124,7 +188,65 @@ const AuctionList: React.FC<AuctionListProps> = ({
     const list = [...cachedFileGroups, ...(fileGroupsQuery.data ?? [])];
     return new Map(list.map((group) => [String(group.fileGroupId), group]));
   }, [cachedFileGroups, fileGroupsQuery.data]);
-  const isImageLoading = fileGroupsQuery.isLoading;
+  const isImageLoading = fileGroupsQuery.isLoading || productsQuery.isLoading;
+
+  const sellerIds = useMemo(() => {
+    const ids = auctions
+      .map((auction) => auction.sellerId)
+      .filter((id): id is string => !!id && id.trim().length > 0);
+    return Array.from(new Set(ids));
+  }, [auctions]);
+
+  const cachedSellerUsers = useMemo(() => {
+    const map = new Map<string, User>();
+    sellerIds.forEach((id) => {
+      const cached = queryClient.getQueryData<User>(queryKeys.user.detail(id));
+      if (cached) {
+        map.set(id, cached);
+      }
+    });
+    return map;
+  }, [queryClient, sellerIds]);
+
+  const missingSellerIds = useMemo(() => {
+    return sellerIds.filter((id) => {
+      const cached = cachedSellerUsers.get(id);
+      if (!cached) return true;
+      return !cached.nickname && !cached.email;
+    });
+  }, [cachedSellerUsers, sellerIds]);
+
+  const sellerUsersQuery = useQuery({
+    queryKey: queryKeys.user.many(missingSellerIds),
+    queryFn: async () => {
+      const response = await userApi.getUsersByIds(missingSellerIds);
+      const users = response.data ?? [];
+      users.forEach((userInfo) => {
+        if (!userInfo?.userId) return;
+        queryClient.setQueryData(
+          queryKeys.user.detail(userInfo.userId),
+          userInfo
+        );
+      });
+      return users;
+    },
+    enabled: missingSellerIds.length > 0,
+    staleTime: 5 * 60_000,
+  });
+
+  const sellerLabelMap = useMemo(() => {
+    const map = new Map<string, string>();
+    cachedSellerUsers.forEach((userInfo, userId) => {
+      const label = getUserLabel(userInfo);
+      if (label) map.set(userId, label);
+    });
+    (sellerUsersQuery.data ?? []).forEach((userInfo) => {
+      if (!userInfo?.userId) return;
+      const label = getUserLabel(userInfo);
+      if (label) map.set(userInfo.userId, label);
+    });
+    return map;
+  }, [cachedSellerUsers, sellerUsersQuery.data]);
 
   return (
     <Box
@@ -205,18 +327,29 @@ const AuctionList: React.FC<AuctionListProps> = ({
               auction.currentBid != null && auction.currentBid > 0
                 ? auction.currentBid
                 : auction.startBid;
-            const displayName = auction.productName ?? "상품명 미확인";
+            const displayName =
+              auction.productName ??
+              productMap.get(auction.productId)?.name ??
+              "상품명 미확인";
+            const productInfo = productMap.get(auction.productId);
             const fileGroupId =
-              auction.productFileGroupId ?? auction.fileGroupId;
+              auction.productFileGroupId ??
+              auction.fileGroupId ??
+              productInfo?.fileGroupId;
             const fileGroup = fileGroupId
               ? fileGroupMap.get(String(fileGroupId))
               : undefined;
             const coverImage = fileGroup?.files?.[0]?.filePath ?? "";
             const hasFileGroupId = !!fileGroupId;
+            const hasKnownNoFileGroup =
+              !!productInfo && !productInfo.fileGroupId && !hasFileGroupId;
             const emptyImage =
               fileGroupsQuery.isError && hasFileGroupId
                 ? "/images/fallback.png"
                 : "/images/no_image.png";
+            const shouldShowImageLoading = hasFileGroupId
+              ? isImageLoading
+              : !hasKnownNoFileGroup && productsQuery.isLoading;
 
             return (
               <Card
@@ -249,7 +382,7 @@ const AuctionList: React.FC<AuctionListProps> = ({
                       src={coverImage}
                       alt={auction?.productName ?? "경매 이미지"}
                       height={210}
-                      loading={isImageLoading}
+                      loading={shouldShowImageLoading}
                       emptySrc={emptyImage}
                       sx={{ objectFit: "cover", width: "100%" }}
                       skeletonSx={{ width: "100%" }}
@@ -316,6 +449,13 @@ const AuctionList: React.FC<AuctionListProps> = ({
                     >
                       {displayName}
                     </Typography>
+                    {auction.sellerId && (
+                      <Typography variant="caption" color="text.secondary">
+                        판매자:{" "}
+                        {sellerLabelMap.get(auction.sellerId) ??
+                          auction.sellerId}
+                      </Typography>
+                    )}
                     <Stack direction="row" spacing={1}>
                       <Box
                         sx={{

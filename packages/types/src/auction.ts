@@ -110,10 +110,16 @@ export interface AuctionParticipationResponse {
   isWithdrawn: boolean;
   isRefund: boolean;
   depositAmount?: number; // BigDecimal → number
+  createdAt?: string; // LocalDateTime → ISO 문자열
   withdrawnAt?: string; // LocalDateTime → ISO 문자열
   refundAt?: string; // LocalDateTime → ISO 문자열
   lastBidPrice?: number; // BigDecimal → number
+  status?: AuctionStatus;
+  productName?: string;
 }
+
+export type PagedAuctionParticipationResponse =
+  PagedApiResponse<AuctionParticipationResponse>;
 
 /**
  * 입찰 내역 페이지네이션 응답 타입

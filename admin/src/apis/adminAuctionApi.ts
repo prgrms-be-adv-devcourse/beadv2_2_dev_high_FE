@@ -36,4 +36,12 @@ export const adminAuctionApi = {
     const response = await client.get("/admin/auctions", { params });
     return extractData<PagedApiResponse<AuctionDetailResponse>>(response.data);
   },
+  startNow: async (auctionId: string): Promise<ApiResponseDto<null>> => {
+    const response = await client.put(`/admin/auctions/${auctionId}/start-now`);
+    return response.data;
+  },
+  endNow: async (auctionId: string): Promise<ApiResponseDto<null>> => {
+    const response = await client.put(`/admin/auctions/${auctionId}/end-now`);
+    return response.data;
+  },
 };

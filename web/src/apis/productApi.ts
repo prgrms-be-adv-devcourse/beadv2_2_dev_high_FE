@@ -99,7 +99,7 @@ export const productApi = {
   getMyProducts: async (
     sellerId?: string,
     params?: ProductQueryParams
-  ): Promise<ApiResponseDto<Product[]>> => {
+  ): Promise<ApiResponseDto<PagedProductResponse>> => {
     console.log("내 상품 목록 조회 API 호출:", sellerId, params);
     const finalParams: ProductQueryParams = {
       ...params,

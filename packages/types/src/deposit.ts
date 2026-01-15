@@ -5,6 +5,7 @@ export const DepositType = {
   USAGE: "USAGE", // 경매 진행
   DEPOSIT: "DEPOSIT",
   REFUND: "REFUND",
+  PAYMENT: "PAYMENT",
 } as const;
 
 export type DepositType = (typeof DepositType)[keyof typeof DepositType];

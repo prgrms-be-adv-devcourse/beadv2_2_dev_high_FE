@@ -22,7 +22,11 @@ import { DepositChargeDialog } from "@/features/mypage/components/DepositChargeD
 import { requestTossPayment } from "@/shared/utils/requestTossPayment";
 import { useAuth } from "@moreauction/auth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { OrderStatus, type OrderResponse } from "@moreauction/types";
+import {
+  DepositType,
+  OrderStatus,
+  type OrderResponse,
+} from "@moreauction/types";
 import { formatWon } from "@moreauction/utils";
 import { queryKeys } from "@/shared/queries/queryKeys";
 import { getErrorMessage } from "@/shared/utils/getErrorMessage";
@@ -129,7 +133,7 @@ const PendingOrders: React.FC = () => {
       const info = await depositApi.createDeposit({
         depositOrderId: orderId,
         amount: payableAmount,
-        type: "USAGE",
+        type: DepositType.PAYMENT,
         userId: user?.userId,
       });
       alert("구매가 완료되었습니다.");

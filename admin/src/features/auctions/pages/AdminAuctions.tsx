@@ -2,6 +2,7 @@ import {
   Box,
   Button,
   Chip,
+  Divider,
   MenuItem,
   Paper,
   Select,
@@ -16,9 +17,18 @@ import {
   Stack,
   Alert,
 } from "@mui/material";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { AuctionStatus, type AuctionDetailResponse } from "@moreauction/types";
+import {
+  AuctionStatus,
+  type AuctionDetailResponse,
+  type PagedApiResponse,
+} from "@moreauction/types";
 import { formatWon } from "@moreauction/utils";
 import { adminAuctionApi } from "@/apis/adminAuctionApi";
 
@@ -60,6 +70,7 @@ const formatDateTime = (value?: string | null) => {
 };
 
 const AdminAuctions = () => {
+  const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState("all");
   const [deletedFilter, setDeletedFilter] = useState("all");
@@ -119,6 +130,41 @@ const AdminAuctions = () => {
     placeholderData: keepPreviousData,
   });
 
+  const updateAuctionStatus = (auctionId: string, status: AuctionStatus) => {
+    queryClient.setQueriesData<PagedApiResponse<AuctionDetailResponse>>(
+      { queryKey: ["admin", "auctions"] },
+      (cached) => {
+        if (!cached) return cached;
+        const nextContent = cached.content.map((auction) =>
+          auction.id === auctionId ? { ...auction, status } : auction
+        );
+        return { ...cached, content: nextContent };
+      }
+    );
+  };
+
+  const startNowMutation = useMutation({
+    mutationFn: (auctionId: string) => adminAuctionApi.startNow(auctionId),
+    onSuccess: (_response, auctionId) => {
+      updateAuctionStatus(auctionId, AuctionStatus.IN_PROGRESS);
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "auctions"],
+        refetchType: "none",
+      });
+    },
+  });
+
+  const endNowMutation = useMutation({
+    mutationFn: (auctionId: string) => adminAuctionApi.endNow(auctionId),
+    onSuccess: (_response, auctionId) => {
+      updateAuctionStatus(auctionId, AuctionStatus.COMPLETED);
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "auctions"],
+        refetchType: "none",
+      });
+    },
+  });
+
   const totalPages = auctionsQuery.data?.totalPages ?? 1;
   const auctions = auctionsQuery.data?.content ?? [];
 
@@ -128,6 +174,16 @@ const AdminAuctions = () => {
     if (!auctionsQuery.isError) return null;
     return "경매 목록을 불러오지 못했습니다.";
   }, [auctionsQuery.isError]);
+
+  const canStartNow = (status: AuctionStatus) =>
+    status === AuctionStatus.READY;
+  const canEndNow = (status: AuctionStatus) =>
+    status === AuctionStatus.IN_PROGRESS;
+  const getDisplayBid = (auction: AuctionDetailResponse) => {
+    const currentBid = auction.currentBid ?? 0;
+    if (currentBid > 0) return currentBid;
+    return auction.startBid ?? 0;
+  };
 
   return (
     <Box>
@@ -337,6 +393,7 @@ const AdminAuctions = () => {
               <TableCell align="center">시작일</TableCell>
               <TableCell align="center">종료일</TableCell>
               <TableCell align="center">삭제</TableCell>
+              <TableCell align="center">즉시 제어</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -354,7 +411,7 @@ const AdminAuctions = () => {
                   {formatWon(auction.startBid)}
                 </TableCell>
                 <TableCell align="center">
-                  {formatWon(auction.currentBid)}
+                  {formatWon(getDisplayBid(auction))}
                 </TableCell>
                 <TableCell align="center">
                   {formatDateTime(auction.auctionStartAt)}
@@ -376,11 +433,52 @@ const AdminAuctions = () => {
                     );
                   })()}
                 </TableCell>
+                <TableCell align="center">
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    alignItems="center"
+                    justifyContent="center"
+                  >
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      disabled={
+                        !canStartNow(auction.status) ||
+                        startNowMutation.isPending ||
+                        endNowMutation.isPending
+                      }
+                      onClick={() => {
+                        if (!window.confirm("경매를 즉시 시작할까요?")) return;
+                        startNowMutation.mutate(auction.id);
+                      }}
+                    >
+                      즉시 시작
+                    </Button>
+                    <Divider orientation="vertical" flexItem />
+                    <Button
+                      size="small"
+                      variant="contained"
+                      color="error"
+                      disabled={
+                        !canEndNow(auction.status) ||
+                        startNowMutation.isPending ||
+                        endNowMutation.isPending
+                      }
+                      onClick={() => {
+                        if (!window.confirm("경매를 즉시 종료할까요?")) return;
+                        endNowMutation.mutate(auction.id);
+                      }}
+                    >
+                      즉시 종료
+                    </Button>
+                  </Stack>
+                </TableCell>
               </TableRow>
             ))}
             {showEmpty && (
               <TableRow>
-                <TableCell colSpan={9}>
+                <TableCell colSpan={10}>
                   <Typography color="text.secondary">
                     조건에 해당하는 경매가 없습니다.
                   </Typography>

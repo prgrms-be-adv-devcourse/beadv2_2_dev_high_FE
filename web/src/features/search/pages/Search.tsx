@@ -88,26 +88,6 @@ const SearchPage: React.FC = () => {
   const [startTo, setStartTo] = useState(initialStartTo);
   const [page, setPage] = useState(initialPage >= 0 ? initialPage : 0);
 
-  const hasFilter = useMemo(
-    () =>
-      !!keyword ||
-      !!status ||
-      selectedCategoryNames.length > 0 ||
-      !!minStartPrice ||
-      !!maxStartPrice ||
-      !!startFrom ||
-      !!startTo,
-    [
-      keyword,
-      status,
-      selectedCategoryNames.length,
-      minStartPrice,
-      maxStartPrice,
-      startFrom,
-      startTo,
-    ]
-  );
-
   const categoriesQuery = useQuery({
     queryKey: queryKeys.categories.all,
     queryFn: async () => {
@@ -312,19 +292,6 @@ const SearchPage: React.FC = () => {
     e.preventDefault();
 
     const trimmed = inputKeyword.trim();
-    const hasFilter =
-      !!trimmed ||
-      !!pendingStatus ||
-      pendingCategoryNames.length > 0 ||
-      !!pendingMinStartPrice.trim() ||
-      !!pendingMaxStartPrice.trim() ||
-      !!pendingStartFrom.trim() ||
-      !!pendingStartTo.trim();
-
-    if (!hasFilter) {
-      // 아무 조건도 없으면 검색하지 않음
-      return;
-    }
 
     setKeyword(trimmed);
     setStatus(pendingStatus);
@@ -342,6 +309,34 @@ const SearchPage: React.FC = () => {
       maxStartPrice: pendingMaxStartPrice.trim(),
       startFrom: pendingStartFrom.trim(),
       startTo: pendingStartTo.trim(),
+      page: 0,
+    });
+  };
+
+  const handleReset = () => {
+    setInputKeyword("");
+    setPendingStatus("");
+    setPendingCategoryNames([]);
+    setPendingMinStartPrice("");
+    setPendingMaxStartPrice("");
+    setPendingStartFrom("");
+    setPendingStartTo("");
+    setKeyword("");
+    setStatus("");
+    setSelectedCategoryNames([]);
+    setMinStartPrice("");
+    setMaxStartPrice("");
+    setStartFrom("");
+    setStartTo("");
+    setPage(0);
+    navigateToSearch({
+      keyword: "",
+      status: "",
+      categories: [],
+      minStartPrice: "",
+      maxStartPrice: "",
+      startFrom: "",
+      startTo: "",
       page: 0,
     });
   };
@@ -394,6 +389,14 @@ const SearchPage: React.FC = () => {
               sx={{ px: 3, py: 1.25, minWidth: 96 }}
             >
               검색
+            </Button>
+            <Button
+              variant="outlined"
+              color="primary"
+              onClick={handleReset}
+              sx={{ px: 3, py: 1.25, minWidth: 96 }}
+            >
+              초기화
             </Button>
           </Stack>
         </form>
@@ -647,13 +650,17 @@ const SearchPage: React.FC = () => {
               gap: 3,
             }}
           >
-            {result.content.map((doc) => {
+            {result.content.map((doc, index) => {
               const coverImage = doc.imageUrl || "";
               const emptyImage = "/images/no_image.png";
+              const cardKey =
+                doc.auctionId ??
+                doc.productId ??
+                `${doc.productName ?? "auction"}-${index}`;
 
               return (
                 <Card
-                  key={doc.auctionId}
+                  key={cardKey}
                   sx={{
                     minHeight: 320,
                     overflow: "hidden",
@@ -751,9 +758,9 @@ const SearchPage: React.FC = () => {
                           spacing={0.75}
                           sx={{ mb: 0.75, flexWrap: "wrap" }}
                         >
-                          {doc.categories!.slice(0, 2).map((c) => (
+                          {doc.categories!.slice(0, 2).map((c, idx) => (
                             <Chip
-                              key={c}
+                              key={`${c}-${idx}`}
                               label={c}
                               size="small"
                               variant="outlined"

@@ -84,7 +84,7 @@ export const userApi = {
    * TODO: 백엔드 엔드포인트에 맞게 경로/파라미터를 조정하세요.
    */
   getUsersByIds: async (userIds: string[]): Promise<ApiResponseDto<User[]>> => {
-    const response = await client.post("/users/ids", { userIds });
+    const response = await client.post("/users", { userIds });
     return response.data;
   },
   getSellerInfo: async (): Promise<ApiResponseDto<any>> => {

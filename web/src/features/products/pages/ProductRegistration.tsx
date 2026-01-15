@@ -13,13 +13,15 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { keyframes } from "@emotion/react";
-import type {
-  AiGeneratedProductDetail,
-  FileGroup,
-  Product,
-  ProductCategory,
-  ProductCreationRequest,
-  ProductUpdateRequest,
+import {
+  AuctionStatus,
+  type AiGeneratedProductDetail,
+  type AuctionUpdateRequest,
+  type FileGroup,
+  type Product,
+  type ProductCategory,
+  type ProductCreationRequest,
+  type ProductUpdateRequest,
 } from "@moreauction/types";
 import { UserRole, hasRole } from "@moreauction/types";
 import {
@@ -67,6 +69,7 @@ import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import { categoryApi } from "@/apis/categoryApi";
 import { fileApi } from "@/apis/fileApi";
 import { productApi } from "@/apis/productApi";
+import { auctionApi } from "@/apis/auctionApi";
 import { useAuth } from "@moreauction/auth";
 import { queryKeys } from "@/shared/queries/queryKeys";
 import { getErrorMessage } from "@/shared/utils/getErrorMessage";
@@ -474,6 +477,107 @@ const ProductRegistration: React.FC = () => {
 
   const isCategorySelectionFull = selectedCategoryIds.length >= 3;
 
+  const updatePendingAuctionsForProduct = async (
+    targetProductId: string,
+    productName: string
+  ) => {
+    const formatAuctionDate = (value: string) => {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return value;
+      }
+      const pad = (num: number) => String(num).padStart(2, "0");
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+        date.getDate()
+      )} ${pad(date.getHours())}:${pad(date.getMinutes())}:00`;
+    };
+
+    try {
+      const auctionsResponse = await auctionApi.getAuctionsByProductId(
+        targetProductId
+      );
+      const auctions = auctionsResponse.data ?? [];
+      const pendingAuctions = auctions.filter((auction) => {
+        const isDeleted =
+          auction.deletedYn === true || auction.deletedYn === "Y";
+        return !isDeleted && auction.status === AuctionStatus.READY;
+      });
+
+      if (pendingAuctions.length === 0) {
+        return;
+      }
+
+      const updatedAuctions = await Promise.all(
+        pendingAuctions.map(async (auction) => {
+          const auctionId = auction.auctionId ?? auction.id;
+          if (!auctionId) return null;
+          const auctionData: AuctionUpdateRequest = {
+            productName,
+            startBid: auction.startBid,
+            auctionStartAt: formatAuctionDate(auction.auctionStartAt),
+            auctionEndAt: formatAuctionDate(auction.auctionEndAt),
+          };
+          const response = await auctionApi.updateAuction(
+            String(auctionId),
+            auctionData
+          );
+          if (response.data) {
+            queryClient.setQueryData(
+              queryKeys.auctions.detail(auctionId),
+              response.data
+            );
+          }
+          return response.data ?? null;
+        })
+      );
+
+      const updatedMap = new Map(
+        updatedAuctions
+          .filter(
+            (auction): auction is NonNullable<typeof auction> => !!auction
+          )
+          .map((auction) => [String(auction.auctionId ?? auction.id), auction])
+      );
+
+      if (updatedMap.size > 0) {
+        queryClient.setQueryData(
+          queryKeys.auctions.byProduct(targetProductId),
+          (prev?: { data?: typeof auctions } | typeof auctions) => {
+            const list = Array.isArray(prev) ? prev : prev?.data ?? [];
+            if (list.length === 0) return prev;
+            const next = list.map((item) => {
+              const id = item.auctionId ?? item.id;
+              const updated = updatedMap.get(String(id));
+              return updated ? { ...item, ...updated } : item;
+            });
+            return Array.isArray(prev) ? next : { ...prev, data: next };
+          }
+        );
+        queryClient.setQueriesData(
+          { queryKey: queryKeys.auctions.lists() },
+          (prev?: { content?: typeof auctions } | typeof auctions) => {
+            const list = Array.isArray(prev) ? prev : prev?.content ?? [];
+            if (list.length === 0) return prev;
+            const next = list.map((item) => {
+              const id = item.auctionId ?? item.id;
+              const updated = updatedMap.get(String(id));
+              return updated ? { ...item, ...updated } : item;
+            });
+            return Array.isArray(prev) ? next : { ...prev, content: next };
+          }
+        );
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.auctions.lists(),
+          refetchType: "none",
+        });
+      }
+    } catch (err) {
+      console.error("대기 중 경매 업데이트 실패:", err);
+      setDialogMessage("대기 중 경매 상품명 업데이트에 실패했습니다.");
+      setDialogOpen(true);
+    }
+  };
+
   const onSubmit = async (data: ProductFormData) => {
     if (formLoading) return;
 
@@ -493,7 +597,9 @@ const ProductRegistration: React.FC = () => {
       : isClearingImages
       ? null
       : undefined;
-    let uploadedFirstFileUrl: string | undefined;
+    let uploadedFirstFileUrl: string | undefined = canReuseExistingImages
+      ? getProductImageUrls(fileGroup)[0]
+      : undefined;
 
     try {
       if (!canReuseExistingImages && localFiles.length > 0) {
@@ -547,6 +653,9 @@ const ProductRegistration: React.FC = () => {
           queryKey: queryKeys.products.mine(user?.userId),
           refetchType: "none",
         });
+        if (productId) {
+          await updatePendingAuctionsForProduct(productId, data.name);
+        }
         alert("상품이 성공적으로 수정되었습니다.");
         navigate(`/products/${createdProduct?.id ?? productId}`);
       } else {
@@ -1178,14 +1287,14 @@ const ProductRegistration: React.FC = () => {
                           대표로 사용됩니다.
                         </Typography>
                       </Box>
-                        <Button
-                          size="small"
-                          color="inherit"
-                          onClick={clearLocalImages}
-                          disabled={aiDraftLoading}
-                        >
-                          전체 제거
-                        </Button>
+                      <Button
+                        size="small"
+                        color="inherit"
+                        onClick={clearLocalImages}
+                        disabled={aiDraftLoading}
+                      >
+                        전체 제거
+                      </Button>
                     </Stack>
 
                     <Box

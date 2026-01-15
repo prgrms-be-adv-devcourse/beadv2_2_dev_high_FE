@@ -28,7 +28,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import { auctionApi } from "@/apis/auctionApi";
 import { depositApi } from "@/apis/depositApi";
 import { fileApi } from "@/apis/fileApi";
@@ -90,10 +90,12 @@ const AuctionDetail: React.FC = () => {
   const wishInFlightRef = useRef(false);
   const wishDesiredRef = useRef(false);
   const wishServerRef = useRef(false);
+  const withdrawInFlightRef = useRef(false);
 
   const [bidLoading, setBidLoading] = useState(false);
   const [withdrawLoading, setWithdrawLoading] = useState(false);
   const [depositLoading, setDepositLoading] = useState(false);
+  const [socketWindowActive, setSocketWindowActive] = useState(false);
   const queryClient = useQueryClient();
   const [insufficientDepositOpen, setInsufficientDepositOpen] = useState(false);
   const [insufficientDepositInfo, setInsufficientDepositInfo] = useState<{
@@ -426,8 +428,16 @@ const AuctionDetail: React.FC = () => {
     if (highestBidderInfo?.id) {
       ids.push(highestBidderInfo.id);
     }
+    if (sellerId) {
+      ids.push(sellerId);
+    }
     return Array.from(new Set(ids));
-  }, [auctionDetail?.highestUserId, bidHistory, highestBidderInfo?.id]);
+  }, [
+    auctionDetail?.highestUserId,
+    bidHistory,
+    highestBidderInfo?.id,
+    sellerId,
+  ]);
 
   const cachedUsers = useMemo(() => {
     const map = new Map<string, User>();
@@ -444,7 +454,7 @@ const AuctionDetail: React.FC = () => {
     return bidderUserIds.filter((id) => {
       const cached = cachedUsers.get(id);
       if (!cached) return true;
-      return !cached.email;
+      return !cached.nickname && !cached.email;
     });
   }, [bidderUserIds, cachedUsers]);
 
@@ -466,43 +476,39 @@ const AuctionDetail: React.FC = () => {
     staleTime: 5 * 60_000,
   });
 
-  const userLabelMap = useMemo(() => {
-    const map = new Map<string, string>();
+  const userInfoMap = useMemo(() => {
+    const map = new Map<string, User>();
     cachedUsers.forEach((userInfo, userId) => {
-      const nickname = userInfo.nickname?.trim();
-      const email = userInfo.email?.trim();
-      if (nickname && email) {
-        map.set(userId, `${nickname} (${email})`);
-      } else if (nickname) {
-        map.set(userId, nickname);
-      } else if (email) {
-        map.set(userId, email);
-      }
+      map.set(userId, userInfo);
     });
     (usersQuery.data ?? []).forEach((userInfo) => {
       if (!userInfo?.userId) return;
-      const nickname = userInfo.nickname?.trim();
-      const email = userInfo.email?.trim();
-      if (nickname && email) {
-        map.set(userInfo.userId, `${nickname} (${email})`);
-      } else if (nickname) {
-        map.set(userInfo.userId, nickname);
-      } else if (email) {
-        map.set(userInfo.userId, email);
-      }
+      map.set(userInfo.userId, userInfo);
     });
     return map;
   }, [cachedUsers, usersQuery.data]);
 
+  const formatUserLabel = (user?: User | null): string | null => {
+    if (!user) return null;
+    const nickname = user.nickname?.trim();
+    const name = user.name?.trim();
+    const email = (user.maskedEmail ?? user.email)?.trim();
+    const displayName = nickname || name;
+    if (displayName && email) return `${displayName} (${email})`;
+    if (displayName) return displayName;
+    if (email) return email;
+    return null;
+  };
+
   const getBidderLabel = useCallback(
     (userId?: string, fallbackName?: string) => {
       if (!userId) return "-";
-      const label = userLabelMap.get(userId);
+      const label = formatUserLabel(userInfoMap.get(userId));
       if (label) return label;
       if (fallbackName) return fallbackName;
       return null;
     },
-    [userLabelMap]
+    [userInfoMap]
   );
 
   const isUserInfoLoading = missingUserIds.length > 0 && usersQuery.isLoading;
@@ -513,6 +519,49 @@ const AuctionDetail: React.FC = () => {
     resolvedHighestBidderId,
     highestBidderInfo?.username
   );
+  const sellerLabel = getBidderLabel(sellerId) ?? sellerId ?? "-";
+
+  useEffect(() => {
+    const startValue = auctionDetail?.auctionStartAt;
+    const endValue = auctionDetail?.auctionEndAt;
+    if (!startValue || !endValue) {
+      setSocketWindowActive(auctionDetail?.status === AuctionStatus.IN_PROGRESS);
+      return;
+    }
+    const startAt = new Date(startValue).getTime();
+    const endAt = new Date(endValue).getTime();
+    if (Number.isNaN(startAt) || Number.isNaN(endAt)) {
+      setSocketWindowActive(auctionDetail?.status === AuctionStatus.IN_PROGRESS);
+      return;
+    }
+
+    const windowStart = startAt - 10 * 60 * 1000;
+    const windowEnd = endAt + 10 * 60 * 1000;
+    let timerId: number | undefined;
+
+    const updateWindow = () => {
+      const now = Date.now();
+      setSocketWindowActive(now >= windowStart && now <= windowEnd);
+      if (now < windowStart) {
+        timerId = window.setTimeout(
+          updateWindow,
+          Math.max(0, windowStart - now)
+        );
+      } else if (now < windowEnd) {
+        timerId = window.setTimeout(
+          updateWindow,
+          Math.max(0, windowEnd - now)
+        );
+      }
+    };
+
+    updateWindow();
+    return () => {
+      if (timerId) {
+        window.clearTimeout(timerId);
+      }
+    };
+  }, [auctionDetail?.auctionEndAt, auctionDetail?.auctionStartAt, auctionDetail?.status]);
 
   const handleNewMessage = useCallback(
     (message: IMessage) => {
@@ -586,7 +635,7 @@ const AuctionDetail: React.FC = () => {
   );
 
   const shouldConnect =
-    auctionDetail?.status === AuctionStatus.IN_PROGRESS && !!auctionId;
+    socketWindowActive && !!auctionId;
   const { isConnected, isRetrying, connectionState } = useStomp({
     topic: shouldConnect ? `/topic/auction.${auctionId}` : "",
     onMessage: handleNewMessage,
@@ -619,6 +668,10 @@ const AuctionDetail: React.FC = () => {
     }
     if (participationStatus.isWithdrawn) {
       alert("경매 참여를 포기하여 입찰할 수 없습니다.");
+      return;
+    }
+    if (participationStatus.isRefund) {
+      alert("보증금이 환급되어 입찰할 수 없습니다.");
       return;
     }
     if (!participationStatus.isParticipated) {
@@ -688,8 +741,9 @@ const AuctionDetail: React.FC = () => {
   };
 
   const handleWithdraw = async () => {
-    if (withdrawLoading) return;
+    if (withdrawLoading || withdrawInFlightRef.current) return;
     try {
+      withdrawInFlightRef.current = true;
       setWithdrawLoading(true);
       const res = await auctionApi.withdrawnParticipation(auctionId!);
       setNewBidAmount("");
@@ -717,6 +771,7 @@ const AuctionDetail: React.FC = () => {
       alert(err?.data?.message);
     } finally {
       setWithdrawLoading(false);
+      withdrawInFlightRef.current = false;
     }
   };
 
@@ -762,22 +817,15 @@ const AuctionDetail: React.FC = () => {
       });
 
       queryClient.setQueryData(
-        queryKeys.deposit.balance(),
-        (prev: number | undefined) => {
-          const base = typeof prev === "number" ? prev : 0;
-          const next = Math.max(base - depositAmount, 0);
-          localStorage.setItem("depositBalance", String(next));
-          return next;
-        }
-      );
-
-      queryClient.setQueryData(
         queryKeys.auctions.participation(auctionId),
         res.data
       );
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: queryKeys.deposit.account(),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.deposit.balance(),
         }),
         queryClient.invalidateQueries({
           queryKey: queryKeys.deposit.historyAll(),
@@ -788,6 +836,7 @@ const AuctionDetail: React.FC = () => {
     } catch (error: any) {
       alert(error?.data?.message ?? "보증금 결제중 에러가 발생했습니다.");
     } finally {
+      setOpenDepositPrompt(false);
       setDepositLoading(false);
     }
   };
@@ -860,6 +909,11 @@ const AuctionDetail: React.FC = () => {
     auctionDetail?.status === AuctionStatus.READY &&
     user &&
     user?.userId === auctionDetail.sellerId;
+  const canReregister =
+    isSeller &&
+    !!auctionDetail?.productId &&
+    (auctionDetail.status === AuctionStatus.FAILED ||
+      auctionDetail.status === AuctionStatus.CANCELLED);
 
   return (
     <>
@@ -936,7 +990,7 @@ const AuctionDetail: React.FC = () => {
                       <Skeleton variant="text" width="70%" />
                       <Skeleton variant="text" width="40%" />
                     </Stack>
-                  ) : canRenderDetail ? (
+                  ) : canRenderDetail && participationQuery.data ? (
                     <>
                       {showParticipationWarning && (
                         <Alert severity="warning" sx={{ mb: 1 }}>
@@ -953,6 +1007,10 @@ const AuctionDetail: React.FC = () => {
                         refundRequest={refundRequest}
                       />
                     </>
+                  ) : canRenderDetail ? (
+                    <Alert severity="error">
+                      참여 현황을 불러오지 못했습니다.
+                    </Alert>
                   ) : (
                     <Alert severity="error">
                       경매 정보를 불러오지 못했습니다.
@@ -1038,6 +1096,7 @@ const AuctionDetail: React.FC = () => {
                     showConnectionStatus={shouldConnect}
                     isRetrying={isRetrying}
                     isWithdrawn={participationStatus.isWithdrawn}
+                    isRefund={participationStatus.isRefund}
                     isAuthenticated={isAuthenticated}
                     isParticipationUnavailable={isParticipationUnavailable}
                     isSeller={isSeller}
@@ -1046,6 +1105,20 @@ const AuctionDetail: React.FC = () => {
                   <Alert severity="info">
                     경매 정보를 불러오면 입찰할 수 있습니다.
                   </Alert>
+                )}
+                {canReregister && (
+                  <>
+                    <Divider />
+                    <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+                      <Button
+                        variant="contained"
+                        component={RouterLink}
+                        to={`/auctions/new/${auctionDetail?.productId}`}
+                      >
+                        경매 재등록
+                      </Button>
+                    </Box>
+                  </>
                 )}
               </Stack>
             </CardContent>
@@ -1128,6 +1201,7 @@ const AuctionDetail: React.FC = () => {
         setOpenWithdrawnPopup={setOpenWithdrawnPopup}
         handleWithdraw={handleWithdraw}
         isCurrentUserHighestBidder={resolvedHighestBidderId === user?.userId}
+        isWithdrawLoading={withdrawLoading}
       />
 
       <Dialog
@@ -1275,6 +1349,7 @@ const AuctionDetail: React.FC = () => {
                   auctionDetail?.productName ??
                   ""
                 }
+                sellerLabel={sellerLabel}
                 description={
                   productDetailQuery.data?.description ??
                   auctionDetail?.description ??

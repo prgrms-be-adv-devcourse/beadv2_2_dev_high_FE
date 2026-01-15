@@ -22,6 +22,7 @@ import { DepositChargeDialog } from "@/features/mypage/components/DepositChargeD
 import { requestTossPayment } from "@/shared/utils/requestTossPayment";
 import { useAuth } from "@moreauction/auth";
 import {
+  DepositType,
   getOrderStatusLabel,
   OrderStatus,
   type OrderResponse,
@@ -113,7 +114,7 @@ const OrderDetail: React.FC = () => {
       const info = await depositApi.createDeposit({
         depositOrderId: order.id,
         amount: payableAmount,
-        type: "USAGE",
+        type: DepositType.PAYMENT,
         userId: user?.userId,
       });
       if (typeof info?.data?.balance === "number") {
@@ -139,8 +140,12 @@ const OrderDetail: React.FC = () => {
           Math.max((typeof prev === "number" ? prev : 0) - 1, 0)
       );
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.orders.pendings() }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.orders.histories() }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.orders.pendings(),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.orders.histories(),
+        }),
         queryClient.invalidateQueries({
           queryKey: queryKeys.orders.detail(order.id),
           refetchType: "none",

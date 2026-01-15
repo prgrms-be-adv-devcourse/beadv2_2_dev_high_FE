@@ -15,6 +15,7 @@ import { auctionApi } from "@/apis/auctionApi";
 import { depositApi } from "@/apis/depositApi";
 import { useAuth } from "@moreauction/auth";
 import { queryKeys } from "@/shared/queries/queryKeys";
+import { DepositType } from "@moreauction/types";
 
 export default function PaymentSuccess() {
   const navigate = useNavigate();
@@ -117,7 +118,7 @@ export default function PaymentSuccess() {
                 const info = await depositApi.createDeposit({
                   depositOrderId: purchaseOrderId,
                   amount: purchaseAmount,
-                  type: "USAGE",
+                  type: DepositType.PAYMENT,
                   userId: user?.userId,
                 });
                 if (typeof info?.data?.balance === "number") {
