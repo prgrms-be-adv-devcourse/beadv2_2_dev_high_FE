@@ -28,6 +28,7 @@ export interface OrderResponse {
   sellerId: string;
   buyerId: string;
   auctionId: string;
+  deletedYn?: boolean | "Y" | "N";
   winningAmount: number;
   confirmDate?: string | null;
   status: OrderStatus;

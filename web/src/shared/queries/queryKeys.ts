@@ -24,6 +24,8 @@ export const queryKeys = {
     details: () => [...queryKeys.auctions.all, "detail"] as const,
     detail: (auctionId?: string | null) =>
       [...queryKeys.auctions.all, "detail", auctionId ?? "unknown"] as const,
+    many: (auctionIds?: Array<string | number | null | undefined>) =>
+      [...queryKeys.auctions.all, "many", toStableIdList(auctionIds)] as const,
     byProduct: (productId?: string | null) =>
       [...queryKeys.auctions.all, "byProduct", productId ?? "unknown"] as const,
     recommendation: (productId?: string | null) =>
@@ -181,6 +183,8 @@ export const queryKeys = {
       [...queryKeys.settlement.all, "summary", pageSize] as const,
     history: (pageSize: number) =>
       [...queryKeys.settlement.all, "history", pageSize] as const,
+    groupItems: (groupId: string, pageSize: number) =>
+      [...queryKeys.settlement.all, "group", groupId, pageSize] as const,
   },
   search: {
     all: ["search"] as const,
@@ -204,6 +208,13 @@ export const queryKeys = {
         startFrom,
         startTo,
         page,
+      ] as const,
+    similar: (productId?: string | null, limit?: number | null) =>
+      [
+        ...queryKeys.search.all,
+        "similar",
+        productId ?? "unknown",
+        limit ?? "default",
       ] as const,
   },
 };

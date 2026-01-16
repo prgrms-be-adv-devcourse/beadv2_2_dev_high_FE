@@ -44,7 +44,7 @@ const getHistoryTypeText = (type: DepositType) => {
     case DepositType.REFUND:
       return "보증금 환불";
     case DepositType.PAYMENT:
-      return "결제";
+      return "구매";
     default:
       return String(type);
   }

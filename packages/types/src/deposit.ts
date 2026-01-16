@@ -1,8 +1,8 @@
 import type { PagedApiResponse } from "./common";
 
 export const DepositType = {
-  CHARGE: "CHARGE", // 경매 대기 (시작 전)
-  USAGE: "USAGE", // 경매 진행
+  CHARGE: "CHARGE",
+  USAGE: "USAGE",
   DEPOSIT: "DEPOSIT",
   REFUND: "REFUND",
   PAYMENT: "PAYMENT",

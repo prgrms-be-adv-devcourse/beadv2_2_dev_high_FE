@@ -4,6 +4,7 @@ import type {
   AuctionCreationRequest,
   AuctionDetailResponse,
   AuctionParticipationResponse,
+  AuctionResponse,
   PagedAuctionParticipationResponse,
   AuctionQueryParams,
   AuctionRankingResponse,
@@ -13,6 +14,7 @@ import type {
   PagedAuctionDocument,
   PagedAuctionResponse,
   PagedBidHistoryResponse,
+  SimilarProductResponse,
 } from "@moreauction/types";
 import { client } from "@/apis/client";
 // Auction 타입 임포트
@@ -33,6 +35,19 @@ export const auctionApi = {
       params,
       paramsSerializer: (params) =>
         qs.stringify(params, { arrayFormat: "repeat" }),
+    });
+    return res.data;
+  },
+
+  /**
+   * 경매 ID 리스트로 경매 정보를 조회합니다.
+   */
+  getAuctionsByIds: async (
+    auctionIds: string[]
+  ): Promise<ApiResponseDto<AuctionResponse[]>> => {
+    const encodedIds = auctionIds.map((id) => encodeURIComponent(id)).join(",");
+    const res = await client.get(`/auctions/by-ids`, {
+      params: { auctionIds: encodedIds },
     });
     return res.data;
   },
@@ -172,6 +187,15 @@ export const auctionApi = {
       params,
       paramsSerializer: (params) =>
         qs.stringify(params, { arrayFormat: "repeat" }),
+    });
+    return res.data;
+  },
+  getSimilarProducts: async (
+    productId: string,
+    limit = 4
+  ): Promise<ApiResponseDto<SimilarProductResponse[]>> => {
+    const res = await client.get("/search/similar", {
+      params: { productId, limit },
     });
     return res.data;
   },

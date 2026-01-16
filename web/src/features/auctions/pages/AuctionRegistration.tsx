@@ -351,6 +351,12 @@ const AuctionRegistration: React.FC = () => {
             refetchType: "none",
           });
         }
+        if (targetProductId && targetAuctionId) {
+          await productApi.updateLatestAuctionId(
+            targetProductId,
+            targetAuctionId
+          );
+        }
         alert("경매가 성공적으로 수정되었습니다.");
         if (targetProductId) {
           navigate(`/products/${targetProductId}`);

@@ -400,7 +400,7 @@ const ProductDetail: React.FC = () => {
         }
       );
       await auctionApi.removeAuction(auctionKey);
-      if (product?.latestAuctionId === auctionKey) {
+      if (product?.id) {
         await productApi.updateLatestAuctionId(product.id, null);
       }
       queryClient.removeQueries({
@@ -411,7 +411,6 @@ const ProductDetail: React.FC = () => {
           queryKeys.products.detail(product.id),
           (prev?: Product | null) => {
             if (!prev) return prev;
-            if (prev.latestAuctionId !== auctionKey) return prev;
             return { ...prev, latestAuctionId: null };
           }
         );

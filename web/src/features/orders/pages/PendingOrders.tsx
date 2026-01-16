@@ -15,7 +15,7 @@ import {
 } from "@mui/material";
 import { format } from "date-fns";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Link as RouterLink, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { depositApi } from "@/apis/depositApi";
 import { orderApi } from "@/apis/orderApi";
 import { DepositChargeDialog } from "@/features/mypage/components/DepositChargeDialog";
@@ -176,7 +176,10 @@ const PendingOrders: React.FC = () => {
           const account = await depositApi.getAccount();
           const balance = account?.data?.balance ?? 0;
           const shortage = Math.max(0, payableAmount - balance);
-          const recommendedCharge = Math.ceil(shortage / 1000) * 1000;
+          const recommendedCharge = Math.max(
+            1000,
+            Math.ceil(shortage / 100) * 100
+          );
           setInsufficientInfo({
             balance,
             needed: payableAmount,
@@ -246,13 +249,18 @@ const PendingOrders: React.FC = () => {
                     new Date(order.createdAt),
                     "yyyy-MM-dd HH:mm"
                   );
+                  const payLimitAt = order.payLimitDate
+                    ? new Date(order.payLimitDate)
+                    : null;
+                  const isPayExpired =
+                    payLimitAt != null && Date.now() > payLimitAt.getTime();
 
                   return (
                     <Paper
                       key={order.id}
                       variant="outlined"
-                      component={RouterLink}
-                      to={`/orders/${order.id}`}
+                      role="button"
+                      tabIndex={0}
                       sx={{
                         p: 2,
                         borderRadius: 2,
@@ -268,6 +276,17 @@ const PendingOrders: React.FC = () => {
                           boxShadow: "0 10px 24px rgba(15, 23, 42, 0.12)",
                           borderColor: "rgba(59, 130, 246, 0.4)",
                         },
+                        "&:focus-visible": {
+                          outline: "2px solid rgba(59, 130, 246, 0.5)",
+                          outlineOffset: 2,
+                        },
+                      }}
+                      onClick={() => navigate(`/orders/${order.id}`)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          navigate(`/orders/${order.id}`);
+                        }
                       }}
                     >
                       <Stack spacing={1.5}>
@@ -290,13 +309,26 @@ const PendingOrders: React.FC = () => {
                               주문일시 · {createdAt}
                             </Typography>
                           </Box>
+                          <Button
+                            variant="contained"
+                            size="small"
+                            disabled={isPayExpired}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              navigate(`/orders/${order.id}?pay=1`);
+                            }}
+                          >
+                            결제하기
+                          </Button>
                         </Box>
                         <Box
                           sx={{
                             display: "grid",
                             gridTemplateColumns: {
                               xs: "1fr",
-                              sm: "repeat(3, 1fr)",
+                              sm: "repeat(2, 1fr)",
+                              md: "repeat(4, 1fr)",
                             },
                             gap: 1.5,
                           }}
@@ -334,9 +366,28 @@ const PendingOrders: React.FC = () => {
                               {formatWon(payableAmount)}
                             </Typography>
                           </Box>
+                          <Box>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              결제 기한
+                            </Typography>
+                            <Typography
+                              variant="body2"
+                              fontWeight={600}
+                              color={isPayExpired ? "error" : "text.primary"}
+                            >
+                              {payLimitAt
+                                ? format(payLimitAt, "yyyy-MM-dd HH:mm")
+                                : "-"}
+                            </Typography>
+                          </Box>
                         </Box>
                         <Typography variant="caption" color="text.secondary">
-                          자세한 결제는 주문 상세에서 진행할 수 있습니다.
+                          {isPayExpired
+                            ? "결제 기한이 만료되었습니다."
+                            : "결제 버튼을 눌러 바로 진행할 수 있습니다."}
                         </Typography>
                       </Stack>
                     </Paper>

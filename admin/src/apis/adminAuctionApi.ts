@@ -22,6 +22,7 @@ type AdminAuctionListParams = {
   endTo?: string;
 };
 
+
 const extractData = <T>(payload: ApiResponseDto<T> | T): T => {
   if (payload && typeof payload === "object" && "data" in payload) {
     return (payload as ApiResponseDto<T>).data;

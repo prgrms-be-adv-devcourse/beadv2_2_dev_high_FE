@@ -131,12 +131,21 @@ export default function PaymentSuccess() {
                   (prev: number | undefined) =>
                     Math.max((typeof prev === "number" ? prev : 0) - 1, 0)
                 );
+                queryClient.setQueryData(
+                  queryKeys.orders.pending(user?.userId),
+                  (prev: Array<{ id: string }> | undefined) =>
+                    (prev ?? []).filter((item) => item.id !== purchaseOrderId)
+                );
                 await queryClient.invalidateQueries({
                   queryKey: queryKeys.orders.pendingCount(),
                 });
                 await Promise.all([
                   queryClient.invalidateQueries({
                     queryKey: queryKeys.orders.pendings(),
+                  }),
+                  queryClient.invalidateQueries({
+                    queryKey: queryKeys.orders.pending(user?.userId),
+                    refetchType: "none",
                   }),
                   queryClient.invalidateQueries({
                     queryKey: queryKeys.orders.histories(),

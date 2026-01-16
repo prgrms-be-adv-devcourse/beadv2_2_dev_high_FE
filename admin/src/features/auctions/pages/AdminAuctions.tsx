@@ -129,7 +129,6 @@ const AdminAuctions = () => {
     staleTime: 20_000,
     placeholderData: keepPreviousData,
   });
-
   const updateAuctionStatus = (auctionId: string, status: AuctionStatus) => {
     queryClient.setQueriesData<PagedApiResponse<AuctionDetailResponse>>(
       { queryKey: ["admin", "auctions"] },
@@ -175,8 +174,7 @@ const AdminAuctions = () => {
     return "경매 목록을 불러오지 못했습니다.";
   }, [auctionsQuery.isError]);
 
-  const canStartNow = (status: AuctionStatus) =>
-    status === AuctionStatus.READY;
+  const canStartNow = (status: AuctionStatus) => status === AuctionStatus.READY;
   const canEndNow = (status: AuctionStatus) =>
     status === AuctionStatus.IN_PROGRESS;
   const getDisplayBid = (auction: AuctionDetailResponse) => {
@@ -390,6 +388,7 @@ const AdminAuctions = () => {
               <TableCell align="center">상태</TableCell>
               <TableCell align="center">시작가</TableCell>
               <TableCell align="center">현재가</TableCell>
+              <TableCell align="center">최고 입찰자</TableCell>
               <TableCell align="center">시작일</TableCell>
               <TableCell align="center">종료일</TableCell>
               <TableCell align="center">삭제</TableCell>
@@ -412,6 +411,9 @@ const AdminAuctions = () => {
                 </TableCell>
                 <TableCell align="center">
                   {formatWon(getDisplayBid(auction))}
+                </TableCell>
+                <TableCell align="center">
+                  {auction.highestUserId ?? "-"}
                 </TableCell>
                 <TableCell align="center">
                   {formatDateTime(auction.auctionStartAt)}
@@ -478,7 +480,7 @@ const AdminAuctions = () => {
             ))}
             {showEmpty && (
               <TableRow>
-                <TableCell colSpan={10}>
+                <TableCell colSpan={11}>
                   <Typography color="text.secondary">
                     조건에 해당하는 경매가 없습니다.
                   </Typography>
