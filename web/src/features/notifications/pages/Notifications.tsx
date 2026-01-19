@@ -15,6 +15,7 @@ import {
   type InfiniteData,
   useInfiniteQuery,
   useMutation,
+  useQuery,
   useQueryClient,
   type QueryKey,
 } from "@tanstack/react-query";
@@ -45,6 +46,18 @@ const Notifications: React.FC = () => {
   const [showUnreadOnly, setShowUnreadOnly] = useState(true);
   const queryClient = useQueryClient();
 
+  const unreadCountQuery = useQuery({
+    queryKey: queryKeys.notifications.unreadCount(),
+    queryFn: () => notificationApi.getUnreadCount(),
+    enabled: isAuthenticated && !!user?.userId,
+    staleTime: 30_000,
+  });
+
+  const unreadCount =
+    typeof unreadCountQuery.data === "number"
+      ? unreadCountQuery.data
+      : 0;
+
   const notificationsQuery = useInfiniteQuery<
     PagedNotificationResponse,
     Error,
@@ -52,14 +65,24 @@ const Notifications: React.FC = () => {
     QueryKey,
     number
   >({
-    queryKey: queryKeys.notifications.list(user?.userId),
+    queryKey: showUnreadOnly
+      ? queryKeys.notifications.unreadList(user?.userId)
+      : queryKeys.notifications.list(user?.userId),
     queryFn: async ({ pageParam = 0 }) =>
-      notificationApi.getNotifications({
-        page: pageParam,
-        size: 20,
-      }),
+      showUnreadOnly
+        ? notificationApi.getUnreadNotifications({
+            page: pageParam,
+            size: 20,
+          })
+        : notificationApi.getNotifications({
+            page: pageParam,
+            size: 20,
+          }),
     initialPageParam: 0,
-    enabled: isAuthenticated && !!user?.userId,
+    enabled:
+      isAuthenticated &&
+      !!user?.userId &&
+      (!showUnreadOnly || (unreadCount ?? 0) > 0),
     getNextPageParam: (lastPage) =>
       lastPage?.last ? undefined : (lastPage?.number ?? 0) + 1,
     staleTime: 30_000,
@@ -88,8 +111,8 @@ const Notifications: React.FC = () => {
     mutationFn: (notificationId: string) =>
       notificationApi.getNotifi(notificationId),
     onSuccess: (_, notificationId) => {
-      queryClient.setQueryData(
-        queryKeys.notifications.list(user?.userId),
+      queryClient.setQueriesData(
+        { queryKey: queryKeys.notifications.lists() },
         (oldData: any) => {
           if (!oldData?.pages) return oldData;
           return {
@@ -126,8 +149,8 @@ const Notifications: React.FC = () => {
   const markAllAsReadMutation = useMutation({
     mutationFn: () => notificationApi.readAll(),
     onSuccess: () => {
-      queryClient.setQueryData(
-        queryKeys.notifications.list(user?.userId),
+      queryClient.setQueriesData(
+        { queryKey: queryKeys.notifications.lists() },
         (oldData: any) => {
           if (!oldData?.pages) return oldData;
           return {
@@ -205,21 +228,7 @@ const Notifications: React.FC = () => {
               {errorMessage}
             </Alert>
           )}
-          {!showSkeleton && !errorMessage && notifications.length === 0 && (
-            <Alert severity="info" sx={{ width: "100%" }}>
-              새로운 알림이 없습니다.
-            </Alert>
-          )}
-          {!showSkeleton &&
-            !errorMessage &&
-            notifications.length > 0 &&
-            showUnreadOnly &&
-            visibleNotifications.length === 0 && (
-              <Alert severity="info" sx={{ width: "100%", mb: 2 }}>
-                안 읽은 알림이 없습니다.
-              </Alert>
-            )}
-          {!showSkeleton && !errorMessage && notifications.length > 0 && (
+          {!showSkeleton && !errorMessage && (
             <Box
               sx={{
                 display: "flex",
@@ -251,6 +260,7 @@ const Notifications: React.FC = () => {
                 onClick={() => markAllAsReadMutation.mutate()}
                 disabled={
                   markAllAsReadMutation.isPending ||
+                  notifications.length === 0 ||
                   notifications.every((n) => n.readYn)
                 }
               >
@@ -259,6 +269,22 @@ const Notifications: React.FC = () => {
             </Box>
           )}
           <Box sx={{ maxHeight: "60vh", overflowY: "auto" }}>
+            {!showSkeleton && !errorMessage && notifications.length === 0 && (
+              <Alert severity="info" sx={{ width: "100%", mb: 2 }}>
+                {showUnreadOnly
+                  ? "읽지 않은 알림이 없습니다."
+                  : "새로운 알림이 없습니다."}
+              </Alert>
+            )}
+            {!showSkeleton &&
+              !errorMessage &&
+              notifications.length > 0 &&
+              showUnreadOnly &&
+              visibleNotifications.length === 0 && (
+                <Alert severity="info" sx={{ width: "100%", mb: 2 }}>
+                  안 읽은 알림이 없습니다.
+                </Alert>
+              )}
             {showSkeleton &&
               Array.from({ length: 6 }).map((_, idx) => (
                 <Box

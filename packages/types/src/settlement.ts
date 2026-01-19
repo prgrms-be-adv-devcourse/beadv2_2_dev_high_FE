@@ -1,14 +1,18 @@
 import type { PagedApiResponse } from "./common";
 
 export const SettlementStatus = {
-  PENDING: "PENDING",
+  WAITING: "WAITING",
   COMPLETED: "COMPLETED",
+  FAILED: "FAILED",
 } as const;
 
 export type SettlementStatus = string;
 
+export type DepositStatus = string;
+
 export interface SettlementResponse {
   id: string;
+  settlementGroupId?: string;
   orderId: string;
   sellerId: string;
   buyerId: string;
@@ -16,7 +20,7 @@ export interface SettlementResponse {
   winningAmount: number;
   charge: number;
   finalAmount: number;
-  dueDate: string;
+  dueDate?: string;
   status: SettlementStatus;
   payYn: string;
   inputDate: string;
@@ -25,12 +29,16 @@ export interface SettlementResponse {
 }
 
 export interface SettlementSummary {
+  id: string;
   sellerId: string;
-  totalWinningAmount: number;
+  settlementDate: string;
   totalCharge: number;
   totalFinalAmount: number;
-  date?: string;
-  count: number;
+  paidCharge: number;
+  paidFinalAmount: number;
+  depositStatus: DepositStatus;
+  createdAt: string;
+  updateDate: string;
 }
 
 export type PagedSettlementResponse = PagedApiResponse<SettlementResponse>;

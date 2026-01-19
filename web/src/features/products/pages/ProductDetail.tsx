@@ -400,7 +400,7 @@ const ProductDetail: React.FC = () => {
         }
       );
       await auctionApi.removeAuction(auctionKey);
-      if (product?.latestAuctionId === auctionKey) {
+      if (product?.id) {
         await productApi.updateLatestAuctionId(product.id, null);
       }
       queryClient.removeQueries({
@@ -411,7 +411,6 @@ const ProductDetail: React.FC = () => {
           queryKeys.products.detail(product.id),
           (prev?: Product | null) => {
             if (!prev) return prev;
-            if (prev.latestAuctionId !== auctionKey) return prev;
             return { ...prev, latestAuctionId: null };
           }
         );
@@ -615,6 +614,13 @@ const ProductDetail: React.FC = () => {
                   <Skeleton variant="text" width="70%" />
                   <Skeleton variant="text" width="90%" />
                   <Skeleton variant="text" width="80%" />
+                </CardContent>
+                <CardContent sx={{ pt: 0 }}>
+                  <Stack spacing={1}>
+                    <Skeleton variant="text" width="85%" />
+                    <Skeleton variant="text" width="80%" />
+                    <Skeleton variant="text" width="70%" />
+                  </Stack>
                 </CardContent>
               </Card>
             ) : showProductError ? (
@@ -916,10 +922,11 @@ const ProductDetail: React.FC = () => {
                     <Alert severity="error">{auctionErrorMessage}</Alert>
                   ) : isAuctionLoading ? (
                     <Stack spacing={1}>
-                      <Skeleton variant="text" width="45%" />
+                      <Skeleton variant="text" width="55%" />
+                      <Skeleton variant="text" width="70%" />
+                      <Skeleton variant="text" width="50%" />
                       <Skeleton variant="text" width="60%" />
-                      <Skeleton variant="text" width="40%" />
-                      <Skeleton variant="rounded" height={36} width="35%" />
+                      <Skeleton variant="rounded" height={64} width="55%" />
                     </Stack>
                   ) : activeAuction ? (
                     <>

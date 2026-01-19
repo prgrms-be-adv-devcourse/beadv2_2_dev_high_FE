@@ -33,4 +33,19 @@ export const settlementApi = {
     );
     return res.data;
   },
+
+  getSettlementGroupItems: async (
+    groupId: string,
+    params?: {
+      page?: number;
+      size?: number;
+      sort?: string[];
+    }
+  ): Promise<ApiResponseDto<PagedSettlementResponse>> => {
+    const res = await client.get<ApiResponseDto<PagedSettlementResponse>>(
+      `/settle/group/${groupId}/items`,
+      { params }
+    );
+    return res.data;
+  },
 };

@@ -9,6 +9,7 @@ export type OrderAdminSearchFilter = {
   auctionId?: string;
   status?: OrderStatus;
   payYn?: string;
+  deletedYn?: "Y" | "N" | "all";
   createdFrom?: string;
   createdTo?: string;
 };
@@ -21,7 +22,24 @@ type OrderListParams = {
 };
 
 type OrderUpdateRequest = {
+  id?: string;
   status?: OrderStatus;
+};
+
+type PayLimitUpdateRequest = {
+  id: string;
+  payLimitDate: string;
+};
+
+type OrderCreateRequest = {
+  sellerId: string;
+  buyerId: string;
+  productId: string;
+  productName: string;
+  auctionId: string;
+  winningAmount: number;
+  depositAmount: number;
+  winningDate: string;
 };
 
 const extractData = <T>(payload: ApiResponseDto<T> | T): T => {
@@ -49,7 +67,22 @@ export const adminOrderApi = {
     orderId: string,
     payload: OrderUpdateRequest
   ): Promise<ApiResponseDto<OrderResponse>> => {
-    const response = await client.patch(`/admin/orders/${orderId}`, payload);
+    const response = await client.patch(`/admin/orders`, {
+      id: orderId,
+      ...payload,
+    });
+    return response.data;
+  },
+  updatePayLimit: async (
+    payload: PayLimitUpdateRequest
+  ): Promise<ApiResponseDto<OrderResponse>> => {
+    const response = await client.patch(`/admin/orders/pay-limit`, payload);
+    return response.data;
+  },
+  createOrder: async (
+    payload: OrderCreateRequest
+  ): Promise<ApiResponseDto<OrderResponse>> => {
+    const response = await client.post(`/admin/orders`, payload);
     return response.data;
   },
   deleteOrder: async (orderId: string): Promise<ApiResponseDto<null>> => {

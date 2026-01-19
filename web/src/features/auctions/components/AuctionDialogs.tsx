@@ -1,5 +1,6 @@
 import {
   Button,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -23,6 +24,7 @@ interface AuctionDialogsProps {
   setOpenWithdrawnPopup: (open: boolean) => void;
   handleWithdraw: () => void;
   isCurrentUserHighestBidder: boolean;
+  isWithdrawLoading?: boolean;
 }
 
 const AuctionDialogs: React.FC<AuctionDialogsProps> = ({
@@ -38,6 +40,7 @@ const AuctionDialogs: React.FC<AuctionDialogsProps> = ({
   setOpenWithdrawnPopup,
   handleWithdraw,
   isCurrentUserHighestBidder,
+  isWithdrawLoading = false,
 }) => {
   return (
     <>
@@ -86,7 +89,14 @@ const AuctionDialogs: React.FC<AuctionDialogsProps> = ({
             autoFocus
             disabled={isDepositLoading}
           >
-            보증금 결제
+            {isDepositLoading ? (
+              <>
+                <CircularProgress size={16} sx={{ mr: 1 }} />
+                처리중...
+              </>
+            ) : (
+              "보증금 결제"
+            )}
           </Button>
         </DialogActions>
       </Dialog>
@@ -94,7 +104,11 @@ const AuctionDialogs: React.FC<AuctionDialogsProps> = ({
       {/* 경매 포기 확인 */}
       <Dialog
         open={openWithdrawnPopup}
-        onClose={() => setOpenWithdrawnPopup(false)}
+        onClose={() => {
+          if (!isWithdrawLoading) {
+            setOpenWithdrawnPopup(false);
+          }
+        }}
       >
         <DialogTitle>경매 포기</DialogTitle>
         <DialogContent>
@@ -110,13 +124,25 @@ const AuctionDialogs: React.FC<AuctionDialogsProps> = ({
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenWithdrawnPopup(false)}>취소</Button>
+          <Button
+            onClick={() => setOpenWithdrawnPopup(false)}
+            disabled={isWithdrawLoading}
+          >
+            취소
+          </Button>
           <Button
             onClick={handleWithdraw}
             autoFocus
-            disabled={isCurrentUserHighestBidder}
+            disabled={isCurrentUserHighestBidder || isWithdrawLoading}
           >
-            포기
+            {isWithdrawLoading ? (
+              <>
+                <CircularProgress size={16} sx={{ mr: 1 }} />
+                처리중...
+              </>
+            ) : (
+              "포기"
+            )}
           </Button>
         </DialogActions>
       </Dialog>

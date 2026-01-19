@@ -24,19 +24,28 @@ export const queryKeys = {
     details: () => [...queryKeys.auctions.all, "detail"] as const,
     detail: (auctionId?: string | null) =>
       [...queryKeys.auctions.all, "detail", auctionId ?? "unknown"] as const,
+    many: (auctionIds?: Array<string | number | null | undefined>) =>
+      [...queryKeys.auctions.all, "many", toStableIdList(auctionIds)] as const,
     byProduct: (productId?: string | null) =>
       [...queryKeys.auctions.all, "byProduct", productId ?? "unknown"] as const,
+    recommendation: (productId?: string | null) =>
+      [
+        ...queryKeys.auctions.all,
+        "recommendation",
+        productId ?? "unknown",
+      ] as const,
     participation: (auctionId?: string | null) =>
       [
         ...queryKeys.auctions.all,
         "participation",
         auctionId ?? "unknown",
       ] as const,
-    participationHistory: (userId?: string | null) =>
+    participationHistory: (userId?: string | null, pageSize?: number | null) =>
       [
         ...queryKeys.auctions.all,
         "participationHistory",
         userId ?? "anonymous",
+        pageSize ?? "default",
       ] as const,
     bidHistory: (auctionId?: string | null) =>
       [...queryKeys.auctions.all, "bidHistory", auctionId ?? "unknown"] as const,
@@ -81,6 +90,13 @@ export const queryKeys = {
     unreadCount: () => [...queryKeys.notifications.all, "unreadCount"] as const,
     list: (userId?: string | null) =>
       [...queryKeys.notifications.all, "list", userId ?? "anonymous"] as const,
+    unreadList: (userId?: string | null) =>
+      [
+        ...queryKeys.notifications.all,
+        "list",
+        "unread",
+        userId ?? "anonymous",
+      ] as const,
     headerListBase: (userId?: string | null) =>
       [
         ...queryKeys.notifications.all,
@@ -167,6 +183,8 @@ export const queryKeys = {
       [...queryKeys.settlement.all, "summary", pageSize] as const,
     history: (pageSize: number) =>
       [...queryKeys.settlement.all, "history", pageSize] as const,
+    groupItems: (groupId: string, pageSize: number) =>
+      [...queryKeys.settlement.all, "group", groupId, pageSize] as const,
   },
   search: {
     all: ["search"] as const,
@@ -190,6 +208,13 @@ export const queryKeys = {
         startFrom,
         startTo,
         page,
+      ] as const,
+    similar: (productId?: string | null, limit?: number | null) =>
+      [
+        ...queryKeys.search.all,
+        "similar",
+        productId ?? "unknown",
+        limit ?? "default",
       ] as const,
   },
 };

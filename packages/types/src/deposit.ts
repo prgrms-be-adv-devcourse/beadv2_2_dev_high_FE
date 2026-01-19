@@ -1,10 +1,11 @@
 import type { PagedApiResponse } from "./common";
 
 export const DepositType = {
-  CHARGE: "CHARGE", // 경매 대기 (시작 전)
-  USAGE: "USAGE", // 경매 진행
+  CHARGE: "CHARGE",
+  USAGE: "USAGE",
   DEPOSIT: "DEPOSIT",
   REFUND: "REFUND",
+  PAYMENT: "PAYMENT",
 } as const;
 
 export type DepositType = (typeof DepositType)[keyof typeof DepositType];
@@ -31,7 +32,7 @@ export interface DepositHstRequest {
 }
 
 export interface DepositOrderInfo {
-  orderId: string;
+  id: string;
   userId: String;
   amount: number;
   status: DepositOrderStatus;

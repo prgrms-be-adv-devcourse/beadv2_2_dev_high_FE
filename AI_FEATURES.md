@@ -9,7 +9,7 @@ list actionable for both frontend and backend work.
 - Home: "맞춤 추천" section (login-only, skeleton cards).
 - Auction detail: "비슷한 경매" section (skeleton cards).
 - Wishlist: "찜 기반 추천" section (skeleton cards).
-- Auction registration: "AI 시작가 추천" card (skeleton + apply button placeholder).
+- Auction registration: "AI 시작가 추천" card (Done).
 - Product registration: "AI 상세설명 초안 생성" entry (Done).
 - In-app chatbot: "More Assistant" entry (TBD: launcher UI).
 
@@ -23,7 +23,7 @@ list actionable for both frontend and backend work.
 
 ### AI Assist (AI keyword OK)
 
-- AI start bid suggestion on auction registration.
+- AI start bid suggestion on auction registration. (Done)
 - AI product description draft generation. (Done)
 - In-app chatbot (FAQ + contextual guidance, RAG-first).
 

@@ -35,14 +35,16 @@ type HistoryFilter = "ALL" | DepositType;
 
 const getHistoryTypeText = (type: DepositType) => {
   switch (type) {
-    case "CHARGE":
+    case DepositType.CHARGE:
       return "충전";
-    case "USAGE":
+    case DepositType.USAGE:
       return "사용";
-    case "DEPOSIT":
+    case DepositType.DEPOSIT:
       return "보증금 납부";
-    case "REFUND":
+    case DepositType.REFUND:
       return "보증금 환불";
+    case DepositType.PAYMENT:
+      return "구매";
     default:
       return String(type);
   }
@@ -158,8 +160,8 @@ export const DepositHistoryTab: React.FC = () => {
     try {
       const depositOrder = await depositApi.createDepositOrder(amount);
 
-      if (depositOrder?.data?.orderId) {
-        requestTossPayment(depositOrder.data.orderId, depositOrder.data.amount);
+      if (depositOrder?.data?.id) {
+        requestTossPayment(depositOrder.data.id, depositOrder.data.amount);
         handleCloseChargeDialog();
       } else {
         setChargeError("주문 생성에 실패했습니다.");
@@ -269,10 +271,10 @@ export const DepositHistoryTab: React.FC = () => {
           sx={{ mb: 2 }}
         >
           <ToggleButton value="ALL">전체</ToggleButton>
-          <ToggleButton value="CHARGE">충전</ToggleButton>
-          <ToggleButton value="USAGE">사용</ToggleButton>
-          <ToggleButton value="DEPOSIT">보증금</ToggleButton>
-          <ToggleButton value="REFUND">환불</ToggleButton>
+          <ToggleButton value={DepositType.CHARGE}>충전</ToggleButton>
+          <ToggleButton value={DepositType.USAGE}>사용</ToggleButton>
+          <ToggleButton value={DepositType.DEPOSIT}>보증금</ToggleButton>
+          <ToggleButton value={DepositType.REFUND}>환불</ToggleButton>
         </ToggleButtonGroup>
 
         {showSkeleton ? (

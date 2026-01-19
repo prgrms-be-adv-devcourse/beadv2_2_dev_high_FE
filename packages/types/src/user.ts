@@ -15,6 +15,7 @@ export interface User {
   userId?: string;
   name?: string;
   email?: string;
+  maskedEmail?: string;
   nickname?: string;
   roles?: UserRoles;
   phone_number?: string;

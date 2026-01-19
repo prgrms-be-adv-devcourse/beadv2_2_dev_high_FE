@@ -13,13 +13,15 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { keyframes } from "@emotion/react";
-import type {
-  AiGeneratedProductDetail,
-  FileGroup,
-  Product,
-  ProductCategory,
-  ProductCreationRequest,
-  ProductUpdateRequest,
+import {
+  AuctionStatus,
+  type AiGeneratedProductDetail,
+  type AuctionUpdateRequest,
+  type FileGroup,
+  type Product,
+  type ProductCategory,
+  type ProductCreationRequest,
+  type ProductUpdateRequest,
 } from "@moreauction/types";
 import { UserRole, hasRole } from "@moreauction/types";
 import {
@@ -27,6 +29,7 @@ import {
   Close,
   ExpandMore,
   InfoOutlined,
+  AutoAwesome,
   Star,
 } from "@mui/icons-material";
 import {
@@ -66,6 +69,7 @@ import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import { categoryApi } from "@/apis/categoryApi";
 import { fileApi } from "@/apis/fileApi";
 import { productApi } from "@/apis/productApi";
+import { auctionApi } from "@/apis/auctionApi";
 import { useAuth } from "@moreauction/auth";
 import { queryKeys } from "@/shared/queries/queryKeys";
 import { getErrorMessage } from "@/shared/utils/getErrorMessage";
@@ -473,6 +477,107 @@ const ProductRegistration: React.FC = () => {
 
   const isCategorySelectionFull = selectedCategoryIds.length >= 3;
 
+  const updatePendingAuctionsForProduct = async (
+    targetProductId: string,
+    productName: string
+  ) => {
+    const formatAuctionDate = (value: string) => {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return value;
+      }
+      const pad = (num: number) => String(num).padStart(2, "0");
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+        date.getDate()
+      )} ${pad(date.getHours())}:${pad(date.getMinutes())}:00`;
+    };
+
+    try {
+      const auctionsResponse = await auctionApi.getAuctionsByProductId(
+        targetProductId
+      );
+      const auctions = auctionsResponse.data ?? [];
+      const pendingAuctions = auctions.filter((auction) => {
+        const isDeleted =
+          auction.deletedYn === true || auction.deletedYn === "Y";
+        return !isDeleted && auction.status === AuctionStatus.READY;
+      });
+
+      if (pendingAuctions.length === 0) {
+        return;
+      }
+
+      const updatedAuctions = await Promise.all(
+        pendingAuctions.map(async (auction) => {
+          const auctionId = auction.auctionId ?? auction.id;
+          if (!auctionId) return null;
+          const auctionData: AuctionUpdateRequest = {
+            productName,
+            startBid: auction.startBid,
+            auctionStartAt: formatAuctionDate(auction.auctionStartAt),
+            auctionEndAt: formatAuctionDate(auction.auctionEndAt),
+          };
+          const response = await auctionApi.updateAuction(
+            String(auctionId),
+            auctionData
+          );
+          if (response.data) {
+            queryClient.setQueryData(
+              queryKeys.auctions.detail(auctionId),
+              response.data
+            );
+          }
+          return response.data ?? null;
+        })
+      );
+
+      const updatedMap = new Map(
+        updatedAuctions
+          .filter(
+            (auction): auction is NonNullable<typeof auction> => !!auction
+          )
+          .map((auction) => [String(auction.auctionId ?? auction.id), auction])
+      );
+
+      if (updatedMap.size > 0) {
+        queryClient.setQueryData(
+          queryKeys.auctions.byProduct(targetProductId),
+          (prev?: { data?: typeof auctions } | typeof auctions) => {
+            const list = Array.isArray(prev) ? prev : prev?.data ?? [];
+            if (list.length === 0) return prev;
+            const next = list.map((item) => {
+              const id = item.auctionId ?? item.id;
+              const updated = updatedMap.get(String(id));
+              return updated ? { ...item, ...updated } : item;
+            });
+            return Array.isArray(prev) ? next : { ...prev, data: next };
+          }
+        );
+        queryClient.setQueriesData(
+          { queryKey: queryKeys.auctions.lists() },
+          (prev?: { content?: typeof auctions } | typeof auctions) => {
+            const list = Array.isArray(prev) ? prev : prev?.content ?? [];
+            if (list.length === 0) return prev;
+            const next = list.map((item) => {
+              const id = item.auctionId ?? item.id;
+              const updated = updatedMap.get(String(id));
+              return updated ? { ...item, ...updated } : item;
+            });
+            return Array.isArray(prev) ? next : { ...prev, content: next };
+          }
+        );
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.auctions.lists(),
+          refetchType: "none",
+        });
+      }
+    } catch (err) {
+      console.error("대기 중 경매 업데이트 실패:", err);
+      setDialogMessage("대기 중 경매 상품명 업데이트에 실패했습니다.");
+      setDialogOpen(true);
+    }
+  };
+
   const onSubmit = async (data: ProductFormData) => {
     if (formLoading) return;
 
@@ -492,11 +597,15 @@ const ProductRegistration: React.FC = () => {
       : isClearingImages
       ? null
       : undefined;
+    let uploadedFirstFileUrl: string | undefined = canReuseExistingImages
+      ? getProductImageUrls(fileGroup)[0]
+      : undefined;
 
     try {
       if (!canReuseExistingImages && localFiles.length > 0) {
         const fileUploadResponse = await fileApi.uploadFiles(localFiles);
         finalFileGroupId = fileUploadResponse.data.fileGroupId;
+        uploadedFirstFileUrl = fileUploadResponse.data.files?.[0]?.filePath;
 
         if (!finalFileGroupId) {
           throw new Error("파일 그룹 ID를 받아오지 못했습니다.");
@@ -510,6 +619,7 @@ const ProductRegistration: React.FC = () => {
           description: data.description,
           fileGrpId:
             finalFileGroupId === undefined ? undefined : finalFileGroupId,
+          fileURL: uploadedFirstFileUrl,
           categoryIds: selectedCategoryIds,
         };
         const productResponse = await productApi.updateProduct(
@@ -543,6 +653,9 @@ const ProductRegistration: React.FC = () => {
           queryKey: queryKeys.products.mine(user?.userId),
           refetchType: "none",
         });
+        if (productId) {
+          await updatePendingAuctionsForProduct(productId, data.name);
+        }
         alert("상품이 성공적으로 수정되었습니다.");
         navigate(`/products/${createdProduct?.id ?? productId}`);
       } else {
@@ -551,6 +664,7 @@ const ProductRegistration: React.FC = () => {
           name: data.name,
           description: data.description,
           fileGrpId: finalFileGroupId ?? undefined,
+          fileURL: uploadedFirstFileUrl,
           categoryIds: selectedCategoryIds,
         };
 
@@ -765,69 +879,96 @@ const ProductRegistration: React.FC = () => {
             </Typography>
 
             <Box sx={{ mb: 3 }}>
-              <Stack
-                direction={{ xs: "column", sm: "row" }}
-                spacing={1.5}
-                alignItems={{ xs: "flex-start", sm: "center" }}
-                justifyContent="space-between"
-                sx={{ mb: 2 }}
+              <Box
+                sx={{
+                  p: 2,
+                  borderRadius: 2,
+                  backgroundColor: (theme) =>
+                    theme.palette.mode === "dark"
+                      ? "rgba(59, 130, 246, 0.12)"
+                      : "rgba(59, 130, 246, 0.08)",
+                  border: "1px solid",
+                  borderColor: (theme) =>
+                    theme.palette.mode === "dark"
+                      ? "rgba(148, 163, 184, 0.3)"
+                      : "rgba(59, 130, 246, 0.2)",
+                  mb: 2,
+                }}
               >
-                <Box>
-                  <Typography variant="subtitle1" fontWeight={700}>
-                    AI 상세설명 초안
-                  </Typography>
-                  <Stack direction="row" spacing={0.5} alignItems="center">
-                    <Typography variant="caption" color="text.secondary">
-                      현재 선택한 이미지 기준으로 생성됩니다.
-                    </Typography>
-                    {aiDraft && (
-                      <Tooltip
-                        title="AI 초안은 참고용입니다. 필요한 내용을 보완해 주세요."
-                        arrow
-                        placement="top"
-                        componentsProps={{
-                          tooltip: {
-                            sx: {
-                              bgcolor: "grey.900",
-                              color: "common.white",
-                              fontSize: 12,
-                              borderRadius: 1,
-                              px: 1,
-                              py: 0.5,
-                            },
-                          },
-                          arrow: {
-                            sx: { color: "grey.900" },
-                          },
-                        }}
-                      >
-                        <IconButton
-                          size="small"
-                          aria-label="AI 초안 안내"
-                          sx={{ color: "text.secondary" }}
-                        >
-                          <InfoOutlined fontSize="inherit" />
-                        </IconButton>
-                      </Tooltip>
-                    )}
-                  </Stack>
-                </Box>
-                <Button
-                  variant="contained"
-                  onClick={handleGenerateAiDraft}
-                  disabled={
-                    !canGenerateAiDraft ||
-                    aiDraftLoading ||
-                    !canRegenerateAfterApply
-                  }
+                <Stack
+                  direction={{ xs: "column", sm: "row" }}
+                  spacing={1.5}
+                  alignItems={{ xs: "flex-start", sm: "center" }}
+                  justifyContent="space-between"
                 >
-                  {aiDraftLoading
-                    ? "이미지 분석 중..."
-                    : aiDraft
-                    ? "AI 초안 다시 생성"
-                    : "AI로 초안 생성"}
-                </Button>
-              </Stack>
+                  <Box>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <AutoAwesome
+                        sx={{
+                          fontSize: 22,
+                          color: (theme) =>
+                            theme.palette.mode === "light"
+                              ? "rgba(37, 99, 235, 0.95)"
+                              : "rgba(191, 219, 254, 0.95)",
+                        }}
+                      />
+                      <Typography variant="subtitle1" fontWeight={800}>
+                        AI 상세설명 초안
+                      </Typography>
+                    </Stack>
+                    <Stack direction="row" spacing={0.5} alignItems="center">
+                      <Typography variant="caption" color="text.secondary">
+                        현재 선택한 이미지 기준으로 생성됩니다.
+                      </Typography>
+                      {aiDraft && (
+                        <Tooltip
+                          title="AI 초안은 참고용입니다. 필요한 내용을 보완해 주세요."
+                          arrow
+                          placement="top"
+                          componentsProps={{
+                            tooltip: {
+                              sx: {
+                                bgcolor: "grey.900",
+                                color: "common.white",
+                                fontSize: 12,
+                                borderRadius: 1,
+                                px: 1,
+                                py: 0.5,
+                              },
+                            },
+                            arrow: {
+                              sx: { color: "grey.900" },
+                            },
+                          }}
+                        >
+                          <IconButton
+                            size="small"
+                            aria-label="AI 초안 안내"
+                            sx={{ color: "text.secondary" }}
+                          >
+                            <InfoOutlined fontSize="inherit" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </Stack>
+                  </Box>
+                  <Button
+                    variant="contained"
+                    onClick={handleGenerateAiDraft}
+                    disabled={
+                      !canGenerateAiDraft ||
+                      aiDraftLoading ||
+                      !canRegenerateAfterApply
+                    }
+                  >
+                    {aiDraftLoading
+                      ? "이미지 분석 중..."
+                      : aiDraft
+                      ? "AI 초안 다시 생성"
+                      : "AI로 초안 생성"}
+                  </Button>
+                </Stack>
+              </Box>
 
               <Paper
                 variant="outlined"
@@ -1146,14 +1287,14 @@ const ProductRegistration: React.FC = () => {
                           대표로 사용됩니다.
                         </Typography>
                       </Box>
-                        <Button
-                          size="small"
-                          color="inherit"
-                          onClick={clearLocalImages}
-                          disabled={aiDraftLoading}
-                        >
-                          전체 제거
-                        </Button>
+                      <Button
+                        size="small"
+                        color="inherit"
+                        onClick={clearLocalImages}
+                        disabled={aiDraftLoading}
+                      >
+                        전체 제거
+                      </Button>
                     </Stack>
 
                     <Box

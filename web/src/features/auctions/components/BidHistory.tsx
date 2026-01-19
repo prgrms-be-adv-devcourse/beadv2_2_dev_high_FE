@@ -7,13 +7,13 @@ import {
   List,
   ListItem,
   ListItemText,
-  Paper,
   Skeleton,
   Typography,
 } from "@mui/material";
+import { keyframes } from "@emotion/react";
 import { format } from "date-fns";
 import { ko } from "date-fns/locale";
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import InfiniteScroll from "react-infinite-scroll-component";
 import { useNavigate } from "react-router-dom";
 import type { AuctionBidMessage } from "@moreauction/types";
@@ -37,6 +37,44 @@ const BidHistory: React.FC<BidHistoryProps> = ({
   isBidderLoading = false,
 }) => {
   const navigate = useNavigate();
+  const [highlightBidSrno, setHighlightBidSrno] = useState<number | null>(null);
+  const [pushPulse, setPushPulse] = useState(false);
+  const latestBidRef = useRef<number | null>(null);
+  const hasMountedRef = useRef(false);
+
+  useEffect(() => {
+    if (bidHistory.length === 0) return;
+    const latest = bidHistory[0]?.bidSrno ?? null;
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      latestBidRef.current = latest;
+      return;
+    }
+    if (latest && latest !== latestBidRef.current) {
+      latestBidRef.current = latest;
+      setHighlightBidSrno(latest);
+      setPushPulse(true);
+      const timer = window.setTimeout(() => {
+        setHighlightBidSrno((prev) => (prev === latest ? null : prev));
+      }, 1200);
+      const pushTimer = window.setTimeout(() => {
+        setPushPulse(false);
+      }, 260);
+      return () => {
+        window.clearTimeout(timer);
+        window.clearTimeout(pushTimer);
+      };
+    }
+  }, [bidHistory]);
+
+  const revealAnimation = keyframes`
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+  `;
+  const pushDownAnimation = keyframes`
+    from { transform: translateY(-8px); }
+    to { transform: translateY(0); }
+  `;
 
   if (!isAuthenticated) {
     return (
@@ -88,7 +126,15 @@ const BidHistory: React.FC<BidHistoryProps> = ({
       <List>
         {bidHistory.map((bid) => (
           <React.Fragment key={bid.bidSrno}>
-            <ListItem>
+            <ListItem
+              sx={
+                highlightBidSrno === bid.bidSrno
+                  ? { animation: `${revealAnimation} 280ms ease-out` }
+                  : pushPulse
+                  ? { animation: `${pushDownAnimation} 240ms ease-out` }
+                  : undefined
+              }
+            >
               <ListItemText
                 primary={
                   <Typography component="span" fontWeight="bold">
@@ -97,27 +143,27 @@ const BidHistory: React.FC<BidHistoryProps> = ({
                 }
                 secondary={
                   <>
-                  <Typography component="span" display="block">
-                    입찰자:{" "}
-                    {(() => {
-                      const label = getBidderLabel
-                        ? getBidderLabel(
-                            bid.highestUserId,
-                            bid.highestUsername
-                          )
-                        : bid.highestUsername ?? null;
-                      if (label) return label;
-                      if (isBidderLoading) {
-                        return (
-                          <Skeleton
-                            width={120}
-                            sx={{ display: "inline-block" }}
-                          />
-                        );
-                      }
-                      return "-";
-                    })()}
-                  </Typography>
+                    <Typography component="span" display="block">
+                      입찰자:{" "}
+                      {(() => {
+                        const label = getBidderLabel
+                          ? getBidderLabel(
+                              bid.highestUserId,
+                              bid.highestUsername
+                            )
+                          : bid.highestUsername ?? null;
+                        if (label) return label;
+                        if (isBidderLoading) {
+                          return (
+                            <Skeleton
+                              width={120}
+                              sx={{ display: "inline-block" }}
+                            />
+                          );
+                        }
+                        return "-";
+                      })()}
+                    </Typography>
                     <Typography
                       component="span"
                       display="block"

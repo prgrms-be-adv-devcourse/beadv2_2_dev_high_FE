@@ -96,9 +96,6 @@ export const useStomp = ({ topic, onMessage }: UseStompProps) => {
       heartbeatIncoming: 10000, // 운영용으로 10초 복원
       heartbeatOutgoing: 10000, // 운영용으로 10초 복원
       debug: (str) => console.log(new Date(), str),
-      connectHeaders: {
-        // 필요시 헤더 추가
-      },
     });
 
     client.onConnect = () => {

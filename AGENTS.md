@@ -71,6 +71,7 @@ file as the project-specific guide for changes, commands, and conventions.
   - 2+ distinct UI blocks live together (filters + list/table + modal/form).
   - UI rendering is mixed with heavy event/data logic (many handlers/branches).
   - A UI block has its own state/validation (forms, dialogs, complex tables).
+- During ongoing work, continually extract components to keep files from growing too large; avoid letting a single file become a catch-all.
 - Placement:
   - Domain-only UI → `features/<domain>/components/*`
   - Page-only UI → colocate near the page (e.g., `.../pages/<Page>/components/*`)

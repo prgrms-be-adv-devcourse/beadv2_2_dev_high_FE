@@ -18,3 +18,10 @@ export interface AuctionDocument {
 }
 
 export type PagedAuctionDocument = PagedApiResponse<AuctionDocument>;
+
+export interface SimilarProductResponse {
+  productId: string;
+  auctionId: string | null;
+  imageUrl: string | null;
+  score: number;
+}

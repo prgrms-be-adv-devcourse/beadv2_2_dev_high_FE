@@ -81,7 +81,9 @@ export const ImageWithFallback = ({
       image={imageSrc}
       alt={alt}
       sx={sx}
-      onLoad={() => setStatus("loaded")}
+      onLoad={() =>
+        setStatus((prevStatus) => (prevStatus === "error" ? prevStatus : "loaded"))
+      }
       onError={() => setStatus("error")}
     />
   );

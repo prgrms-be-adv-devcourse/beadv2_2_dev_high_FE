@@ -5,6 +5,7 @@ import {
   CardContent,
   Chip,
   Container,
+  CircularProgress,
   Divider,
   InputAdornment,
   Pagination,
@@ -39,20 +40,30 @@ const SearchPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const params = useMemo(
-    () => new URLSearchParams(location.search),
-    [location.search]
-  );
+  const readSearchParams = (search: string) => {
+    const params = new URLSearchParams(search);
+    return {
+      keyword: params.get("keyword") ?? "",
+      status: params.get("status") ?? "",
+      categories: params.getAll("categories"),
+      minStartPrice: params.get("minStartPrice") ?? "",
+      maxStartPrice: params.get("maxStartPrice") ?? "",
+      startFrom: params.get("startFrom") ?? "",
+      startTo: params.get("startTo") ?? "",
+      page: Number(params.get("page") ?? 0),
+    };
+  };
 
   // URL 쿼리에서 초기 검색 조건 읽기
-  const initialKeyword = params.get("keyword") ?? "";
-  const initialStatus = params.get("status") ?? "";
-  const initialCategoryNames = params.getAll("categories");
-  const initialMinStartPrice = params.get("minStartPrice") ?? "";
-  const initialMaxStartPrice = params.get("maxStartPrice") ?? "";
-  const initialStartFrom = params.get("startFrom") ?? "";
-  const initialStartTo = params.get("startTo") ?? "";
-  const initialPage = Number(params.get("page") ?? 0);
+  const initialParams = readSearchParams(location.search);
+  const initialKeyword = initialParams.keyword;
+  const initialStatus = initialParams.status;
+  const initialCategoryNames = initialParams.categories;
+  const initialMinStartPrice = initialParams.minStartPrice;
+  const initialMaxStartPrice = initialParams.maxStartPrice;
+  const initialStartFrom = initialParams.startFrom;
+  const initialStartTo = initialParams.startTo;
+  const initialPage = initialParams.page;
 
   // 입력용 상태 (폼에 바인딩)
   const [inputKeyword, setInputKeyword] = useState(initialKeyword);
@@ -77,26 +88,6 @@ const SearchPage: React.FC = () => {
   const [startTo, setStartTo] = useState(initialStartTo);
   const [page, setPage] = useState(initialPage >= 0 ? initialPage : 0);
 
-  const hasFilter = useMemo(
-    () =>
-      !!keyword ||
-      !!status ||
-      selectedCategoryNames.length > 0 ||
-      !!minStartPrice ||
-      !!maxStartPrice ||
-      !!startFrom ||
-      !!startTo,
-    [
-      keyword,
-      status,
-      selectedCategoryNames.length,
-      minStartPrice,
-      maxStartPrice,
-      startFrom,
-      startTo,
-    ]
-  );
-
   const categoriesQuery = useQuery({
     queryKey: queryKeys.categories.all,
     queryFn: async () => {
@@ -106,45 +97,67 @@ const SearchPage: React.FC = () => {
     staleTime: 5 * 60_000,
   });
 
-  // 적용된 검색 조건이 바뀔 때 URL 동기화
-  useEffect(() => {
+  const buildSearchUrl = (next: {
+    keyword: string;
+    status: string;
+    categories: string[];
+    minStartPrice: string;
+    maxStartPrice: string;
+    startFrom: string;
+    startTo: string;
+    page: number;
+  }) => {
     const newParams = new URLSearchParams();
-    if (keyword) newParams.set("keyword", keyword);
-    if (status) newParams.set("status", status);
-    if (selectedCategoryNames.length > 0) {
-      selectedCategoryNames.forEach((name) =>
-        newParams.append("categories", name)
-      );
+    if (next.keyword) newParams.set("keyword", next.keyword);
+    if (next.status) newParams.set("status", next.status);
+    if (next.categories.length > 0) {
+      next.categories.forEach((name) => newParams.append("categories", name));
     }
-    if (minStartPrice) newParams.set("minStartPrice", minStartPrice);
-    if (maxStartPrice) newParams.set("maxStartPrice", maxStartPrice);
-    if (startFrom) newParams.set("startFrom", startFrom);
-    if (startTo) newParams.set("startTo", startTo);
+    if (next.minStartPrice) newParams.set("minStartPrice", next.minStartPrice);
+    if (next.maxStartPrice) newParams.set("maxStartPrice", next.maxStartPrice);
+    if (next.startFrom) newParams.set("startFrom", next.startFrom);
+    if (next.startTo) newParams.set("startTo", next.startTo);
+    newParams.set("page", String(next.page));
+    newParams.set("size", "20");
+    const search = newParams.toString();
+    return `/search${search ? `?${search}` : ""}`;
+  };
 
-    const nextSearch = hasFilter
-      ? (() => {
-          newParams.set("page", String(page));
-          newParams.set("size", "8");
-          return `?${newParams.toString()}`;
-        })()
-      : "";
-    const nextPath = `/search${nextSearch}`;
+  const navigateToSearch = (next: {
+    keyword: string;
+    status: string;
+    categories: string[];
+    minStartPrice: string;
+    maxStartPrice: string;
+    startFrom: string;
+    startTo: string;
+    page: number;
+  }) => {
+    const nextPath = buildSearchUrl(next);
     if (`${location.pathname}${location.search}` !== nextPath) {
       navigate(nextPath);
     }
-  }, [
-    keyword,
-    status,
-    selectedCategoryNames,
-    minStartPrice,
-    maxStartPrice,
-    startFrom,
-    startTo,
-    page,
-    navigate,
-    location.pathname,
-    location.search,
-  ]);
+  };
+
+  // URL 쿼리 변경 시 상태 동기화 (뒤로가기/앞으로가기 대응)
+  useEffect(() => {
+    const nextParams = readSearchParams(location.search);
+    setInputKeyword(nextParams.keyword);
+    setPendingStatus(nextParams.status);
+    setPendingCategoryNames(nextParams.categories);
+    setPendingMinStartPrice(nextParams.minStartPrice);
+    setPendingMaxStartPrice(nextParams.maxStartPrice);
+    setPendingStartFrom(nextParams.startFrom);
+    setPendingStartTo(nextParams.startTo);
+    setKeyword(nextParams.keyword);
+    setStatus(nextParams.status);
+    setSelectedCategoryNames(nextParams.categories);
+    setMinStartPrice(nextParams.minStartPrice);
+    setMaxStartPrice(nextParams.maxStartPrice);
+    setStartFrom(nextParams.startFrom);
+    setStartTo(nextParams.startTo);
+    setPage(nextParams.page >= 0 ? nextParams.page : 0);
+  }, [location.search]);
 
   const searchQuery = useQuery({
     queryKey: queryKeys.search.auctions(
@@ -200,6 +213,8 @@ const SearchPage: React.FC = () => {
   const categoriesLoading = categoriesQuery.isLoading;
   const result = searchQuery.data ?? { totalPages: 0, content: [] };
   const loading = searchQuery.isLoading && result.content.length === 0;
+  const isFetching = searchQuery.isFetching;
+  const [showLoadingOverlay, setShowLoadingOverlay] = useState(false);
   const searchErrorMessage = useMemo(() => {
     if (!searchQuery.isError) return null;
     return getErrorMessage(
@@ -207,6 +222,20 @@ const SearchPage: React.FC = () => {
       "검색 결과를 불러오는데 실패했습니다."
     );
   }, [searchQuery.error, searchQuery.isError]);
+
+  useEffect(() => {
+    let timer: number | undefined;
+    if (isFetching) {
+      timer = window.setTimeout(() => {
+        setShowLoadingOverlay(true);
+      }, 200);
+    } else {
+      setShowLoadingOverlay(false);
+    }
+    return () => {
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [isFetching]);
 
   // 입력 핸들러들 (아직 검색 조건에는 적용하지 않음)
   const handleInputKeywordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -218,6 +247,16 @@ const SearchPage: React.FC = () => {
       const next = prev === value ? "" : value;
       setStatus(next);
       setPage(0);
+      navigateToSearch({
+        keyword,
+        status: next,
+        categories: selectedCategoryNames,
+        minStartPrice,
+        maxStartPrice,
+        startFrom,
+        startTo,
+        page: 0,
+      });
       return next;
     });
   };
@@ -232,6 +271,16 @@ const SearchPage: React.FC = () => {
       }
       setSelectedCategoryNames(next);
       setPage(0);
+      navigateToSearch({
+        keyword,
+        status,
+        categories: next,
+        minStartPrice,
+        maxStartPrice,
+        startFrom,
+        startTo,
+        page: 0,
+      });
       return next;
     });
   };
@@ -243,19 +292,6 @@ const SearchPage: React.FC = () => {
     e.preventDefault();
 
     const trimmed = inputKeyword.trim();
-    const hasFilter =
-      !!trimmed ||
-      !!pendingStatus ||
-      pendingCategoryNames.length > 0 ||
-      !!pendingMinStartPrice.trim() ||
-      !!pendingMaxStartPrice.trim() ||
-      !!pendingStartFrom.trim() ||
-      !!pendingStartTo.trim();
-
-    if (!hasFilter) {
-      // 아무 조건도 없으면 검색하지 않음
-      return;
-    }
 
     setKeyword(trimmed);
     setStatus(pendingStatus);
@@ -265,13 +301,62 @@ const SearchPage: React.FC = () => {
     setStartFrom(pendingStartFrom.trim());
     setStartTo(pendingStartTo.trim());
     setPage(0);
+    navigateToSearch({
+      keyword: trimmed,
+      status: pendingStatus,
+      categories: pendingCategoryNames,
+      minStartPrice: pendingMinStartPrice.trim(),
+      maxStartPrice: pendingMaxStartPrice.trim(),
+      startFrom: pendingStartFrom.trim(),
+      startTo: pendingStartTo.trim(),
+      page: 0,
+    });
+  };
+
+  const handleReset = () => {
+    setInputKeyword("");
+    setPendingStatus("");
+    setPendingCategoryNames([]);
+    setPendingMinStartPrice("");
+    setPendingMaxStartPrice("");
+    setPendingStartFrom("");
+    setPendingStartTo("");
+    setKeyword("");
+    setStatus("");
+    setSelectedCategoryNames([]);
+    setMinStartPrice("");
+    setMaxStartPrice("");
+    setStartFrom("");
+    setStartTo("");
+    setPage(0);
+    navigateToSearch({
+      keyword: "",
+      status: "",
+      categories: [],
+      minStartPrice: "",
+      maxStartPrice: "",
+      startFrom: "",
+      startTo: "",
+      page: 0,
+    });
   };
 
   const handlePageChange = (
     _: React.ChangeEvent<unknown>,
     value: number
   ): void => {
-    setPage(value - 1);
+    const nextPage = value - 1;
+    setPage(nextPage);
+    navigateToSearch({
+      keyword,
+      status,
+      categories: selectedCategoryNames,
+      minStartPrice,
+      maxStartPrice,
+      startFrom,
+      startTo,
+      page: nextPage,
+    });
   };
 
   return (
@@ -304,6 +389,14 @@ const SearchPage: React.FC = () => {
               sx={{ px: 3, py: 1.25, minWidth: 96 }}
             >
               검색
+            </Button>
+            <Button
+              variant="outlined"
+              color="primary"
+              onClick={handleReset}
+              sx={{ px: 3, py: 1.25, minWidth: 96 }}
+            >
+              초기화
             </Button>
           </Stack>
         </form>
@@ -351,6 +444,16 @@ const SearchPage: React.FC = () => {
             setPendingMinStartPrice(value);
             setMinStartPrice(value);
             setPage(0);
+            navigateToSearch({
+              keyword,
+              status,
+              categories: selectedCategoryNames,
+              minStartPrice: value,
+              maxStartPrice,
+              startFrom,
+              startTo,
+              page: 0,
+            });
           }}
           fullWidth
           slotProps={{ input: { inputProps: { min: 0, step: 100 } } }}
@@ -364,6 +467,16 @@ const SearchPage: React.FC = () => {
             setPendingMaxStartPrice(value);
             setMaxStartPrice(value);
             setPage(0);
+            navigateToSearch({
+              keyword,
+              status,
+              categories: selectedCategoryNames,
+              minStartPrice,
+              maxStartPrice: value,
+              startFrom,
+              startTo,
+              page: 0,
+            });
           }}
           fullWidth
           slotProps={{ input: { inputProps: { min: 0, step: 100 } } }}
@@ -380,6 +493,16 @@ const SearchPage: React.FC = () => {
             setPendingStartFrom(value);
             setStartFrom(value);
             setPage(0);
+            navigateToSearch({
+              keyword,
+              status,
+              categories: selectedCategoryNames,
+              minStartPrice,
+              maxStartPrice,
+              startFrom: value,
+              startTo,
+              page: 0,
+            });
           }}
           fullWidth
           slotProps={{ inputLabel: { shrink: true } }}
@@ -393,6 +516,16 @@ const SearchPage: React.FC = () => {
             setPendingStartTo(value);
             setStartTo(value);
             setPage(0);
+            navigateToSearch({
+              keyword,
+              status,
+              categories: selectedCategoryNames,
+              minStartPrice,
+              maxStartPrice,
+              startFrom,
+              startTo: value,
+              page: 0,
+            });
           }}
           fullWidth
           slotProps={{ inputLabel: { shrink: true } }}
@@ -446,25 +579,29 @@ const SearchPage: React.FC = () => {
             },
             gap: 3,
             mb: 4,
+            opacity: isFetching ? 0.6 : 1,
+            transition: "opacity 150ms ease",
+            pointerEvents: isFetching ? "none" : "auto",
           }}
         >
           {Array.from({ length: 8 }).map((_, idx) => (
             <Card
               key={idx}
               sx={{
-                minHeight: 300,
+                minHeight: 320,
                 overflow: "hidden",
                 display: "flex",
                 flexDirection: "column",
               }}
             >
-              <Skeleton variant="rectangular" height={150} />
+              <Skeleton variant="rectangular" height={200} />
               <CardContent
                 sx={{
                   flex: 1,
                   display: "flex",
                   flexDirection: "column",
-                  py: 1.25,
+                  py: 1.5,
+                  gap: 1,
                 }}
               >
                 <Skeleton variant="text" width="75%" />
@@ -484,124 +621,174 @@ const SearchPage: React.FC = () => {
           조건에 맞는 상품/경매를 찾지 못했습니다.
         </Typography>
       ) : (
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: {
-              xs: "1fr",
-              sm: "repeat(2, 1fr)",
-              md: "repeat(3, 1fr)",
-              lg: "repeat(4, 1fr)",
-            },
-            gap: 3,
-            mb: 4,
-          }}
-        >
-          {result.content.map((doc) => {
-            const coverImage = doc.imageUrl || "";
-            const emptyImage = "/images/no_image.png";
+        <Box sx={{ position: "relative", mb: 4 }}>
+          {showLoadingOverlay && (
+            <Box
+              sx={{
+                position: "absolute",
+                inset: 0,
+                bgcolor: "rgba(15, 23, 42, 0.18)",
+                backdropFilter: "blur(2px)",
+                zIndex: 2,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <CircularProgress color="inherit" sx={{ color: "#fff" }} />
+            </Box>
+          )}
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: {
+                xs: "1fr",
+                sm: "repeat(2, 1fr)",
+                md: "repeat(3, 1fr)",
+                lg: "repeat(4, 1fr)",
+              },
+              gap: 3,
+            }}
+          >
+            {result.content.map((doc, index) => {
+              const coverImage = doc.imageUrl || "";
+              const emptyImage = "/images/no_image.png";
+              const cardKey =
+                doc.auctionId ??
+                doc.productId ??
+                `${doc.productName ?? "auction"}-${index}`;
 
-            return (
-              <Card
-                key={doc.auctionId}
-                sx={{
-                  minHeight: 320,
-                  overflow: "hidden",
-                  display: "flex",
-                  flexDirection: "column",
-                  borderRadius: 3,
-                  boxShadow: "0 10px 30px rgba(15, 23, 42, 0.08)",
-                }}
-              >
-                <CardActionArea
-                  component={RouterLink}
-                  to={`/products/${doc.productId}`}
+              return (
+                <Card
+                  key={cardKey}
                   sx={{
+                    minHeight: 320,
+                    overflow: "hidden",
                     display: "flex",
                     flexDirection: "column",
-                    height: "100%",
-                    alignItems: "stretch",
+                    borderRadius: 3,
+                    boxShadow: "0 10px 30px rgba(15, 23, 42, 0.08)",
                   }}
                 >
-                  <Box sx={{ position: "relative" }}>
-                    <ImageWithFallback
-                      src={coverImage}
-                      alt={doc.productName}
-                      height={200}
-                      loading={loading}
-                      emptySrc={emptyImage}
-                      sx={{ objectFit: "cover", width: "100%" }}
-                      skeletonSx={{ width: "100%" }}
-                    />
-                    <Box
-                      sx={{
-                        position: "absolute",
-                        inset: 0,
-                        background:
-                          "linear-gradient(180deg, rgba(15, 23, 42, 0) 40%, rgba(15, 23, 42, 0.45) 100%)",
-                        pointerEvents: "none",
-                      }}
-                    />
+                  <CardActionArea
+                    component={RouterLink}
+                    to={`/products/${doc.productId}`}
+                    sx={{
+                      display: "flex",
+                      flexDirection: "column",
+                      height: "100%",
+                      alignItems: "stretch",
+                    }}
+                  >
+                    <Box sx={{ position: "relative" }}>
+                      <ImageWithFallback
+                        src={coverImage}
+                        alt={doc.productName}
+                        height={200}
+                        loading={loading}
+                        emptySrc={emptyImage}
+                        sx={{ objectFit: "cover", width: "100%" }}
+                        skeletonSx={{ width: "100%" }}
+                      />
+                      <Box
+                        sx={{
+                          position: "absolute",
+                          inset: 0,
+                          background:
+                            "linear-gradient(180deg, rgba(15, 23, 42, 0) 40%, rgba(15, 23, 42, 0.45) 100%)",
+                          pointerEvents: "none",
+                        }}
+                      />
                     <Chip
                       label={getAuctionStatusText(doc.status)}
                       size="small"
                       sx={{
                         position: "absolute",
                         top: 12,
-                        left: 12,
-                        bgcolor: "rgba(255, 255, 255, 0.9)",
-                        fontWeight: 600,
+                        right: 12,
+                        fontWeight: 700,
+                        border: "1px solid",
+                        borderColor: (theme) =>
+                          theme.palette.mode === "light"
+                            ? "rgba(15, 23, 42, 0.12)"
+                            : "rgba(148, 163, 184, 0.35)",
+                        bgcolor: (theme) =>
+                          theme.palette.mode === "light"
+                            ? "rgba(255, 255, 255, 0.92)"
+                            : "rgba(15, 23, 42, 0.8)",
+                        color: (theme) =>
+                          theme.palette.mode === "light"
+                            ? "text.primary"
+                            : "rgba(248, 250, 252, 0.95)",
+                        backdropFilter: "blur(6px)",
+                        boxShadow: (theme) =>
+                          theme.palette.mode === "light"
+                            ? "0 6px 16px rgba(15, 23, 42, 0.12)"
+                            : "0 6px 16px rgba(0, 0, 0, 0.35)",
                       }}
                     />
-                  </Box>
-                  <CardContent
-                    sx={{
-                      flex: 1,
-                      display: "flex",
-                      flexDirection: "column",
-                      py: 1.5,
-                      gap: 1,
-                      alignItems: "stretch",
-                    }}
-                  >
-                    <Typography
-                      variant="subtitle1"
+                    </Box>
+                    <CardContent
                       sx={{
-                        fontWeight: 600,
-                        display: "-webkit-box",
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: "vertical",
-                        overflow: "hidden",
+                        flex: 1,
+                        display: "flex",
+                        flexDirection: "column",
+                        py: 1.5,
+                        gap: 1,
+                        alignItems: "stretch",
                       }}
                     >
-                      {doc.productName}
-                    </Typography>
-
-                    {(doc.categories?.length ?? 0) > 0 && (
-                      <Stack
-                        direction="row"
-                        spacing={0.75}
-                        sx={{ mb: 0.75, flexWrap: "wrap" }}
+                      <Typography
+                        variant="subtitle1"
+                        sx={{
+                          fontWeight: 600,
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                        }}
                       >
-                        {doc.categories!.slice(0, 2).map((c) => (
-                          <Chip
-                            key={c}
-                            label={c}
-                            size="small"
-                            variant="outlined"
-                            sx={{ mb: 0.5 }}
-                          />
-                        ))}
-                        {doc.categories!.length > 2 && (
-                          <Chip
-                            label={`+${doc.categories!.length - 2}`}
-                            size="small"
-                            variant="outlined"
-                            sx={{ mb: 0.5 }}
-                          />
-                        )}
-                      </Stack>
-                    )}
+                        {doc.productName}
+                      </Typography>
+
+                    <Box sx={{ minHeight: 36 }}>
+                      {(doc.categories?.length ?? 0) > 0 ? (
+                        <Stack
+                          direction="row"
+                          spacing={0.75}
+                          sx={{ mb: 0.75, flexWrap: "wrap" }}
+                        >
+                          {doc.categories!.slice(0, 2).map((c, idx) => (
+                            <Chip
+                              key={`${c}-${idx}`}
+                              label={c}
+                              size="small"
+                              variant="outlined"
+                              sx={{ mb: 0.5 }}
+                            />
+                          ))}
+                          {doc.categories!.length > 2 && (
+                            <Chip
+                              label={`+${doc.categories!.length - 2}`}
+                              size="small"
+                              variant="outlined"
+                              sx={{ mb: 0.5 }}
+                            />
+                          )}
+                        </Stack>
+                      ) : (
+                        <Chip
+                          label="카테고리 없음"
+                          size="small"
+                          variant="outlined"
+                          sx={{
+                            mb: 0.5,
+                            color: "text.secondary",
+                            borderStyle: "dashed",
+                          }}
+                        />
+                      )}
+                    </Box>
 
                     <Stack direction="row" spacing={1}>
                       <Box
@@ -654,11 +841,12 @@ const SearchPage: React.FC = () => {
                           : `종료 ${formatDateTime(doc.auctionEndAt)}`}
                       </Typography>
                     </Stack>
-                  </CardContent>
-                </CardActionArea>
-              </Card>
-            );
-          })}
+                    </CardContent>
+                  </CardActionArea>
+                </Card>
+              );
+            })}
+          </Box>
         </Box>
       )}
 

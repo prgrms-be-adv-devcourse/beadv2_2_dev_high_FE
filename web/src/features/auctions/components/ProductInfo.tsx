@@ -11,6 +11,7 @@ import { ImageWithFallback } from "@/shared/components/common/ImageWithFallback"
 interface ProductInfoProps {
   imageUrls?: string[];
   productName: string;
+  sellerLabel?: string;
   description: string;
   action?: React.ReactNode;
 }
@@ -18,6 +19,7 @@ interface ProductInfoProps {
 const ProductInfo: React.FC<ProductInfoProps> = ({
   imageUrls,
   productName,
+  sellerLabel,
   description,
   action,
 }) => {
@@ -104,16 +106,22 @@ const ProductInfo: React.FC<ProductInfoProps> = ({
           spacing={1}
           sx={{ mb: 1 }}
         >
-          <Typography
-            variant="h5"
-            noWrap
-            textOverflow={"ellipsis"}
-            overflow={"hidden"}
-            title={productName}
-            sx={{ flex: 1, minWidth: 0 }}
-          >
-            {productName}
-          </Typography>
+          <Stack sx={{ flex: 1, minWidth: 0 }}>
+            <Typography
+              variant="h5"
+              noWrap
+              textOverflow={"ellipsis"}
+              overflow={"hidden"}
+              title={productName}
+            >
+              {productName}
+            </Typography>
+            {sellerLabel && (
+              <Typography variant="caption" color="text.secondary">
+                판매자: {sellerLabel}
+              </Typography>
+            )}
+          </Stack>
           {action}
         </Stack>
         <Divider />
