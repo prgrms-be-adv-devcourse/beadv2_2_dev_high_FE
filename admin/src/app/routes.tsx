@@ -5,6 +5,7 @@ import AdminDashboard from "@/features/admin-dashboard/pages/AdminDashboard";
 import AdminOrders from "@/features/orders/pages/AdminOrders";
 import AdminAuctions from "@/features/auctions/pages/AdminAuctions";
 import AdminSettlements from "@/features/settlements/pages/AdminSettlements";
+import AdminProducts from "@/features/products/pages/AdminProducts";
 import AdminPlaceholder from "@/shared/components/AdminPlaceholder";
 import ProtectedRoute from "./ProtectedRoute";
 
@@ -41,12 +42,7 @@ export const router = createBrowserRouter([
           },
           {
             path: "products",
-            element: (
-              <AdminPlaceholder
-                title="상품 관리"
-                description="상품 검수 및 노출 제어 기능을 준비 중입니다."
-              />
-            ),
+            element: <AdminProducts />,
           },
           {
             path: "orders",
@@ -55,6 +51,15 @@ export const router = createBrowserRouter([
           {
             path: "settlements",
             element: <AdminSettlements />,
+          },
+          {
+            path: "payments",
+            element: (
+              <AdminPlaceholder
+                title="결제 관리"
+                description="결제 관리 페이지를 준비 중입니다."
+              />
+            ),
           },
           {
             path: "settings",

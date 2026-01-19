@@ -227,7 +227,6 @@ const ProductRegistration: React.FC = () => {
   const [dialogMessage, setDialogMessage] = useState("");
   const [currentProduct, setCurrentProduct] = useState<Product | null>(null);
   const [fileGroup, setFileGroup] = useState<FileGroup | null>(null);
-  const [productDeleteLoading, setProductDeleteLoading] = useState(false);
   const [aiDraft, setAiDraft] = useState<AiGeneratedProductDetail | null>(null);
   const [aiDraftLoading, setAiDraftLoading] = useState(false);
   const [aiDraftError, setAiDraftError] = useState<string | null>(null);
@@ -700,12 +699,6 @@ const ProductRegistration: React.FC = () => {
       setLoading(false);
     }
   };
-
-  const canDeleteProduct = !!(
-    isEditMode &&
-    currentProduct &&
-    user?.userId === currentProduct.sellerId
-  );
 
   const buildAiDescription = (draft: AiGeneratedProductDetail) => {
     const blocks: string[] = [];

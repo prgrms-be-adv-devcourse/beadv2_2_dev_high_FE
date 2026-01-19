@@ -126,6 +126,11 @@ export type PagedAuctionParticipationResponse =
  */
 export type PagedBidHistoryResponse = PagedApiResponse<AuctionBidMessage>;
 
+export interface AuctionFormData {
+  startBid: number;
+  auctionStartAt: string;
+  auctionEndAt: string;
+}
 /**
  * 경매 생성을 위한 요청 데이터 인터페이스
  */
@@ -133,8 +138,9 @@ export interface AuctionCreationRequest {
   productId: string;
   productName?: string;
   startBid: number;
-  auctionStartAt: string;
-  auctionEndAt: string;
+  auctionStartAt: string | null;
+  auctionEndAt: string | null;
+  sellerId?: string;
 }
 
 /**
@@ -143,8 +149,8 @@ export interface AuctionCreationRequest {
 export interface AuctionUpdateRequest {
   productName?: string;
   startBid: number;
-  auctionStartAt: string;
-  auctionEndAt: string;
+  auctionStartAt: string | null;
+  auctionEndAt: string | null;
 }
 
 export interface AuctionRecommendationResponse {

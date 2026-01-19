@@ -1,10 +1,16 @@
 import {
+  adminSettlementApi,
+  type SettlementAdminSearchFilter,
+} from "@/apis/adminSettlementApi";
+import { formatDate, formatWon } from "@moreauction/utils";
+import {
+  Alert,
   Box,
   Button,
   Chip,
-  MenuItem,
+  Pagination,
   Paper,
-  Select,
+  Stack,
   Table,
   TableBody,
   TableCell,
@@ -12,14 +18,6 @@ import {
   TableRow,
   TextField,
   Typography,
-  Pagination,
-  Stack,
-  Alert,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  CircularProgress,
 } from "@mui/material";
 import {
   keepPreviousData,
@@ -28,23 +26,10 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { OrderStatus, SettlementStatus } from "@moreauction/types";
-import { formatWon } from "@moreauction/utils";
-import {
-  adminSettlementApi,
-  type SettlementAdminSearchFilter,
-} from "@/apis/adminSettlementApi";
-import { adminOrderApi } from "@/apis/adminOrderApi";
+import ChangeSettleDialog from "../dialog/ChangeSettleDialog";
+import SettleCreateDialog from "../dialog/SettleCreateDialog";
 
 const PAGE_SIZE = 10;
-const ORDER_PAGE_SIZE = 8;
-const GROUP_ITEMS_PAGE_SIZE = 8;
-
-const settlementStatusLabels: Record<string, string> = {
-  WAITING: "대기",
-  COMPLETED: "완료",
-  FAILED: "실패",
-};
 
 const AdminSettlements = () => {
   const queryClient = useQueryClient();
@@ -53,39 +38,14 @@ const AdminSettlements = () => {
   const [draftFilters, setDraftFilters] = useState<SettlementAdminSearchFilter>(
     {}
   );
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [isGroupOpen, setIsGroupOpen] = useState(false);
-  const [orderPage, setOrderPage] = useState(1);
-  const [orderSearch, setOrderSearch] = useState("");
-  const [groupItemsPage, setGroupItemsPage] = useState(1);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
-  const [createError, setCreateError] = useState<string | null>(null);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+
   const [runBatchMessage, setRunBatchMessage] = useState<string | null>(null);
-  const [runBatchCooldownUntil, setRunBatchCooldownUntil] = useState<number | null>(
-    null
-  );
+  const [runBatchCooldownUntil, setRunBatchCooldownUntil] = useState<
+    number | null
+  >(null);
   const [batchCooldownSeconds, setBatchCooldownSeconds] = useState(0);
-
-  const formatDateTime = (value?: string | null) => {
-    if (!value) return "-";
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return "-";
-    return parsed.toLocaleString(undefined, {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
-  };
-
-  const formatDate = (value?: string | null) => {
-    if (!value) return "-";
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return value;
-    return parsed.toISOString().slice(0, 10);
-  };
 
   const settlementsQuery = useQuery({
     queryKey: ["admin", "settlements", page, filters],
@@ -98,23 +58,6 @@ const AdminSettlements = () => {
       }),
     staleTime: 20_000,
     placeholderData: keepPreviousData,
-  });
-
-  const createMutation = useMutation({
-    mutationFn: (orderId: string) =>
-      adminSettlementApi.createSettlement(orderId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin", "settlements"] });
-      queryClient.invalidateQueries({ queryKey: ["admin", "orders"] });
-      setCreateError(null);
-    },
-    onError: (error: any) => {
-      const message =
-        error?.response?.data?.message ??
-        error?.data?.message ??
-        "정산 등록에 실패했습니다.";
-      setCreateError(message);
-    },
   });
 
   const runBatchMutation = useMutation({
@@ -133,60 +76,8 @@ const AdminSettlements = () => {
     },
   });
 
-  const updateStatusMutation = useMutation({
-    mutationFn: (params: { id: string; status: SettlementStatus }) =>
-      adminSettlementApi.updateSettlement({
-        id: params.id,
-        status: params.status,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin", "settlements"] });
-      queryClient.invalidateQueries({
-        queryKey: ["admin", "settlement-group-items"],
-      });
-    },
-  });
-
-  const ordersQuery = useQuery({
-    queryKey: ["admin", "orders", "confirm-buy", orderPage, orderSearch],
-    queryFn: () =>
-      adminOrderApi.getOrders({
-        page: orderPage - 1,
-        size: ORDER_PAGE_SIZE,
-        sort: "createdAt,desc",
-        filter: {
-          status: OrderStatus.CONFIRM_BUY,
-          deletedYn: "N",
-          orderId: orderSearch.trim() || undefined,
-        },
-      }),
-    enabled: isCreateOpen,
-    placeholderData: keepPreviousData,
-  });
-
-  const groupItemsQuery = useQuery({
-    queryKey: [
-      "admin",
-      "settlement-group-items",
-      selectedGroupId,
-      groupItemsPage,
-    ],
-    queryFn: () =>
-      adminSettlementApi.getSettlementGroupItems(selectedGroupId as string, {
-        page: groupItemsPage - 1,
-        size: GROUP_ITEMS_PAGE_SIZE,
-        sort: "updateDate,desc",
-      }),
-    enabled: isGroupOpen && Boolean(selectedGroupId),
-    placeholderData: keepPreviousData,
-  });
-
   const totalPages = settlementsQuery.data?.totalPages ?? 1;
   const settlements = settlementsQuery.data?.content ?? [];
-  const ordersTotalPages = ordersQuery.data?.totalPages ?? 1;
-  const orders = ordersQuery.data?.content ?? [];
-  const groupItemsTotalPages = groupItemsQuery.data?.totalPages ?? 1;
-  const groupItems = groupItemsQuery.data?.content ?? [];
 
   const showEmpty =
     !settlementsQuery.isLoading &&
@@ -197,43 +88,12 @@ const AdminSettlements = () => {
     return "정산 목록을 불러오지 못했습니다.";
   }, [settlementsQuery.isError]);
 
-  const handleOpenCreate = () => {
-    setIsCreateOpen(true);
-    setOrderPage(1);
-    setCreateError(null);
-  };
-
-  const handleCloseCreate = () => {
-    setIsCreateOpen(false);
-    setCreateError(null);
-  };
-
   const handleOpenGroup = (groupId: string) => {
     setSelectedGroupId(groupId);
-    setGroupItemsPage(1);
-    setIsGroupOpen(true);
   };
 
-  const handleCloseGroup = () => {
-    setIsGroupOpen(false);
-    setSelectedGroupId(null);
-  };
-
-  const handleCreateSettlement = (orderId: string) => {
-    createMutation.mutate(orderId, {
-      onSuccess: () => {
-        handleCloseCreate();
-      },
-    });
-  };
-
-  const handleGroupItemStatusChange = (
-    settlementId: string,
-    current: SettlementStatus,
-    next: SettlementStatus
-  ) => {
-    if (current === next) return;
-    updateStatusMutation.mutate({ id: settlementId, status: next });
+  const handleOpenCreate = () => {
+    setIsCreateOpen(true);
   };
 
   const handleRunBatch = () => {
@@ -373,8 +233,7 @@ const AdminSettlements = () => {
                 setFilters({});
                 setPage(1);
               }}
-              fullWidth
-              sx={{ minWidth: 120 }}
+              size="small"
             >
               초기화
             </Button>
@@ -386,8 +245,7 @@ const AdminSettlements = () => {
                 });
                 setPage(1);
               }}
-              fullWidth
-              sx={{ minWidth: 120 }}
+              size="small"
             >
               필터 적용
             </Button>
@@ -396,7 +254,6 @@ const AdminSettlements = () => {
       </Paper>
 
       <Paper variant="outlined">
-        {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
         <Table>
           <TableHead>
             <TableRow>
@@ -416,15 +273,36 @@ const AdminSettlements = () => {
             </TableRow>
           </TableHead>
           <TableBody>
+            {errorMessage && (
+              <TableRow>
+                <TableCell colSpan={13}>
+                  <Alert severity="error">{errorMessage}</Alert>
+                </TableCell>
+              </TableRow>
+            )}
             {settlements.map((settlement) => (
-              <TableRow key={settlement.id} hover>
+              <TableRow key={settlement.id} hover sx={{ height: 56 }}>
                 <TableCell align="center">{settlement.id}</TableCell>
-                <TableCell align="center">{settlement.sellerId}</TableCell>
+                <TableCell>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      maxWidth: 120,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    {settlement.sellerId}
+                  </Typography>
+                </TableCell>
                 <TableCell align="center">
                   {formatDate(settlement.settlementDate)}
                 </TableCell>
                 <TableCell align="center">
-                  {formatWon(settlement.totalFinalAmount + settlement.totalCharge)}
+                  {formatWon(
+                    settlement.totalFinalAmount + settlement.totalCharge
+                  )}
                 </TableCell>
                 <TableCell align="center">
                   {formatWon(settlement.totalFinalAmount)}
@@ -433,7 +311,9 @@ const AdminSettlements = () => {
                   {formatWon(settlement.totalCharge)}
                 </TableCell>
                 <TableCell align="center">
-                  {formatWon(settlement.paidFinalAmount + settlement.paidCharge)}
+                  {formatWon(
+                    settlement.paidFinalAmount + settlement.paidCharge
+                  )}
                 </TableCell>
                 <TableCell align="center">
                   {formatWon(settlement.paidFinalAmount)}
@@ -445,10 +325,13 @@ const AdminSettlements = () => {
                   {settlement.depositStatus ?? "-"}
                 </TableCell>
                 <TableCell align="center">
-                  <Chip size="small" label={formatDateTime(settlement.createdAt)} />
+                  <Chip size="small" label={formatDate(settlement.createdAt)} />
                 </TableCell>
                 <TableCell align="center">
-                  <Chip size="small" label={formatDateTime(settlement.updateDate)} />
+                  <Chip
+                    size="small"
+                    label={formatDate(settlement.updateDate)}
+                  />
                 </TableCell>
                 <TableCell align="center">
                   <Button
@@ -482,178 +365,14 @@ const AdminSettlements = () => {
           color="primary"
         />
       </Box>
-
-      <Dialog open={isCreateOpen} onClose={handleCloseCreate} maxWidth="md" fullWidth>
-        <DialogTitle>정산 등록</DialogTitle>
-        <DialogContent dividers>
-          <Stack spacing={2}>
-            {createError && <Alert severity="error">{createError}</Alert>}
-            <TextField
-              label="주문 ID 검색"
-              size="small"
-              value={orderSearch}
-              onChange={(event) => {
-                setOrderSearch(event.target.value);
-                setOrderPage(1);
-              }}
-              fullWidth
-            />
-            <Paper variant="outlined">
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell align="center">주문 ID</TableCell>
-                    <TableCell align="center">판매자 ID</TableCell>
-                    <TableCell align="center">구매자 ID</TableCell>
-                    <TableCell align="center">낙찰 금액</TableCell>
-                    <TableCell align="center">구매확정일</TableCell>
-                    <TableCell align="center">작업</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {orders.map((order) => (
-                    <TableRow key={order.id} hover>
-                      <TableCell align="center">{order.id}</TableCell>
-                      <TableCell align="center">{order.sellerId}</TableCell>
-                      <TableCell align="center">{order.buyerId}</TableCell>
-                      <TableCell align="center">
-                        {formatWon(order.winningAmount)}
-                      </TableCell>
-                      <TableCell align="center">
-                        {formatDateTime(order.confirmDate)}
-                      </TableCell>
-                      <TableCell align="center">
-                        <Button
-                          size="small"
-                          variant="contained"
-                          onClick={() => handleCreateSettlement(order.id)}
-                          disabled={createMutation.isPending}
-                        >
-                          정산 등록
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {!ordersQuery.isLoading && orders.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={6}>
-                        <Typography color="text.secondary">
-                          구매확정 주문이 없습니다.
-                        </Typography>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {ordersQuery.isLoading && (
-                    <TableRow>
-                      <TableCell colSpan={6} align="center">
-                        <CircularProgress size={20} />
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </Paper>
-            <Box sx={{ display: "flex", justifyContent: "center" }}>
-              <Pagination
-                count={ordersTotalPages}
-                page={orderPage}
-                onChange={(_, value) => setOrderPage(value)}
-                color="primary"
-              />
-            </Box>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseCreate}>닫기</Button>
-        </DialogActions>
-      </Dialog>
-
-      <Dialog open={isGroupOpen} onClose={handleCloseGroup} maxWidth="lg" fullWidth>
-        <DialogTitle>정산 항목 상태 변경</DialogTitle>
-        <DialogContent dividers>
-          <Stack spacing={2}>
-            <Paper variant="outlined">
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell align="center">정산 ID</TableCell>
-                    <TableCell align="center">주문 ID</TableCell>
-                    <TableCell align="center">정산 금액</TableCell>
-                    <TableCell align="center">상태</TableCell>
-                    <TableCell align="center">등록일</TableCell>
-                    <TableCell align="center">완료일</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {groupItems.map((item) => (
-                    <TableRow key={item.id} hover>
-                      <TableCell align="center">{item.id}</TableCell>
-                      <TableCell align="center">{item.orderId}</TableCell>
-                      <TableCell align="center">
-                        {formatWon(item.finalAmount)}
-                      </TableCell>
-                      <TableCell align="center">
-                        <Select
-                          size="small"
-                          value={item.status}
-                          onChange={(event) =>
-                            handleGroupItemStatusChange(
-                              item.id,
-                              item.status,
-                              event.target.value as SettlementStatus
-                            )
-                          }
-                          sx={{ minWidth: 130 }}
-                          disabled={item.status === SettlementStatus.COMPLETED}
-                        >
-                          {Object.values(SettlementStatus).map((status) => (
-                            <MenuItem key={status} value={status}>
-                              {settlementStatusLabels[status] ?? status}
-                            </MenuItem>
-                          ))}
-                        </Select>
-                      </TableCell>
-                      <TableCell align="center">
-                        {formatDateTime(item.inputDate)}
-                      </TableCell>
-                      <TableCell align="center">
-                        {formatDateTime(item.completeDate)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {!groupItemsQuery.isLoading && groupItems.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={6}>
-                        <Typography color="text.secondary">
-                          정산 항목이 없습니다.
-                        </Typography>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {groupItemsQuery.isLoading && (
-                    <TableRow>
-                      <TableCell colSpan={6} align="center">
-                        <CircularProgress size={20} />
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </Paper>
-            <Box sx={{ display: "flex", justifyContent: "center" }}>
-              <Pagination
-                count={groupItemsTotalPages}
-                page={groupItemsPage}
-                onChange={(_, value) => setGroupItemsPage(value)}
-                color="primary"
-              />
-            </Box>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseGroup}>닫기</Button>
-        </DialogActions>
-      </Dialog>
+      <SettleCreateDialog
+        isCreateOpen={isCreateOpen}
+        setIsCreateOpen={setIsCreateOpen}
+      />
+      <ChangeSettleDialog
+        selectedGroupId={selectedGroupId}
+        setSelectedGroupId={setSelectedGroupId}
+      />
     </Box>
   );
 };
