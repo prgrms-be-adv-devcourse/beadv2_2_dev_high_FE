@@ -16,9 +16,9 @@ import { Link as RouterLink } from "react-router-dom";
 import { formatWon } from "@moreauction/utils";
 import { useQuery } from "@tanstack/react-query";
 import { orderApi } from "@/apis/orderApi";
-import { useAuth } from "@/contexts/AuthContext";
-import { queryKeys } from "@/queries/queryKeys";
-import { getErrorMessage } from "@/utils/getErrorMessage";
+import { useAuth } from "@moreauction/auth";
+import { queryKeys } from "@/shared/queries/queryKeys";
+import { getErrorMessage } from "@/shared/utils/getErrorMessage";
 
 interface OrdersTabProps {
   title: string;
@@ -38,8 +38,19 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
     queryKey: queryKeys.orders.history(status, user?.userId),
     queryFn: async () => {
       if (!user?.userId) return [];
-      const response = await orderApi.getOrderByStatus(status);
-      return Array.isArray(response.data) ? response.data : [];
+      const response = await orderApi.getOrderByStatus(status, undefined, {
+        page: 0,
+        size: 50,
+        sort: "updatedAt,desc",
+      });
+      const payload: any = response.data;
+      if (payload?.content && Array.isArray(payload.content)) {
+        return payload.content as OrderResponse[];
+      }
+      if (payload?.data?.content && Array.isArray(payload.data.content)) {
+        return payload.data.content as OrderResponse[];
+      }
+      return [];
     },
     staleTime: 30_000,
   });

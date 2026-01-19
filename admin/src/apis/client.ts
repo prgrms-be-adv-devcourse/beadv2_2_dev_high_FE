@@ -1,5 +1,5 @@
 import { createApiClient } from "@moreauction/api-client";
-import { updateAccessTokenOutsideReact } from "@/contexts/AuthContextx";
+import { updateAccessTokenOutsideReact } from "@moreauction/auth";
 
 // API 서버의 기본 URL
 // - VITE_API_BASE_URL 없으면 http://localhost:8000

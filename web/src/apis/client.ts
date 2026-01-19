@@ -1,5 +1,5 @@
 import { createApiClient } from "@moreauction/api-client";
-import { updateAccessTokenOutsideReact } from "@/contexts/AuthContext";
+import { updateAccessTokenOutsideReact } from "@moreauction/auth";
 
 // API 서버의 기본 URL
 // - VITE_API_BASE_URL 없으면 http://localhost:8000
@@ -7,7 +7,7 @@ import { updateAccessTokenOutsideReact } from "@/contexts/AuthContext";
 const API_ORIGIN = (
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000"
 ).replace(/\/$/, "");
-const API_BASE_URL = `${API_ORIGIN}/api/v1`;
+export const API_BASE_URL = `${API_ORIGIN}/api/v1`;
 
 /**
  * 기본 axios 인스턴스입니다.

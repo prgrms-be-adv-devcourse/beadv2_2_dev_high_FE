@@ -2,6 +2,10 @@ import {
   Box,
   Button,
   Container,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControlLabel,
   Stack,
   Switch,
@@ -10,19 +14,27 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { useQuery } from "@tanstack/react-query";
-import React, { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import React, { useEffect, useMemo, useState } from "react";
 import { userApi } from "@/apis/userApi";
 import { ProfileTab } from "@/features/mypage/components/ProfileTab";
-import { useAuth } from "@/contexts/AuthContext";
-import { queryKeys } from "@/queries/queryKeys";
+import { useAuth } from "@moreauction/auth";
+import { queryKeys } from "@/shared/queries/queryKeys";
 
 const Settings: React.FC = () => {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
+  const queryClient = useQueryClient();
   const [tabValue, setTabValue] = useState(0);
   const [notifyEmail, setNotifyEmail] = useState(true);
   const [notifyPush, setNotifyPush] = useState(true);
   const [notifyMarketing, setNotifyMarketing] = useState(false);
+  const [profileDialogOpen, setProfileDialogOpen] = useState(false);
+  const [profileValues, setProfileValues] = useState({
+    name: "",
+    nickname: "",
+    phone_number: "",
+  });
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [passwordValues, setPasswordValues] = useState({
     currentPassword: "",
     nextPassword: "",
@@ -36,6 +48,78 @@ const Settings: React.FC = () => {
   });
 
   const userInfo = profileQuery.data?.data ?? null;
+  useEffect(() => {
+    if (!userInfo) return;
+    setProfileValues({
+      name: userInfo.name ?? "",
+      nickname: userInfo.nickname ?? "",
+      phone_number: userInfo.phone_number ?? "",
+    });
+  }, [userInfo]);
+
+  const profileMutation = useMutation({
+    mutationFn: (payload: typeof profileValues) =>
+      userApi.updateProfile(payload),
+    onSuccess: (response) => {
+      if (response?.data) {
+        queryClient.setQueryData(queryKeys.user.me(), response);
+        updateUser(response.data);
+      }
+      setProfileError(null);
+      alert("프로필이 변경되었습니다.");
+    },
+    onError: () => {
+      setProfileError("프로필 변경에 실패했습니다.");
+    },
+  });
+
+  const canSaveProfile = useMemo(() => {
+    if (!userInfo) return false;
+    return (
+      profileValues.name.trim().length > 0 &&
+      profileValues.nickname.trim().length > 0
+    );
+  }, [profileValues.name, profileValues.nickname, userInfo]);
+
+  const nameError = useMemo(() => {
+    const value = profileValues.name.trim();
+    if (!value) return "이름을 입력해주세요.";
+    if (!/^[A-Za-z가-힣\s]{2,30}$/.test(value)) {
+      return "이름은 2~30자, 한글/영문/공백만 가능합니다.";
+    }
+    return null;
+  }, [profileValues.name]);
+
+  const nicknameError = useMemo(() => {
+    const value = profileValues.nickname.trim();
+    if (!value) return "닉네임을 입력해주세요.";
+    if (!/^[A-Za-z0-9가-힣_-]{2,12}$/.test(value)) {
+      return "닉네임은 2~12자, 한글/영문/숫자/_/- 만 가능합니다.";
+    }
+    return null;
+  }, [profileValues.nickname]);
+
+  const phoneError = useMemo(() => {
+    const value = profileValues.phone_number.trim();
+    if (!value) return null;
+    if (!/^01[016789][-\s]?\d{3,4}[-\s]?\d{4}$/.test(value)) {
+      return "연락처 형식이 올바르지 않습니다. (예: 010-1234-5678)";
+    }
+    return null;
+  }, [profileValues.phone_number]);
+
+  const canSubmitProfile =
+    canSaveProfile && !nameError && !nicknameError && !phoneError;
+
+  const handleOpenProfileDialog = () => {
+    setProfileDialogOpen(true);
+  };
+
+  const handleCloseProfileDialog = () => {
+    if (!profileMutation.isPending) {
+      setProfileDialogOpen(false);
+    }
+  };
 
   return (
     <Container maxWidth="md">
@@ -43,10 +127,7 @@ const Settings: React.FC = () => {
         설정
       </Typography>
       <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
-        <Tabs
-          value={tabValue}
-          onChange={(_, next) => setTabValue(next)}
-        >
+        <Tabs value={tabValue} onChange={(_, next) => setTabValue(next)}>
           <Tab label="프로필" />
           <Tab label="비밀번호" />
           <Tab label="주소지" />
@@ -56,10 +137,22 @@ const Settings: React.FC = () => {
       <Box sx={{ mt: 3 }}>
         {tabValue === 0 && (
           <Box>
-            <Box sx={{ mb: 2 }}>
+            <Box
+              sx={{
+                mb: 2,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 2,
+                flexWrap: "wrap",
+              }}
+            >
               <Typography variant="body2" color="text.secondary">
-                기본 프로필 정보를 확인할 수 있습니다.
+                기본 프로필 정보를 확인하고 필요할 때 수정할 수 있어요.
               </Typography>
+              <Button variant="contained" onClick={handleOpenProfileDialog}>
+                프로필 수정하기
+              </Button>
             </Box>
             <ProfileTab userInfo={userInfo} roles={user?.roles} />
           </Box>
@@ -72,7 +165,11 @@ const Settings: React.FC = () => {
             <Typography variant="body2" color="text.secondary">
               안전한 비밀번호로 변경하세요.
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ mt: 0.5, display: "block" }}
+            >
               소셜 로그인 계정은 비밀번호가 없을 수 있습니다. (미개발)
             </Typography>
             <Stack spacing={2} sx={{ mt: 2, maxWidth: 360 }}>
@@ -126,7 +223,11 @@ const Settings: React.FC = () => {
             <Typography variant="body2" color="text.secondary">
               배송지 정보를 등록하고 기본 주소지를 설정하세요.
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ mt: 0.5, display: "block" }}
+            >
               주소지 관리 기능은 준비 중입니다.
             </Typography>
             <Box sx={{ mt: 2, display: "flex", gap: 1, flexWrap: "wrap" }}>
@@ -147,7 +248,11 @@ const Settings: React.FC = () => {
             <Typography variant="body2" color="text.secondary">
               수신할 알림을 선택하세요.
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ mt: 0.5, display: "block" }}
+            >
               알림 설정 기능은 준비 중입니다.
             </Typography>
             <Stack sx={{ mt: 2 }} spacing={1}>
@@ -193,6 +298,77 @@ const Settings: React.FC = () => {
           </Box>
         )}
       </Box>
+      <Dialog
+        open={profileDialogOpen}
+        onClose={handleCloseProfileDialog}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>프로필 변경</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            <TextField
+              label="이름"
+              value={profileValues.name}
+              error={!!nameError}
+              helperText={nameError ?? " "}
+              onChange={(event) =>
+                setProfileValues((prev) => ({
+                  ...prev,
+                  name: event.target.value,
+                }))
+              }
+            />
+            <TextField
+              label="닉네임"
+              value={profileValues.nickname}
+              error={!!nicknameError}
+              helperText={nicknameError ?? " "}
+              onChange={(event) =>
+                setProfileValues((prev) => ({
+                  ...prev,
+                  nickname: event.target.value,
+                }))
+              }
+            />
+            <TextField
+              label="연락처"
+              value={profileValues.phone_number}
+              error={!!phoneError}
+              helperText={phoneError ?? " "}
+              onChange={(event) =>
+                setProfileValues((prev) => ({
+                  ...prev,
+                  phone_number: event.target.value,
+                }))
+              }
+            />
+            {profileError && (
+              <Typography variant="body2" color="error">
+                {profileError}
+              </Typography>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={handleCloseProfileDialog}
+            disabled={profileMutation.isPending}
+          >
+            닫기
+          </Button>
+          <Button
+            variant="contained"
+            disabled={!canSubmitProfile || profileMutation.isPending}
+            onClick={() => {
+              profileMutation.mutate(profileValues);
+              handleCloseProfileDialog();
+            }}
+          >
+            {profileMutation.isPending ? "저장 중..." : "저장하기"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };

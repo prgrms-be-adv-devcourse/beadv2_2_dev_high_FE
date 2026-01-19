@@ -20,6 +20,7 @@ interface AuctionBidFormProps {
   isWithdrawn: boolean;
   isAuthenticated: boolean;
   isParticipationUnavailable?: boolean;
+  isSeller?: boolean;
 }
 
 const AuctionBidForm: React.FC<AuctionBidFormProps> = ({
@@ -38,6 +39,7 @@ const AuctionBidForm: React.FC<AuctionBidFormProps> = ({
   isWithdrawn,
   isAuthenticated,
   isParticipationUnavailable = false,
+  isSeller = false,
 }) => {
   const navigate = useNavigate();
   return (
@@ -74,6 +76,11 @@ const AuctionBidForm: React.FC<AuctionBidFormProps> = ({
               참여 현황을 불러오지 못해 입찰을 진행할 수 없습니다.
             </Alert>
           )}
+          {isAuthenticated && isSeller && (
+            <Alert severity="warning">
+              본인의 상품에는 입찰할 수 없습니다.
+            </Alert>
+          )}
           {isAuthenticated &&
             showConnectionStatus &&
             !isConnected &&
@@ -95,7 +102,10 @@ const AuctionBidForm: React.FC<AuctionBidFormProps> = ({
           fullWidth
           onFocus={() => !newBidAmount && setNewBidAmount(String(minBidPrice))}
           disabled={
-            isWithdrawn || !isAuctionInProgress || isParticipationUnavailable
+            isWithdrawn ||
+            !isAuctionInProgress ||
+            isParticipationUnavailable ||
+            isSeller
           }
           inputProps={{ min: minBidPrice, step: 100 }}
         />
@@ -108,7 +118,8 @@ const AuctionBidForm: React.FC<AuctionBidFormProps> = ({
             isWithdrawn ||
             bidLoading ||
             !isAuctionInProgress ||
-            isParticipationUnavailable
+            isParticipationUnavailable ||
+            isSeller
           }
           fullWidth
         >

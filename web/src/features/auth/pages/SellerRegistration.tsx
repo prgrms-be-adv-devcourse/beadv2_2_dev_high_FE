@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
 import { userApi } from "@/apis/userApi"; // RegisterSellerParams import
-import FormContainer from "@/shared/components/FormContainer";
+import { FormContainer } from "@moreauction/ui";
 import type { RegisterSellerParams } from "@moreauction/types";
 
 const SellerRegistration: React.FC = () => {

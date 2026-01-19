@@ -22,6 +22,20 @@ export const notificationApi = {
     }
     return data as PagedNotificationResponse;
   },
+  getUnreadNotifications: async (params: {
+    page?: number;
+    size?: number;
+  }): Promise<PagedNotificationResponse> => {
+    const res = await client.get<PagedNotificationResponse>(
+      "/notifications/unread",
+      { params }
+    );
+    const data: any = res.data;
+    if (data && typeof data === "object" && "data" in data) {
+      return data.data as PagedNotificationResponse;
+    }
+    return data as PagedNotificationResponse;
+  },
   getUnreadCount: async (): Promise<number> => {
     const res = await client.get<number>("/notifications/unread/count");
     const data: any = res.data;
@@ -34,6 +48,10 @@ export const notificationApi = {
       }
     }
     return 0;
+  },
+
+  readAll: async (): Promise<void> => {
+    await client.put("/notifications/read-all");
   },
 
   getNotifi: async (notificationId: string): Promise<number> => {

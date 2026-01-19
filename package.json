@@ -20,5 +20,9 @@
     "build:admin": "pnpm --filter admin build",
     "lint:web": "pnpm --filter web lint",
     "lint:admin": "pnpm --filter admin lint"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.5",
+    "@types/react-dom": "^19.2.3"
   }
 }

@@ -5,6 +5,8 @@ import type {
   AuctionDetailResponse,
   AuctionParticipationResponse,
   AuctionQueryParams,
+  AuctionRankingResponse,
+  AuctionStatus,
   AuctionUpdateRequest,
   PagedAuctionDocument,
   PagedAuctionResponse,
@@ -78,6 +80,14 @@ export const auctionApi = {
   ): Promise<ApiResponseDto<AuctionParticipationResponse>> => {
     console.log(`경매 참여 상태 확인 API 호출: ${auctionId}`);
     const res = await client.get(`/auctions/${auctionId}/participation`);
+    return res.data;
+  },
+
+  // 내 경매 참여 이력 조회
+  getParticipationHistory: async (): Promise<
+    ApiResponseDto<AuctionParticipationResponse[]>
+  > => {
+    const res = await client.get("/auctions/participation/me");
     return res.data;
   },
 
@@ -169,5 +179,31 @@ export const auctionApi = {
     console.log(`경매 삭제 API 호출: ${auctionId}`);
     const response = await client.delete(`/auctions/${auctionId}`);
     return response.data;
+  },
+
+  getTopAuctions: async (
+    limit = 10
+  ): Promise<ApiResponseDto<AuctionRankingResponse[]>> => {
+    console.log(`최고 경매 조회 API 호출`);
+    const response = await client.get(`/auctions/top/today`, {
+      params: { limit },
+    });
+    return response.data;
+  },
+  /**
+   * 상태 기준 경매 목록 조회 (간단 조회용)
+   */
+  getAuctionsByStatus: async (
+    status: AuctionStatus[],
+    size = 4
+  ): Promise<ApiResponseDto<PagedAuctionResponse>> => {
+    const res = await client.get("/auctions", {
+      params: {
+        page: 0,
+        size,
+        status,
+      },
+    });
+    return res.data;
   },
 };

@@ -7,6 +7,7 @@ import { AuctionStatus } from "@moreauction/types";
 export const getCommonStatusText = (
   status: string | null | undefined
 ): string => {
+  if (status == null) return "준비중";
   switch (status) {
     case AuctionStatus.READY:
     case "READY":
@@ -32,17 +33,18 @@ export const getCommonStatusText = (
 export const getAuctionStatusText = (
   status: string | null | undefined
 ): string => {
+  if (status == null) return "준비중";
   switch (status) {
     case AuctionStatus.READY:
-      return "경매 대기중";
+      return "경매대기";
     case AuctionStatus.IN_PROGRESS:
-      return "경매 진행중";
+      return "경매진행";
     case AuctionStatus.COMPLETED:
-      return "경매 종료";
+      return "경매종료";
     case AuctionStatus.FAILED:
-      return "경매 유찰";
+      return "경매유찰";
     case AuctionStatus.CANCELLED:
-      return "경매 취소";
+      return "경매취소";
     default:
       return "경매 상태 알 수 없음";
   }

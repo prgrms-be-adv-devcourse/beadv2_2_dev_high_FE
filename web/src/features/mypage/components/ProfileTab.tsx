@@ -14,13 +14,6 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({ userInfo, roles }) => {
       <List>
         <ListItem>
           <ListItemText
-            primary="닉네임"
-            secondary={userInfo?.nickname || "정보 없음"}
-          />
-        </ListItem>
-        <Divider />
-        <ListItem>
-          <ListItemText
             primary="이름"
             secondary={userInfo?.name || "정보 없음"}
           />
@@ -49,20 +42,14 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({ userInfo, roles }) => {
         <Divider />
         <ListItem>
           <ListItemText
-            primary="주소"
+            primary="기본배송지"
             secondary={
               userInfo
                 ? `${userInfo.city ?? ""} ${userInfo.state ?? ""} ${
                     userInfo.zip_code ?? ""
-                  }`
+                  }`.trim() || "정보 없음"
                 : "정보 없음"
             }
-          />
-        </ListItem>
-        <ListItem>
-          <ListItemText
-            primary="상세주소"
-            secondary={userInfo?.detail ?? "-"}
           />
         </ListItem>
         <Divider />

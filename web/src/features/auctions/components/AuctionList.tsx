@@ -1,46 +1,36 @@
 import {
   Alert,
   Box,
-  Button,
   Card,
+  CardActionArea,
   CardContent,
+  Chip,
   Skeleton,
+  Stack,
   Typography,
 } from "@mui/material";
 import React, { useMemo } from "react";
 import { Link as RouterLink } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { auctionApi } from "@/apis/auctionApi";
 import { fileApi } from "@/apis/fileApi";
 import { productApi } from "@/apis/productApi";
 import {
-  type AuctionQueryParams,
   type PagedAuctionResponse,
   type Product,
   AuctionStatus,
 } from "@moreauction/types";
+import type { ApiResponseDto, FileGroup } from "@moreauction/types";
 import { formatWon } from "@moreauction/utils";
 import { getAuctionStatusText } from "@moreauction/utils";
 import RemainingTime from "@/shared/components/RemainingTime";
-import { queryKeys } from "@/queries/queryKeys";
+import { queryKeys } from "@/shared/queries/queryKeys";
+import { seedFileGroupCache } from "@/shared/queries/seedFileGroupCache";
 import { ImageWithFallback } from "@/shared/components/common/ImageWithFallback";
-import { getErrorMessage } from "@/utils/getErrorMessage";
+import { getErrorMessage } from "@/shared/utils/getErrorMessage";
 
-type AuctionSortOption =
-  | "ENDING_SOON"
-  | "START_SOON"
-  | "NEWEST"
-  | "HIGHEST_BID";
-
-const sortMap: Record<AuctionSortOption, string[]> = {
-  ENDING_SOON: ["auctionEndAt,ASC"],
-  START_SOON: ["auctionStartAt,ASC"],
-  NEWEST: ["createdAt,DESC"],
-  HIGHEST_BID: ["currentBid,DESC"],
-};
-
-interface AuctionListProps extends AuctionQueryParams {
-  sortOption?: AuctionSortOption;
+interface AuctionListProps {
+  status: AuctionStatus[];
   /** 최대 표시 개수 (예: 홈에서는 4개만) */
   limit?: number;
   /**
@@ -55,8 +45,7 @@ interface AuctionListProps extends AuctionQueryParams {
 }
 
 const AuctionList: React.FC<AuctionListProps> = ({
-  status = [],
-  sortOption = "ENDING_SOON",
+  status,
   limit = 4,
   linkDestination = "auction",
   showEmptyState = false,
@@ -66,15 +55,9 @@ const AuctionList: React.FC<AuctionListProps> = ({
   const statusKey = Array.isArray(status) ? status.join(",") : "";
 
   const auctionQuery = useQuery({
-    queryKey: queryKeys.auctions.list(statusKey, sortOption, limit),
+    queryKey: queryKeys.auctions.list(statusKey, "simple", limit),
     queryFn: async () => {
-      const params: AuctionQueryParams = {
-        page: 0,
-        size: limit,
-        status,
-        sort: sortMap[sortOption],
-      };
-      const response = await auctionApi.getAuctions(params);
+      const response = await auctionApi.getAuctionsByStatus(status, limit);
       return response.data as PagedAuctionResponse;
     },
     staleTime: 30_000,
@@ -103,43 +86,95 @@ const AuctionList: React.FC<AuctionListProps> = ({
     return Array.from(new Set(ids));
   }, [auctions]);
 
+  const queryClient = useQueryClient();
+  const cachedProducts = useMemo(
+    () =>
+      productIds
+        .map((productId) =>
+          queryClient.getQueryData<Product>(
+            queryKeys.products.detail(productId)
+          )
+        )
+        .filter((product): product is Product => !!product),
+    [productIds, queryClient]
+  );
+  const cachedProductIds = useMemo(
+    () => new Set(cachedProducts.map((product) => product.id)),
+    [cachedProducts]
+  );
+  const missingProductIds = useMemo(
+    () => productIds.filter((id) => !cachedProductIds.has(id)),
+    [cachedProductIds, productIds]
+  );
   const productsQuery = useQuery({
-    queryKey: queryKeys.products.many(productIds),
+    queryKey: queryKeys.products.many(missingProductIds),
     queryFn: async () => {
-      const response = await productApi.getProductsByIds(productIds);
-      return response.data as Product[];
+      const response = await productApi.getProductsByIds(missingProductIds);
+      const products = (response.data ?? []) as Product[];
+      products.forEach((product) => {
+        queryClient.setQueryData(
+          queryKeys.products.detail(product.id),
+          product
+        );
+      });
+      return products;
     },
-    enabled: productIds.length > 0,
+    enabled: missingProductIds.length > 0,
     staleTime: 30_000,
   });
 
+  const mergedProducts = useMemo(
+    () => [...cachedProducts, ...(productsQuery.data ?? [])],
+    [cachedProducts, productsQuery.data]
+  );
   const productMap = useMemo(() => {
-    const list = productsQuery.data ?? [];
+    const list = mergedProducts;
     return new Map(list.map((product) => [product.id, product]));
-  }, [productsQuery.data]);
+  }, [mergedProducts]);
 
   const fileGroupIds = useMemo(() => {
-    const ids = (productsQuery.data ?? [])
+    const ids = mergedProducts
       .map((product) => product.fileGroupId)
       .filter((id) => id != null && id !== "" && id !== undefined)
       .map((id) => String(id));
     return Array.from(new Set(ids));
-  }, [productsQuery.data]);
+  }, [mergedProducts]);
 
+  const cachedFileGroups = useMemo(
+    () =>
+      fileGroupIds
+        .map(
+          (id) =>
+            queryClient.getQueryData<ApiResponseDto<FileGroup>>(
+              queryKeys.files.group(id)
+            )?.data
+        )
+        .filter((group): group is FileGroup => !!group),
+    [fileGroupIds, queryClient]
+  );
+  const cachedFileGroupIds = useMemo(
+    () => new Set(cachedFileGroups.map((group) => String(group.fileGroupId))),
+    [cachedFileGroups]
+  );
+  const missingFileGroupIds = useMemo(
+    () => fileGroupIds.filter((id) => !cachedFileGroupIds.has(id)),
+    [cachedFileGroupIds, fileGroupIds]
+  );
   const fileGroupsQuery = useQuery({
-    queryKey: queryKeys.files.groups(fileGroupIds),
+    queryKey: queryKeys.files.groups(missingFileGroupIds),
     queryFn: async () => {
-      const response = await fileApi.getFileGroupsByIds(fileGroupIds);
+      const response = await fileApi.getFileGroupsByIds(missingFileGroupIds);
+      seedFileGroupCache(queryClient, response);
       return response.data ?? [];
     },
-    enabled: fileGroupIds.length > 0,
+    enabled: missingFileGroupIds.length > 0,
     staleTime: 30_000,
   });
 
   const fileGroupMap = useMemo(() => {
-    const list = fileGroupsQuery.data ?? [];
+    const list = [...cachedFileGroups, ...(fileGroupsQuery.data ?? [])];
     return new Map(list.map((group) => [String(group.fileGroupId), group]));
-  }, [fileGroupsQuery.data]);
+  }, [cachedFileGroups, fileGroupsQuery.data]);
   const isImageLoading = productsQuery.isLoading || fileGroupsQuery.isLoading;
 
   return (
@@ -194,9 +229,11 @@ const AuctionList: React.FC<AuctionListProps> = ({
                 height: "100%",
                 display: "flex",
                 flexDirection: "column",
+                borderRadius: 3,
+                boxShadow: "0 12px 28px rgba(15, 23, 42, 0.08)",
               }}
             >
-              <Skeleton variant="rectangular" height={200} />
+              <Skeleton variant="rectangular" height={210} />
               <CardContent
                 sx={{
                   flexGrow: 1,
@@ -213,18 +250,16 @@ const AuctionList: React.FC<AuctionListProps> = ({
             </Card>
           ))
         : auctions.map((auction, i) => {
-            const hasBid =
-              auction.status === AuctionStatus.IN_PROGRESS &&
-              (auction.currentBid ?? 0) > 0;
-            const bidText =
-              auction.status === AuctionStatus.READY
-                ? "시작 전"
-                : hasBid
-                ? `현재 가격: ${formatWon(auction.currentBid)}`
-                : "현재 가격: -";
+            const isReady = auction.status === AuctionStatus.READY;
+            const currentValue =
+              auction.currentBid != null && auction.currentBid > 0
+                ? auction.currentBid
+                : auction.startBid;
             const product = auction.productId
               ? productMap.get(auction.productId)
               : undefined;
+            const displayName =
+              auction.productName ?? product?.name ?? "상품명 미확인";
             const fileGroupId =
               product?.fileGroupId != null
                 ? String(product.fileGroupId)
@@ -247,112 +282,159 @@ const AuctionList: React.FC<AuctionListProps> = ({
                   height: "100%",
                   display: "flex",
                   flexDirection: "column",
+                  borderRadius: 3,
+                  overflow: "hidden",
+                  boxShadow: "0 12px 28px rgba(15, 23, 42, 0.08)",
+                  transition: "transform 200ms ease, box-shadow 200ms ease",
+                  "&:hover": {
+                    transform: "translateY(-4px)",
+                    boxShadow: "0 18px 40px rgba(15, 23, 42, 0.12)",
+                  },
                 }}
               >
-                <ImageWithFallback
-                  src={coverImage}
-                  alt={auction?.productName ?? "경매 이미지"}
-                  height={220}
-                  loading={isImageLoading}
-                  emptySrc={emptyImage}
-                  sx={{ borderBottom: "1px solid", borderColor: "divider" }}
-                  skeletonSx={{
-                    borderBottom: "1px solid",
-                    borderColor: "divider",
-                  }}
-                />
-                <CardContent
-                  sx={{ flexGrow: 1, display: "flex", flexDirection: "column" }}
-                >
-                  <Typography
-                    gutterBottom
-                    variant="h6"
-                    component="h2"
-                    sx={{
-                      fontWeight: 600,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                    title={auction.productName} // 툴팁으로 전체 이름 표시
-                  >
-                    {auction.productName}
-                  </Typography>
-                  <Box sx={{ mt: "auto", pt: 1 }}>
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        color: "error.main",
-                        fontWeight: 600,
-                        textAlign: "right",
-                        fontSize: "1.1rem",
-                        mb: 0.5,
-                      }}
-                    >
-                      {bidText}
-                    </Typography>
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        color: "text.secondary",
-                        textAlign: "right",
-                        display: "block",
-                        mb: 0.5,
-                      }}
-                    >
-                      시작가: {formatWon(auction.startBid)}
-                    </Typography>
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        color:
-                          auction.status === "IN_PROGRESS"
-                            ? "warning.main"
-                            : auction.status === AuctionStatus.READY
-                            ? "primary.main"
-                            : "text.secondary",
-                        fontWeight:
-                          auction.status === AuctionStatus.READY ? 700 : 500,
-                        textAlign: "right",
-                        display: "block",
-                      }}
-                    >
-                      {auction.status === AuctionStatus.READY ? (
-                        `시작시간: ${formatDateTime(auction.auctionStartAt)}`
-                      ) : (
-                        <RemainingTime
-                          auctionStartAt={auction.auctionStartAt}
-                          auctionEndAt={auction.auctionEndAt}
-                          status={auction.status}
-                        />
-                      )}
-                    </Typography>
-                  </Box>
-                </CardContent>
-                <Button
-                  size="small"
-                  color="primary"
-                  variant={
-                    linkDestination === "product"
-                      ? "outlined"
-                      : auction.status === AuctionStatus.IN_PROGRESS
-                      ? "contained"
-                      : "outlined"
-                  }
+                <CardActionArea
                   component={RouterLink}
                   to={
                     linkDestination === "product"
                       ? `/products/${auction?.productId}`
                       : `/auctions/${auction.id || auction.auctionId}`
                   }
-                  sx={{ m: 1 }}
+                  sx={{ display: "flex", flexDirection: "column" }}
                 >
-                  {linkDestination === "product"
-                    ? "상품 보러가기"
-                    : auction.status === AuctionStatus.IN_PROGRESS
-                    ? "경매 바로 참여하기"
-                    : "경매 상세보기"}
-                </Button>
+                  <Box sx={{ position: "relative", width: "100%" }}>
+                    <ImageWithFallback
+                      src={coverImage}
+                      alt={auction?.productName ?? "경매 이미지"}
+                      height={210}
+                      loading={isImageLoading}
+                      emptySrc={emptyImage}
+                      sx={{ objectFit: "cover", width: "100%" }}
+                      skeletonSx={{ width: "100%" }}
+                    />
+                    <Box
+                      sx={{
+                        position: "absolute",
+                        inset: 0,
+                        background:
+                          "linear-gradient(180deg, rgba(15, 23, 42, 0) 45%, rgba(15, 23, 42, 0.45) 100%)",
+                        pointerEvents: "none",
+                      }}
+                    />
+                    <Chip
+                      label={getAuctionStatusText(auction.status)}
+                      size="small"
+                      sx={{
+                        position: "absolute",
+                        top: 12,
+                        left: 12,
+                        bgcolor: "rgba(255, 255, 255, 0.92)",
+                        fontWeight: 700,
+                      }}
+                    />
+                  </Box>
+                  <CardContent
+                    sx={{
+                      flexGrow: 1,
+                      width: "100%",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 1,
+                    }}
+                  >
+                    <Typography
+                      variant="subtitle1"
+                      sx={{
+                        fontWeight: 700,
+                        lineHeight: 1.3,
+                        minHeight: 42,
+                        display: "-webkit-box",
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: "vertical",
+                        overflow: "hidden",
+                      }}
+                      title={displayName}
+                    >
+                      {displayName}
+                    </Typography>
+                    <Stack direction="row" spacing={1}>
+                      <Box
+                        sx={{
+                          flex: 1,
+                          borderRadius: 2,
+                          bgcolor: "rgba(15, 23, 42, 0.04)",
+                          px: 1,
+                          py: 0.75,
+                        }}
+                      >
+                        <Typography variant="caption" color="text.secondary">
+                          {isReady ? "시작가" : "현재가"}
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                          {formatWon(currentValue)}
+                        </Typography>
+                      </Box>
+                      <Box
+                        sx={{
+                          flex: 1,
+                          borderRadius: 2,
+                          bgcolor: "rgba(15, 23, 42, 0.04)",
+                          px: 1,
+                          py: 0.75,
+                        }}
+                      >
+                        <Typography variant="caption" color="text.secondary">
+                          보증금
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                          {auction.depositAmount != null
+                            ? formatWon(auction.depositAmount)
+                            : "-"}
+                        </Typography>
+                      </Box>
+                    </Stack>
+                    {isReady ? (
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: "text.secondary",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 0.5,
+                          px: 1,
+                          py: 0.5,
+                          borderRadius: 999,
+                          bgcolor: "rgba(15, 23, 42, 0.06)",
+                          width: "fit-content",
+                        }}
+                      >
+                        {formatDateTime(auction.auctionStartAt)} 예정
+                      </Typography>
+                    ) : (
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 0.5,
+                          px: 1,
+                          py: 0.5,
+                          borderRadius: 999,
+                          bgcolor: "rgba(59, 130, 246, 0.12)",
+                          color: "text.primary",
+                          fontWeight: 700,
+                          width: "fit-content",
+                        }}
+                      >
+                        <RemainingTime
+                          auctionStartAt={auction.auctionStartAt}
+                          auctionEndAt={auction.auctionEndAt}
+                          status={auction.status}
+                        />
+                        남음
+                      </Typography>
+                    )}
+                  </CardContent>
+                </CardActionArea>
               </Card>
             );
           })}

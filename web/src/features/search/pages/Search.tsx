@@ -5,6 +5,7 @@ import {
   CardContent,
   Chip,
   Container,
+  Divider,
   InputAdornment,
   Pagination,
   Skeleton,
@@ -16,18 +17,16 @@ import {
 import { Search as SearchIcon } from "@mui/icons-material";
 import React, { useEffect, useMemo, useState } from "react";
 import { Link as RouterLink, useLocation, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { auctionApi } from "@/apis/auctionApi";
-import { fileApi } from "@/apis/fileApi";
-import type { AuctionDocument } from "@moreauction/types";
-import { type ProductCategory } from "@moreauction/types";
+import type { AuctionDocument, ProductCategory } from "@moreauction/types";
 import { categoryApi } from "@/apis/categoryApi";
 import { getAuctionStatusText } from "@moreauction/utils";
 import { AuctionStatus } from "@moreauction/types";
 import { formatWon } from "@moreauction/utils";
-import { queryKeys } from "@/queries/queryKeys";
+import { queryKeys } from "@/shared/queries/queryKeys";
 import { ImageWithFallback } from "@/shared/components/common/ImageWithFallback";
-import { getErrorMessage } from "@/utils/getErrorMessage";
+import { getErrorMessage } from "@/shared/utils/getErrorMessage";
 
 const SearchPage: React.FC = () => {
   const formatDateTime = (value?: string) => {
@@ -48,7 +47,7 @@ const SearchPage: React.FC = () => {
   // URL 쿼리에서 초기 검색 조건 읽기
   const initialKeyword = params.get("keyword") ?? "";
   const initialStatus = params.get("status") ?? "";
-  const initialCategoryIds = params.getAll("categories");
+  const initialCategoryNames = params.getAll("categories");
   const initialMinStartPrice = params.get("minStartPrice") ?? "";
   const initialMaxStartPrice = params.get("maxStartPrice") ?? "";
   const initialStartFrom = params.get("startFrom") ?? "";
@@ -58,8 +57,8 @@ const SearchPage: React.FC = () => {
   // 입력용 상태 (폼에 바인딩)
   const [inputKeyword, setInputKeyword] = useState(initialKeyword);
   const [pendingStatus, setPendingStatus] = useState(initialStatus);
-  const [pendingCategoryIds, setPendingCategoryIds] =
-    useState<string[]>(initialCategoryIds);
+  const [pendingCategoryNames, setPendingCategoryNames] =
+    useState<string[]>(initialCategoryNames);
   const [pendingMinStartPrice, setPendingMinStartPrice] =
     useState(initialMinStartPrice);
   const [pendingMaxStartPrice, setPendingMaxStartPrice] =
@@ -70,8 +69,8 @@ const SearchPage: React.FC = () => {
   // 실제 검색에 사용되는 적용 상태
   const [keyword, setKeyword] = useState(initialKeyword);
   const [status, setStatus] = useState(initialStatus);
-  const [selectedCategoryIds, setSelectedCategoryIds] =
-    useState<string[]>(initialCategoryIds);
+  const [selectedCategoryNames, setSelectedCategoryNames] =
+    useState<string[]>(initialCategoryNames);
   const [minStartPrice, setMinStartPrice] = useState(initialMinStartPrice);
   const [maxStartPrice, setMaxStartPrice] = useState(initialMaxStartPrice);
   const [startFrom, setStartFrom] = useState(initialStartFrom);
@@ -82,7 +81,7 @@ const SearchPage: React.FC = () => {
     () =>
       !!keyword ||
       !!status ||
-      selectedCategoryIds.length > 0 ||
+      selectedCategoryNames.length > 0 ||
       !!minStartPrice ||
       !!maxStartPrice ||
       !!startFrom ||
@@ -90,7 +89,7 @@ const SearchPage: React.FC = () => {
     [
       keyword,
       status,
-      selectedCategoryIds.length,
+      selectedCategoryNames.length,
       minStartPrice,
       maxStartPrice,
       startFrom,
@@ -112,38 +111,46 @@ const SearchPage: React.FC = () => {
     const newParams = new URLSearchParams();
     if (keyword) newParams.set("keyword", keyword);
     if (status) newParams.set("status", status);
-    if (selectedCategoryIds.length > 0) {
-      selectedCategoryIds.forEach((id) => newParams.append("categories", id));
+    if (selectedCategoryNames.length > 0) {
+      selectedCategoryNames.forEach((name) =>
+        newParams.append("categories", name)
+      );
     }
     if (minStartPrice) newParams.set("minStartPrice", minStartPrice);
     if (maxStartPrice) newParams.set("maxStartPrice", maxStartPrice);
     if (startFrom) newParams.set("startFrom", startFrom);
     if (startTo) newParams.set("startTo", startTo);
 
-    if (hasFilter) {
-      newParams.set("page", String(page));
-      newParams.set("size", "8");
-      navigate(`/search?${newParams.toString()}`, { replace: true });
-    } else {
-      navigate("/search", { replace: true });
+    const nextSearch = hasFilter
+      ? (() => {
+          newParams.set("page", String(page));
+          newParams.set("size", "8");
+          return `?${newParams.toString()}`;
+        })()
+      : "";
+    const nextPath = `/search${nextSearch}`;
+    if (`${location.pathname}${location.search}` !== nextPath) {
+      navigate(nextPath);
     }
   }, [
     keyword,
     status,
-    selectedCategoryIds,
+    selectedCategoryNames,
     minStartPrice,
     maxStartPrice,
     startFrom,
     startTo,
     page,
     navigate,
+    location.pathname,
+    location.search,
   ]);
 
   const searchQuery = useQuery({
     queryKey: queryKeys.search.auctions(
       keyword,
       status,
-      selectedCategoryIds.join(","),
+      selectedCategoryNames.join(","),
       minStartPrice,
       maxStartPrice,
       startFrom,
@@ -167,15 +174,11 @@ const SearchPage: React.FC = () => {
         return Number.isFinite(num) ? num : undefined;
       };
 
-      if (!hasFilter) {
-        return { totalPages: 0, content: [] as AuctionDocument[] };
-      }
-
       const data = await auctionApi.searchAuctions({
         keyword: keyword || undefined,
         status: status || undefined,
         categories:
-          selectedCategoryIds.length > 0 ? selectedCategoryIds : undefined,
+          selectedCategoryNames.length > 0 ? selectedCategoryNames : undefined,
         minStartPrice: parseOptionalNumber(minStartPrice),
         maxStartPrice: parseOptionalNumber(maxStartPrice),
         startFrom: normalizeDateTimeLocal(startFrom),
@@ -189,14 +192,14 @@ const SearchPage: React.FC = () => {
         content: data.data.content ?? [],
       };
     },
-    enabled: hasFilter,
     staleTime: 30_000,
+    placeholderData: keepPreviousData,
   });
 
   const categories = categoriesQuery.data ?? [];
   const categoriesLoading = categoriesQuery.isLoading;
   const result = searchQuery.data ?? { totalPages: 0, content: [] };
-  const loading = searchQuery.isLoading;
+  const loading = searchQuery.isLoading && result.content.length === 0;
   const searchErrorMessage = useMemo(() => {
     if (!searchQuery.isError) return null;
     return getErrorMessage(
@@ -205,45 +208,35 @@ const SearchPage: React.FC = () => {
     );
   }, [searchQuery.error, searchQuery.isError]);
 
-  const fileGroupIds = useMemo(
-    () =>
-      result.content
-        .map((doc) => (doc as { fileGroupId?: string | number }).fileGroupId)
-        .filter((id): id is string | number => id != null && id !== "")
-        .map((id) => String(id)),
-    [result.content]
-  );
-
-  const fileGroupsQuery = useQuery({
-    queryKey: queryKeys.files.searchGroups(fileGroupIds),
-    queryFn: async () => {
-      const response = await fileApi.getFileGroupsByIds(fileGroupIds);
-      return response.data ?? [];
-    },
-    enabled: fileGroupIds.length > 0,
-    staleTime: 30_000,
-  });
-
-  const fileGroupMap = useMemo(() => {
-    const list = fileGroupsQuery.data ?? [];
-    return new Map(list.map((group) => [String(group.fileGroupId), group]));
-  }, [fileGroupsQuery.data]);
-  const isImageLoading = fileGroupsQuery.isLoading;
-
   // 입력 핸들러들 (아직 검색 조건에는 적용하지 않음)
   const handleInputKeywordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputKeyword(e.target.value);
   };
 
   const handlePendingStatusClick = (value: string) => {
-    setPendingStatus((prev) => (prev === value ? "" : value));
+    setPendingStatus((prev) => {
+      const next = prev === value ? "" : value;
+      setStatus(next);
+      setPage(0);
+      return next;
+    });
   };
 
-  const handlePendingCategoryClick = (id: string) => {
-    setPendingCategoryIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
+  const handlePendingCategoryClick = (name: string) => {
+    setPendingCategoryNames((prev) => {
+      let next = prev;
+      if (prev.includes(name)) {
+        next = prev.filter((x) => x !== name);
+      } else if (prev.length < 3) {
+        next = [...prev, name];
+      }
+      setSelectedCategoryNames(next);
+      setPage(0);
+      return next;
+    });
   };
+
+  const isCategorySelectionFull = pendingCategoryNames.length >= 3;
 
   // 검색 버튼 / 폼 제출 시 실제 검색 조건을 적용
   const handleSubmit = (e: React.FormEvent) => {
@@ -253,7 +246,7 @@ const SearchPage: React.FC = () => {
     const hasFilter =
       !!trimmed ||
       !!pendingStatus ||
-      pendingCategoryIds.length > 0 ||
+      pendingCategoryNames.length > 0 ||
       !!pendingMinStartPrice.trim() ||
       !!pendingMaxStartPrice.trim() ||
       !!pendingStartFrom.trim() ||
@@ -266,7 +259,7 @@ const SearchPage: React.FC = () => {
 
     setKeyword(trimmed);
     setStatus(pendingStatus);
-    setSelectedCategoryIds(pendingCategoryIds);
+    setSelectedCategoryNames(pendingCategoryNames);
     setMinStartPrice(pendingMinStartPrice.trim());
     setMaxStartPrice(pendingMaxStartPrice.trim());
     setStartFrom(pendingStartFrom.trim());
@@ -284,7 +277,7 @@ const SearchPage: React.FC = () => {
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Typography variant="h4" sx={{ mb: 3, fontWeight: 700 }}>
-        상품 / 경매 검색
+        상품 검색
       </Typography>
 
       {/* 검색어 + 검색 버튼 */}
@@ -353,7 +346,12 @@ const SearchPage: React.FC = () => {
           label="시작가 최소"
           type="number"
           value={pendingMinStartPrice}
-          onChange={(e) => setPendingMinStartPrice(e.target.value)}
+          onChange={(e) => {
+            const value = e.target.value;
+            setPendingMinStartPrice(value);
+            setMinStartPrice(value);
+            setPage(0);
+          }}
           fullWidth
           slotProps={{ input: { inputProps: { min: 0, step: 100 } } }}
         />
@@ -361,7 +359,12 @@ const SearchPage: React.FC = () => {
           label="시작가 최대"
           type="number"
           value={pendingMaxStartPrice}
-          onChange={(e) => setPendingMaxStartPrice(e.target.value)}
+          onChange={(e) => {
+            const value = e.target.value;
+            setPendingMaxStartPrice(value);
+            setMaxStartPrice(value);
+            setPage(0);
+          }}
           fullWidth
           slotProps={{ input: { inputProps: { min: 0, step: 100 } } }}
         />
@@ -372,7 +375,12 @@ const SearchPage: React.FC = () => {
           label="시작 시간 From"
           type="datetime-local"
           value={pendingStartFrom}
-          onChange={(e) => setPendingStartFrom(e.target.value)}
+          onChange={(e) => {
+            const value = e.target.value;
+            setPendingStartFrom(value);
+            setStartFrom(value);
+            setPage(0);
+          }}
           fullWidth
           slotProps={{ inputLabel: { shrink: true } }}
         />
@@ -380,7 +388,12 @@ const SearchPage: React.FC = () => {
           label="시작 시간 To"
           type="datetime-local"
           value={pendingStartTo}
-          onChange={(e) => setPendingStartTo(e.target.value)}
+          onChange={(e) => {
+            const value = e.target.value;
+            setPendingStartTo(value);
+            setStartTo(value);
+            setPage(0);
+          }}
           fullWidth
           slotProps={{ inputLabel: { shrink: true } }}
         />
@@ -404,20 +417,22 @@ const SearchPage: React.FC = () => {
                 label={cat.categoryName}
                 clickable
                 color={
-                  pendingCategoryIds.includes(cat.id) ? "secondary" : "default"
+                  pendingCategoryNames.includes(cat.categoryName)
+                    ? "secondary"
+                    : "default"
                 }
-                onClick={() => handlePendingCategoryClick(cat.id)}
+                disabled={
+                  isCategorySelectionFull &&
+                  !pendingCategoryNames.includes(cat.categoryName)
+                }
+                onClick={() => handlePendingCategoryClick(cat.categoryName)}
                 sx={{ mb: 0.5 }}
               />
             ))}
       </Stack>
 
       {/* 결과 영역 */}
-      {!hasFilter ? (
-        <Typography color="text.secondary">
-          검색어를 입력하거나 상태/카테고리를 선택한 뒤 검색 버튼을 눌러주세요.
-        </Typography>
-      ) : searchErrorMessage ? (
+      {searchErrorMessage ? (
         <Typography color="text.secondary">{searchErrorMessage}</Typography>
       ) : loading ? (
         <Box
@@ -437,7 +452,7 @@ const SearchPage: React.FC = () => {
             <Card
               key={idx}
               sx={{
-                height: 280,
+                minHeight: 300,
                 overflow: "hidden",
                 display: "flex",
                 flexDirection: "column",
@@ -483,26 +498,19 @@ const SearchPage: React.FC = () => {
           }}
         >
           {result.content.map((doc) => {
-            const fileGroupId = doc.fileGroupId;
-            const fileGroup = fileGroupId
-              ? fileGroupMap.get(fileGroupId)
-              : undefined;
-            const coverImage =
-              fileGroup?.files?.[0]?.filePath || doc.imageUrl || "";
-            const hasFileGroupId = fileGroupId != null && fileGroupId !== "";
-            const emptyImage =
-              fileGroupsQuery.isError && hasFileGroupId
-                ? "/images/fallback.png"
-                : "/images/no_image.png";
+            const coverImage = doc.imageUrl || "";
+            const emptyImage = "/images/no_image.png";
 
             return (
               <Card
                 key={doc.auctionId}
                 sx={{
-                  height: 280,
+                  minHeight: 320,
                   overflow: "hidden",
                   display: "flex",
                   flexDirection: "column",
+                  borderRadius: 3,
+                  boxShadow: "0 10px 30px rgba(15, 23, 42, 0.08)",
                 }}
               >
                 <CardActionArea
@@ -512,33 +520,58 @@ const SearchPage: React.FC = () => {
                     display: "flex",
                     flexDirection: "column",
                     height: "100%",
+                    alignItems: "stretch",
                   }}
                 >
-                  <ImageWithFallback
-                    src={coverImage}
-                    alt={doc.productName}
-                    height={150}
-                    loading={isImageLoading}
-                    emptySrc={emptyImage}
-                    sx={{ objectFit: "cover", width: "100%" }}
-                    skeletonSx={{ width: "100%" }}
-                  />
+                  <Box sx={{ position: "relative" }}>
+                    <ImageWithFallback
+                      src={coverImage}
+                      alt={doc.productName}
+                      height={200}
+                      loading={loading}
+                      emptySrc={emptyImage}
+                      sx={{ objectFit: "cover", width: "100%" }}
+                      skeletonSx={{ width: "100%" }}
+                    />
+                    <Box
+                      sx={{
+                        position: "absolute",
+                        inset: 0,
+                        background:
+                          "linear-gradient(180deg, rgba(15, 23, 42, 0) 40%, rgba(15, 23, 42, 0.45) 100%)",
+                        pointerEvents: "none",
+                      }}
+                    />
+                    <Chip
+                      label={getAuctionStatusText(doc.status)}
+                      size="small"
+                      sx={{
+                        position: "absolute",
+                        top: 12,
+                        left: 12,
+                        bgcolor: "rgba(255, 255, 255, 0.9)",
+                        fontWeight: 600,
+                      }}
+                    />
+                  </Box>
                   <CardContent
                     sx={{
                       flex: 1,
                       display: "flex",
                       flexDirection: "column",
-                      py: 1.25,
+                      py: 1.5,
+                      gap: 1,
+                      alignItems: "stretch",
                     }}
                   >
                     <Typography
                       variant="subtitle1"
                       sx={{
                         fontWeight: 600,
+                        display: "-webkit-box",
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: "vertical",
                         overflow: "hidden",
-                        whiteSpace: "nowrap",
-                        textOverflow: "ellipsis",
-                        mb: 0.5,
                       }}
                     >
                       {doc.productName}
@@ -570,50 +603,57 @@ const SearchPage: React.FC = () => {
                       </Stack>
                     )}
 
-                    {doc.description && (
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
+                    <Stack direction="row" spacing={1}>
+                      <Box
                         sx={{
-                          display: "-webkit-box",
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: "vertical",
-                          overflow: "hidden",
-                          mb: 0.75,
+                          flex: 1,
+                          borderRadius: 2,
+                          bgcolor: "rgba(15, 23, 42, 0.04)",
+                          px: 1,
+                          py: 0.75,
                         }}
                       >
-                        {doc.description}
-                      </Typography>
-                    )}
-
+                        <Typography variant="caption" color="text.secondary">
+                          시작가
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {doc.startPrice != null
+                            ? formatWon(doc.startPrice)
+                            : "-"}
+                        </Typography>
+                      </Box>
+                      <Box
+                        sx={{
+                          flex: 1,
+                          borderRadius: 2,
+                          bgcolor: "rgba(15, 23, 42, 0.04)",
+                          px: 1,
+                          py: 0.75,
+                        }}
+                      >
+                        <Typography variant="caption" color="text.secondary">
+                          보증금
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {doc.depositAmount != null
+                            ? formatWon(doc.depositAmount)
+                            : "-"}
+                        </Typography>
+                      </Box>
+                    </Stack>
+                    <Divider sx={{ my: 0.5 }} />
                     <Stack
                       direction="row"
+                      alignItems="center"
                       justifyContent="space-between"
-                      sx={{ mb: 0.25 }}
+                      sx={{ mt: "auto" }}
                     >
                       <Typography variant="caption" color="text.secondary">
-                        시작가{" "}
-                        {doc.startPrice != null
-                          ? formatWon(doc.startPrice)
-                          : "-"}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        보증금{" "}
-                        {doc.depositAmount != null
-                          ? formatWon(doc.depositAmount)
-                          : "-"}
+                        {doc.status === AuctionStatus.READY
+                          ? `시작 ${formatDateTime(doc.auctionStartAt)}`
+                          : `종료 ${formatDateTime(doc.auctionEndAt)}`}
                       </Typography>
                     </Stack>
-                    <Box sx={{ mt: "auto", textAlign: "right" }}>
-                      <Typography variant="caption" color="text.secondary">
-                        상태: {getAuctionStatusText(doc.status)}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {doc.status === AuctionStatus.READY
-                          ? `시작시간: ${formatDateTime(doc.auctionStartAt)}`
-                          : `종료예정: ${formatDateTime(doc.auctionEndAt)}`}
-                      </Typography>
-                    </Box>
                   </CardContent>
                 </CardActionArea>
               </Card>
@@ -623,9 +663,10 @@ const SearchPage: React.FC = () => {
       )}
 
       <Pagination
-        count={result.totalPages}
+        count={Math.max(result.totalPages, 1)}
         page={page + 1}
         onChange={handlePageChange}
+        disabled={result.totalPages === 0}
         sx={{ display: "flex", justifyContent: "center" }}
       />
     </Container>

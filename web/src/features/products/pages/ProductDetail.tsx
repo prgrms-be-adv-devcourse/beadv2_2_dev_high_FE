@@ -2,6 +2,7 @@ import {
   AuctionStatus,
   type AuctionDetailResponse,
   type FileGroup,
+  type Product,
 } from "@moreauction/types";
 import {
   formatWon,
@@ -26,16 +27,16 @@ import {
   Typography,
 } from "@mui/material";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import { auctionApi } from "@/apis/auctionApi";
 import { fileApi } from "@/apis/fileApi";
 import { productApi } from "@/apis/productApi";
-import { wishlistApi } from "@/apis/wishlistApi";
+import { wishlistApi, type WishlistEntry } from "@/apis/wishlistApi";
 import RemainingTime from "@/shared/components/RemainingTime";
-import { useAuth } from "@/contexts/AuthContext";
-import { queryKeys } from "@/queries/queryKeys";
-import { getErrorMessage } from "@/utils/getErrorMessage";
+import { useAuth } from "@moreauction/auth";
+import { queryKeys } from "@/shared/queries/queryKeys";
+import { getErrorMessage } from "@/shared/utils/getErrorMessage";
 
 const ProductDetail: React.FC = () => {
   const formatDateTime = (value?: string | null) => {
@@ -62,12 +63,9 @@ const ProductDetail: React.FC = () => {
   );
   const [fileGroup, setFileGroup] = useState<FileGroup | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [isDeleted, setIsDeleted] = useState(false);
 
-  const deletableAuctionStatuses: AuctionStatus[] = [
-    AuctionStatus.READY,
-    AuctionStatus.FAILED,
-    AuctionStatus.CANCELLED,
-  ];
+  const deletableAuctionStatuses: AuctionStatus[] = [AuctionStatus.READY];
   const productQuery = useQuery({
     queryKey: queryKeys.products.detail(productId),
     queryFn: async () => {
@@ -77,7 +75,7 @@ const ProductDetail: React.FC = () => {
       const productResponse = await productApi.getProductById(productId);
       return productResponse.data;
     },
-    enabled: !!productId,
+    enabled: !!productId && !isDeleted,
     staleTime: 30_000,
   });
 
@@ -86,14 +84,17 @@ const ProductDetail: React.FC = () => {
   const fileGroupQuery = useQuery({
     queryKey: queryKeys.files.group(productFileGroupId),
     queryFn: () => fileApi.getFiles(String(productFileGroupId)),
-    enabled: !!productFileGroupId,
+    enabled: !!productFileGroupId && !isDeleted,
     staleTime: 30_000,
   });
+  const isFileLoading =
+    !!productFileGroupId &&
+    (fileGroupQuery.isLoading || fileGroupQuery.isFetching);
 
   const auctionsQuery = useQuery({
     queryKey: queryKeys.auctions.byProduct(productId),
     queryFn: () => auctionApi.getAuctionsByProductId(productId as string),
-    enabled: !!productId,
+    enabled: !!productId && !isDeleted,
     staleTime: 30_000,
   });
 
@@ -101,8 +102,13 @@ const ProductDetail: React.FC = () => {
 
   const latestAuctionQuery = useQuery({
     queryKey: queryKeys.auctions.detail(latestAuctionId),
-    queryFn: () => auctionApi.getAuctionDetail(latestAuctionId as string),
-    enabled: !!latestAuctionId,
+    queryFn: async () => {
+      const response = await auctionApi.getAuctionDetail(
+        latestAuctionId as string
+      );
+      return response.data;
+    },
+    enabled: !!latestAuctionId && !isDeleted,
     staleTime: 30_000,
   });
 
@@ -125,10 +131,7 @@ const ProductDetail: React.FC = () => {
     }
     if (productQuery.isError) {
       setError(
-        getErrorMessage(
-          productQuery.error,
-          "상품 정보를 불러오지 못했습니다."
-        )
+        getErrorMessage(productQuery.error, "상품 정보를 불러오지 못했습니다.")
       );
     } else {
       setError(null);
@@ -143,6 +146,9 @@ const ProductDetail: React.FC = () => {
   }
 
   const galleryItems = useMemo<GalleryItem[]>(() => {
+    if (isFileLoading) {
+      return [];
+    }
     if (fileGroupQuery.isError) {
       return [
         {
@@ -187,7 +193,7 @@ const ProductDetail: React.FC = () => {
         isPlaceholder: true,
       },
     ];
-  }, [fileGroup, fileGroupQuery.isError]);
+  }, [fileGroup, fileGroupQuery.isError, isFileLoading]);
 
   const auctionErrorMessage = useMemo(() => {
     if (!productId) {
@@ -210,13 +216,12 @@ const ProductDetail: React.FC = () => {
     setActiveImageIndex(0);
   }, [product?.id]);
 
-  const latestAuction = latestAuctionQuery.data?.data ?? null;
+  const latestAuction = latestAuctionQuery.data ?? null;
   const activeAuction = useMemo(
     () =>
       latestAuction ??
       (auctions.find((a) => a.status === AuctionStatus.IN_PROGRESS) ||
-        auctions.find((a) => a.status === AuctionStatus.READY) ||
-        auctions.find((a) => a.status === AuctionStatus.COMPLETED)),
+        auctions.find((a) => a.status === AuctionStatus.READY)),
     [auctions, latestAuction]
   );
 
@@ -246,13 +251,6 @@ const ProductDetail: React.FC = () => {
     auctions.some((auction) => auction.status === AuctionStatus.IN_PROGRESS) ||
     activeAuction?.status === AuctionStatus.IN_PROGRESS;
 
-  const canEditProduct =
-    isOwner && (!activeAuction || activeAuction.status === AuctionStatus.READY);
-
-  const canReregisterAuction =
-    ((!activeAuction && auctions.length > 0) || auctions.length === 0) &&
-    isOwner;
-
   const hasBlockingAuction =
     auctions.some(
       (auction) =>
@@ -261,6 +259,21 @@ const ProductDetail: React.FC = () => {
     ) ||
     activeAuction?.status === AuctionStatus.IN_PROGRESS ||
     activeAuction?.status === AuctionStatus.READY;
+
+  const canEditProduct =
+    isOwner && (!activeAuction || activeAuction.status === AuctionStatus.READY);
+
+  const canReregisterAuction =
+    ((!activeAuction && auctions.length > 0) || auctions.length === 0) &&
+    isOwner;
+  const canReregisterFromActiveAuction =
+    isOwner &&
+    !!product?.id &&
+    !!activeAuction &&
+    (activeAuction.status === AuctionStatus.FAILED ||
+      activeAuction.status === AuctionStatus.CANCELLED);
+  const canRegisterAuction =
+    isOwner && !!product?.id && !latestAuctionId && !hasBlockingAuction;
 
   const canDeleteProduct = !!(isOwner && product && !hasBlockingAuction);
   const showAuctionActions =
@@ -309,16 +322,37 @@ const ProductDetail: React.FC = () => {
     try {
       setDeleteLoading(true);
       await productApi.deleteProduct(product.id);
+      setIsDeleted(true);
+      queryClient.removeQueries({
+        queryKey: queryKeys.products.detail(product.id),
+      });
+      queryClient.removeQueries({
+        queryKey: queryKeys.auctions.byProduct(product.id),
+      });
+      if (product.latestAuctionId) {
+        queryClient.removeQueries({
+          queryKey: queryKeys.auctions.detail(product.latestAuctionId),
+        });
+      }
+      if (user?.userId) {
+        queryClient.setQueryData(
+          queryKeys.products.mine(user.userId),
+          (prev?: Product[]) =>
+            prev ? prev.filter((item) => item.id !== product.id) : prev
+        );
+      }
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.products.lists() }),
         queryClient.invalidateQueries({
-          queryKey: queryKeys.products.detail(product.id),
+          queryKey: queryKeys.products.lists(),
+          refetchType: "none",
         }),
         queryClient.invalidateQueries({
           queryKey: queryKeys.products.mine(user?.userId),
+          refetchType: "none",
         }),
         queryClient.invalidateQueries({
-          queryKey: queryKeys.auctions.byProduct(product.id),
+          queryKey: queryKeys.auctions.lists(),
+          refetchType: "none",
         }),
       ]);
       deleted = true;
@@ -369,17 +403,22 @@ const ProductDetail: React.FC = () => {
       if (product?.latestAuctionId === auctionKey) {
         await productApi.updateLatestAuctionId(product.id, null);
       }
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.auctions.byProduct(productId),
-      });
-      await queryClient.invalidateQueries({
+      queryClient.removeQueries({
         queryKey: queryKeys.auctions.detail(auctionKey),
       });
+      if (product?.id) {
+        queryClient.setQueryData(
+          queryKeys.products.detail(product.id),
+          (prev?: Product | null) => {
+            if (!prev) return prev;
+            if (prev.latestAuctionId !== auctionKey) return prev;
+            return { ...prev, latestAuctionId: null };
+          }
+        );
+      }
       await queryClient.invalidateQueries({
         queryKey: queryKeys.auctions.lists(),
-      });
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.products.detail(product?.id),
+        refetchType: "none",
       });
       alert("경매가 삭제되었습니다.");
     } catch (err: any) {
@@ -391,33 +430,112 @@ const ProductDetail: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    const fetchWishlistStatus = async () => {
-      if (!productId) return;
-      if (!user) {
-        setIsWish(false);
-        wishDesiredRef.current = false;
-        wishServerRef.current = false;
-        return;
-      }
+  const wishlistQuery = useQuery({
+    queryKey: queryKeys.wishlist.detail(user?.userId, productId),
+    queryFn: async () => {
+      if (!productId) return null;
       try {
-        const seqAtStart = wishActionSeqRef.current;
-        const res = await wishlistApi.getMyWishlist({
-          page: 0,
-          size: 100,
-        });
-        const items = res.data?.content ?? [];
-        const exists = items.some((item) => item.productId === productId);
-        if (wishActionSeqRef.current !== seqAtStart) return;
-        setIsWish(exists);
-        wishDesiredRef.current = exists;
-        wishServerRef.current = exists;
-      } catch (e) {
-        console.error("찜 상태 조회 실패:", e);
+        const res = await wishlistApi.getWishlistByProductId(productId);
+        return res.data;
+      } catch (err: any) {
+        if (err?.response?.status === 404) {
+          return null;
+        }
+        throw err;
       }
-    };
-    fetchWishlistStatus();
-  }, [productId, user]);
+    },
+    enabled: !!productId && !!user?.userId,
+    staleTime: 30_000,
+    retry: false,
+  });
+
+  const updateWishlistCaches = useCallback(
+    (nextDesired: boolean) => {
+      if (!user?.userId || !product) return;
+      const userId = user.userId;
+      const productId = product.id;
+      const now = new Date().toISOString();
+      const buildEntry = (
+        overrides?: Partial<WishlistEntry>
+      ): WishlistEntry => ({
+        id: overrides?.id ?? `optimistic-${userId}-${productId}`,
+        userId,
+        productId,
+        deletedYn: overrides?.deletedYn ?? "N",
+        deletedAt: overrides?.deletedAt ?? null,
+        createdBy: overrides?.createdBy ?? userId,
+        createdAt: overrides?.createdAt ?? now,
+        updatedBy: overrides?.updatedBy ?? userId,
+        updatedAt: overrides?.updatedAt ?? now,
+      });
+
+      queryClient.setQueryData(
+        queryKeys.wishlist.detail(userId, productId),
+        (prev?: WishlistEntry | null) => {
+          if (!nextDesired) return null;
+          const base = prev ?? buildEntry();
+          return {
+            ...base,
+            deletedYn: "N",
+            deletedAt: null,
+            updatedAt: now,
+            updatedBy: userId,
+          };
+        }
+      );
+
+      queryClient.setQueryData(
+        queryKeys.wishlist.list(userId),
+        (
+          prev:
+            | {
+                entries: WishlistEntry[];
+                products: Product[];
+              }
+            | undefined
+        ) => {
+          if (!prev) return prev;
+          if (nextDesired) {
+            const exists = prev.entries.some(
+              (entry) => entry.productId === productId
+            );
+            const nextEntries = exists
+              ? prev.entries
+              : [buildEntry(), ...prev.entries];
+            const nextProducts = prev.products.some(
+              (existing) => existing.id === productId
+            )
+              ? prev.products
+              : [product, ...prev.products];
+            return { entries: nextEntries, products: nextProducts };
+          }
+          return {
+            entries: prev.entries.filter(
+              (entry) => entry.productId !== productId
+            ),
+            products: prev.products.filter(
+              (existing) => existing.id !== productId
+            ),
+          };
+        }
+      );
+    },
+    [product, queryClient, user?.userId]
+  );
+
+  useEffect(() => {
+    if (!productId) return;
+    if (!user) {
+      setIsWish(false);
+      wishDesiredRef.current = false;
+      wishServerRef.current = false;
+      return;
+    }
+    const exists = !!wishlistQuery.data && wishlistQuery.data.deletedYn !== "Y";
+    setIsWish(exists);
+    wishDesiredRef.current = exists;
+    wishServerRef.current = exists;
+  }, [productId, user, wishlistQuery.data]);
 
   const showProductSkeleton = productQuery.isLoading;
   const showProductError = !!error;
@@ -520,19 +638,23 @@ const ProductDetail: React.FC = () => {
                     이미지 로드에 실패했습니다.
                   </Alert>
                 )}
-                <CardMedia
-                  component="img"
-                  height="260"
-                  image={heroImage}
-                  alt={product?.name}
-                  sx={{
-                    objectFit: "contain",
-                    backgroundColor: "grey.50",
-                    borderBottom: "1px solid",
-                    borderColor: "divider",
-                  }}
-                />
-                {galleryItems.length > 1 && (
+                {isFileLoading ? (
+                  <Skeleton variant="rectangular" height={260} />
+                ) : (
+                  <CardMedia
+                    component="img"
+                    height="260"
+                    image={heroImage}
+                    alt={product?.name}
+                    sx={{
+                      objectFit: "contain",
+                      backgroundColor: "grey.50",
+                      borderBottom: "1px solid",
+                      borderColor: "divider",
+                    }}
+                  />
+                )}
+                {isFileLoading ? (
                   <Stack
                     direction="row"
                     spacing={1}
@@ -540,38 +662,58 @@ const ProductDetail: React.FC = () => {
                     useFlexGap
                     sx={{ px: 2, py: 1 }}
                   >
-                    {galleryItems.map((item, idx) => {
-                      const isActive = idx === activeImageIndex;
-                      return (
-                        <ButtonBase
-                          key={item.key}
-                          onClick={() => setActiveImageIndex(idx)}
-                          sx={{
-                            width: 64,
-                            height: 64,
-                            borderRadius: 1,
-                            overflow: "hidden",
-                            border: "2px solid",
-                            borderColor: isActive
-                              ? "primary.main"
-                              : "transparent",
-                            boxShadow: isActive ? 2 : 0,
-                          }}
-                        >
-                          <Box
-                            component="img"
-                            src={item.url}
-                            alt={item.label}
-                            sx={{
-                              width: "100%",
-                              height: "100%",
-                              objectFit: "cover",
-                            }}
-                          />
-                        </ButtonBase>
-                      );
-                    })}
+                    {Array.from({ length: 4 }).map((_, idx) => (
+                      <Skeleton
+                        key={`gallery-skeleton-${idx}`}
+                        variant="rectangular"
+                        width={64}
+                        height={64}
+                        sx={{ borderRadius: 1 }}
+                      />
+                    ))}
                   </Stack>
+                ) : (
+                  galleryItems.length > 1 && (
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      flexWrap="wrap"
+                      useFlexGap
+                      sx={{ px: 2, py: 1 }}
+                    >
+                      {galleryItems.map((item, idx) => {
+                        const isActive = idx === activeImageIndex;
+                        return (
+                          <ButtonBase
+                            key={item.key}
+                            onClick={() => setActiveImageIndex(idx)}
+                            sx={{
+                              width: 64,
+                              height: 64,
+                              borderRadius: 1,
+                              overflow: "hidden",
+                              border: "2px solid",
+                              borderColor: isActive
+                                ? "primary.main"
+                                : "transparent",
+                              boxShadow: isActive ? 2 : 0,
+                            }}
+                          >
+                            <Box
+                              component="img"
+                              src={item.url}
+                              alt={item.label}
+                              sx={{
+                                width: "100%",
+                                height: "100%",
+                                objectFit: "cover",
+                              }}
+                            />
+                          </ButtonBase>
+                        );
+                      })}
+                    </Stack>
+                  )
                 )}
 
                 <CardContent>
@@ -623,6 +765,7 @@ const ProductDetail: React.FC = () => {
                         const nextDesired = !wishDesiredRef.current;
                         wishDesiredRef.current = nextDesired;
                         setIsWish(nextDesired);
+                        updateWishlistCaches(nextDesired);
 
                         if (wishInFlightRef.current) return;
                         wishInFlightRef.current = true;
@@ -639,12 +782,14 @@ const ProductDetail: React.FC = () => {
                               await wishlistApi.remove(product.id);
                             }
                             wishServerRef.current = target;
+                            updateWishlistCaches(target);
                           }
                         } catch (err: any) {
                           console.error("찜 토글 실패:", err);
                           if (wishActionSeqRef.current === seqAtClick) {
                             wishDesiredRef.current = wishServerRef.current;
                             setIsWish(wishServerRef.current);
+                            updateWishlistCaches(wishServerRef.current);
                           }
                           alert(
                             err?.response?.data?.message ??
@@ -672,7 +817,14 @@ const ProductDetail: React.FC = () => {
                     <Typography
                       variant="body2"
                       color="text.secondary"
-                      sx={{ mt: 0.5, whiteSpace: "pre-line", minHeight: 96 }}
+                      sx={{
+                        mt: 0.5,
+                        whiteSpace: "pre-line",
+                        minHeight: 180,
+                        maxHeight: 280,
+                        overflow: "auto",
+                        pr: 0.5,
+                      }}
                     >
                       {product?.description || "설명 없음"}
                     </Typography>
@@ -817,7 +969,15 @@ const ProductDetail: React.FC = () => {
                           />
                         </Typography>
                       )}
-                      <Box sx={{ mt: 2, textAlign: "right" }}>
+                      <Box
+                        sx={{
+                          mt: 2,
+                          display: "flex",
+                          justifyContent: "flex-end",
+                          gap: 1,
+                          flexWrap: "wrap",
+                        }}
+                      >
                         <Button
                           variant="contained"
                           color="primary"
@@ -832,6 +992,16 @@ const ProductDetail: React.FC = () => {
                             ? "경매 상세보기"
                             : "경매 결과 보기"}
                         </Button>
+                        {canReregisterFromActiveAuction && (
+                          <Button
+                            variant="outlined"
+                            color="primary"
+                            component={RouterLink}
+                            to={`/auctions/new/${product?.id}`}
+                          >
+                            경매 재등록
+                          </Button>
+                        )}
                       </Box>
                     </>
                   ) : (
@@ -840,14 +1010,13 @@ const ProductDetail: React.FC = () => {
                         이 상품에 진행 중인 경매가 없습니다.
                       </Typography>
                       {showAuctionActions &&
-                        canReregisterAuction &&
-                        product?.id && (
+                        (canRegisterAuction || canReregisterAuction) && (
                           <Box sx={{ mt: 2, textAlign: "right" }}>
                             <Button
                               variant="contained"
                               color="primary"
                               component={RouterLink}
-                              to={`/auctions/new/${product.id}`}
+                              to={`/auctions/new/${product?.id}`}
                             >
                               {auctions.length === 0
                                 ? "경매 등록"

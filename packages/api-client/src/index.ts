@@ -1,4 +1,4 @@
-import axios, { type AxiosInstance } from "axios";
+import axios, { type AxiosInstance, type AxiosRequestHeaders } from "axios";
 import type { ApiResponseDto } from "@moreauction/types";
 
 interface CreateApiClientOptions {
@@ -45,6 +45,10 @@ export const createApiClient = ({
 
   client.interceptors.request.use(
     (config) => {
+      if (config.data instanceof FormData) {
+        delete (config.headers as any)?.["Content-Type"];
+        delete (config.headers as any)?.["content-type"];
+      }
       const skipAuth = (config as { skipAuth?: boolean }).skipAuth;
       if (!skipAuth) {
         const token = localStorage.getItem("accessToken");
@@ -102,15 +106,24 @@ export const createApiClient = ({
           }
 
           if (!refreshPromise) {
-            refreshPromise = refreshToken(baseUrl).finally(() => {
-              refreshPromise = null;
-            });
+            refreshPromise = refreshToken(baseUrl)
+              .then((newToken) => {
+                if (!newToken) {
+                  refreshFailed = true;
+                  onUpdateToken(null);
+                } else {
+                  refreshFailed = false;
+                  onUpdateToken(newToken);
+                }
+                return newToken;
+              })
+              .finally(() => {
+                refreshPromise = null;
+              });
           }
           const newToken = await refreshPromise;
 
           if (newToken) {
-            refreshFailed = false;
-            onUpdateToken(newToken);
             originalRequest.headers = originalRequest.headers ?? {};
             (
               originalRequest.headers as Record<string, string>
@@ -118,8 +131,6 @@ export const createApiClient = ({
             return client(originalRequest);
           }
 
-          refreshFailed = true;
-          onUpdateToken(null);
           throw new Error("토큰 재발급 실패");
         } catch (err) {
           return Promise.reject(err);

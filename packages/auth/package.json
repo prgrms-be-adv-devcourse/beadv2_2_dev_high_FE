@@ -1,0 +1,19 @@
+{
+  "name": "@moreauction/auth",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@moreauction/types": "workspace:*",
+    "@mui/material": "^7.3.6",
+    "@tanstack/react-query": "^5.90.12",
+    "react": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.5"
+  },
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

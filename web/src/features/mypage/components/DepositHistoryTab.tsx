@@ -12,7 +12,7 @@ import {
   Box,
   Button,
 } from "@mui/material";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   useInfiniteQuery,
   useQuery,
@@ -27,20 +27,11 @@ import { formatNumber } from "@moreauction/utils";
 import { depositApi } from "@/apis/depositApi";
 import { DepositChargeDialog } from "@/features/mypage/components/DepositChargeDialog";
 import { requestTossPayment } from "@/shared/utils/requestTossPayment";
-import { useAuth } from "@/contexts/AuthContext";
-import { queryKeys } from "@/queries/queryKeys";
-import { getErrorMessage } from "@/utils/getErrorMessage";
+import { useAuth } from "@moreauction/auth";
+import { queryKeys } from "@/shared/queries/queryKeys";
+import { getErrorMessage } from "@/shared/utils/getErrorMessage";
 
-type HistoryFilter = "ALL" | "CHARGE" | "USAGE";
-
-const typeMap = {
-  CHARGE: "충전",
-  USAGE: "사용",
-  ALL: "예치금",
-};
-
-const isUsageType = (type: DepositType) =>
-  type === "USAGE" || type === "DEPOSIT";
+type HistoryFilter = "ALL" | DepositType;
 
 const getHistoryTypeText = (type: DepositType) => {
   switch (type) {
@@ -64,6 +55,10 @@ export const DepositHistoryTab: React.FC = () => {
   const [chargeLoading, setChargeLoading] = useState(false);
   const [chargeAmount, setChargeAmount] = useState<string>("");
   const [chargeError, setChargeError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<HistoryFilter>(() => {
+    const stored = sessionStorage.getItem("depositHistoryFilter");
+    return (stored as HistoryFilter) ?? "ALL";
+  });
 
   const depositInfoQuery = useQuery({
     queryKey: queryKeys.deposit.account(),
@@ -75,11 +70,12 @@ export const DepositHistoryTab: React.FC = () => {
     PagedDepositHistoryResponse,
     Error
   >({
-    queryKey: queryKeys.deposit.history(),
+    queryKey: queryKeys.deposit.history(filter),
     queryFn: async ({ pageParam = 0 }) => {
       const response = await depositApi.getDepositHistories({
         page: pageParam as number,
         size: 20,
+        type: filter === "ALL" ? undefined : filter,
       });
       return response.data;
     },
@@ -109,13 +105,12 @@ export const DepositHistoryTab: React.FC = () => {
         "예치금 내역을 불러오지 못했습니다."
       )
     : null;
-  const [filter, setFilter] = useState<HistoryFilter>("ALL");
+  const filtered = history;
+  const filterLabel = filter === "ALL" ? "예치금" : getHistoryTypeText(filter);
 
-  const filtered = useMemo(() => {
-    if (filter === "ALL") return history;
-    if (filter === "CHARGE") return history.filter((h) => h.type === "CHARGE");
-    return history.filter((h) => isUsageType(h.type));
-  }, [history, filter]);
+  useEffect(() => {
+    sessionStorage.setItem("depositHistoryFilter", filter);
+  }, [filter]);
 
   const showSkeleton = loading && !historyError && history.length === 0;
   const canLoadMore = hasMore && !loadingMore;
@@ -140,7 +135,7 @@ export const DepositHistoryTab: React.FC = () => {
           localStorage.setItem("depositBalance", String(res.data.balance));
         }
         await queryClient.invalidateQueries({
-          queryKey: queryKeys.deposit.history(),
+          queryKey: queryKeys.deposit.historyAll(),
         });
       }
     } catch (err: any) {
@@ -206,48 +201,60 @@ export const DepositHistoryTab: React.FC = () => {
             alignItems: { xs: "flex-start", sm: "center" },
           }}
         >
-          <Box>
-            <Typography variant="subtitle2" color="text.secondary">
-              현재 잔액
-            </Typography>
-            {balanceLoading && !balanceInfo ? (
-              <Skeleton width={120} />
-            ) : (
-              <Typography variant="h5" fontWeight={700}>
-                {formatNumber(balanceInfo?.balance ?? 0)}원
+          {balanceError ? (
+            <Alert
+              severity="warning"
+              sx={{ width: "100%", alignItems: "flex-start" }}
+            >
+              <Typography variant="subtitle1" fontWeight={700}>
+                예치금 계좌 정보를 불러오지 못했습니다.
               </Typography>
-            )}
-            {balanceError && (
-              <Alert severity="warning" sx={{ mt: 1 }}>
-                예치금 잔액을 불러오지 못했습니다.
-              </Alert>
-            )}
-            {!balanceLoading && !balanceInfo && !balanceError && (
-              <Alert
-                severity="info"
-                action={
-                  <Button
-                    color="inherit"
-                    size="small"
-                    onClick={handleCreateAccount}
+              <Typography variant="body2" color="text.secondary">
+                잠시 후 다시 시도해 주세요. 문제가 반복되면 고객센터로 문의해
+                주세요.
+              </Typography>
+            </Alert>
+          ) : (
+            <>
+              <Box>
+                <Typography variant="subtitle2" color="text.secondary">
+                  현재 잔액
+                </Typography>
+                {balanceLoading && !balanceInfo ? (
+                  <Skeleton width={120} />
+                ) : (
+                  <Typography variant="h5" fontWeight={700}>
+                    {formatNumber(balanceInfo?.balance ?? 0)}원
+                  </Typography>
+                )}
+                {!balanceLoading && !balanceInfo && (
+                  <Alert
+                    severity="info"
+                    action={
+                      <Button
+                        color="inherit"
+                        size="small"
+                        onClick={handleCreateAccount}
+                      >
+                        계좌 생성
+                      </Button>
+                    }
+                    sx={{ mt: 1 }}
                   >
-                    계좌 생성
-                  </Button>
-                }
-                sx={{ mt: 1 }}
+                    아직 예치금 계좌가 없습니다. 계좌를 생성해 주세요.
+                  </Alert>
+                )}
+              </Box>
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={() => setOpenChargeDialog(true)}
+                disabled={balanceLoading || !balanceInfo}
               >
-                아직 예치금 계좌가 없습니다. 계좌를 생성해 주세요.
-              </Alert>
-            )}
-          </Box>
-          <Button
-            variant="contained"
-            color="primary"
-            onClick={() => setOpenChargeDialog(true)}
-            disabled={balanceLoading || !balanceInfo}
-          >
-            예치금 충전
-          </Button>
+                예치금 충전
+              </Button>
+            </>
+          )}
         </Box>
 
         <ToggleButtonGroup
@@ -264,6 +271,8 @@ export const DepositHistoryTab: React.FC = () => {
           <ToggleButton value="ALL">전체</ToggleButton>
           <ToggleButton value="CHARGE">충전</ToggleButton>
           <ToggleButton value="USAGE">사용</ToggleButton>
+          <ToggleButton value="DEPOSIT">보증금</ToggleButton>
+          <ToggleButton value="REFUND">환불</ToggleButton>
         </ToggleButtonGroup>
 
         {showSkeleton ? (
@@ -281,7 +290,7 @@ export const DepositHistoryTab: React.FC = () => {
             ))}
           </List>
         ) : filtered.length === 0 ? (
-          <Alert severity="info">{typeMap[filter]} 내역이 없습니다.</Alert>
+          <Alert severity="info">{filterLabel} 내역이 없습니다.</Alert>
         ) : (
           <Box
             sx={{ maxHeight: 480, overflowY: "auto" }}

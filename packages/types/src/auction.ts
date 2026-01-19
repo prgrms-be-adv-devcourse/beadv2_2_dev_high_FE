@@ -89,13 +89,25 @@ export interface AuctionDetailResponse {
   auctionStartAt: string; // LocalDateTime → ISO 문자열
   auctionEndAt: string; // LocalDateTime → ISO 문자열
   depositAmount: number; // BigDecimal → number
-  deletedYn: boolean;
+  deletedYn: boolean | "Y" | "N";
+}
+
+export type AuctionResponse = AuctionDetailResponse;
+
+export interface AuctionRankingResponse {
+  bidCount: number;
+  viewCount: number;
+  bidderCount: number;
+  score: number;
+  auction: AuctionResponse;
 }
 
 export interface AuctionParticipationResponse {
+  auctionId?: string;
   isParticipated: boolean;
   isWithdrawn: boolean;
   isRefund: boolean;
+  depositAmount?: number; // BigDecimal → number
   withdrawnAt?: string; // LocalDateTime → ISO 문자열
   refundAt?: string; // LocalDateTime → ISO 문자열
   lastBidPrice?: number; // BigDecimal → number

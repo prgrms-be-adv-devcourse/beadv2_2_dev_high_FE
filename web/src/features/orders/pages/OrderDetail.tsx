@@ -15,8 +15,8 @@ import { useQuery } from "@tanstack/react-query";
 import { orderApi } from "@/apis/orderApi";
 import { getOrderStatusLabel, type OrderResponse } from "@moreauction/types";
 import { formatWon } from "@moreauction/utils";
-import { queryKeys } from "@/queries/queryKeys";
-import { getErrorMessage } from "@/utils/getErrorMessage";
+import { queryKeys } from "@/shared/queries/queryKeys";
+import { getErrorMessage } from "@/shared/utils/getErrorMessage";
 
 const OrderDetail: React.FC = () => {
   const { orderId } = useParams<{ orderId: string }>();
@@ -35,7 +35,10 @@ const OrderDetail: React.FC = () => {
   const errorMessage = useMemo(() => {
     if (!orderId) return "주문 ID가 올바르지 않습니다.";
     if (!orderQuery.isError) return null;
-    return getErrorMessage(orderQuery.error, "주문 정보를 불러오지 못했습니다.");
+    return getErrorMessage(
+      orderQuery.error,
+      "주문 정보를 불러오지 못했습니다."
+    );
   }, [orderId, orderQuery.error, orderQuery.isError]);
 
   const order = orderQuery.data ?? null;
@@ -71,10 +74,7 @@ const OrderDetail: React.FC = () => {
             </Typography>
             {renderInfo("주문 ID", order.id)}
             <Divider />
-            {renderInfo(
-              "총 낙찰가",
-              formatWon(order.winningAmount)
-            )}
+            {renderInfo("총 낙찰가", formatWon(order.winningAmount))}
             <Divider />
             {renderInfo(
               "보증금(기납부)",
@@ -86,7 +86,9 @@ const OrderDetail: React.FC = () => {
             {renderInfo(
               "추가 결제금액(예치금 차감)",
               typeof order.depositAmount === "number"
-                ? formatWon(Math.max(order.winningAmount - order.depositAmount, 0))
+                ? formatWon(
+                    Math.max(order.winningAmount - order.depositAmount, 0)
+                  )
                 : "-"
             )}
             <Divider />

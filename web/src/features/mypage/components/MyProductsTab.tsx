@@ -1,5 +1,6 @@
 import {
   Alert,
+  Box,
   Chip,
   ListItemButton,
   Skeleton,
@@ -15,11 +16,18 @@ import { Link as RouterLink } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import type { Product } from "@moreauction/types";
 import { productApi } from "@/apis/productApi";
-import { useAuth } from "@/contexts/AuthContext";
-import { queryKeys } from "@/queries/queryKeys";
-import { getErrorMessage } from "@/utils/getErrorMessage";
+import { useAuth } from "@moreauction/auth";
+import { queryKeys } from "@/shared/queries/queryKeys";
+import { getErrorMessage } from "@/shared/utils/getErrorMessage";
 
 export const MyProductsTab: React.FC = () => {
+  const formatDateTime = (value?: string | null) => {
+    if (!value) return "-";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return value;
+    return d.toLocaleString();
+  };
+
   const { user } = useAuth();
   const productsQuery = useQuery({
     queryKey: queryKeys.products.mine(user?.userId),
@@ -85,13 +93,13 @@ export const MyProductsTab: React.FC = () => {
                     to={`/products/${product.id}`}
                   >
                     <ListItemText
-                      primary={
-                        <Typography variant="subtitle1" fontWeight={600}>
-                          {product.name}
-                        </Typography>
-                      }
+                      primary={product.name}
+                      primaryTypographyProps={{
+                        variant: "subtitle1",
+                        fontWeight: 600,
+                      }}
                       secondary={
-                        <>
+                        <Box sx={{ display: "flex", flexDirection: "column" }}>
                           <Typography
                             variant="body2"
                             color="text.secondary"
@@ -103,7 +111,11 @@ export const MyProductsTab: React.FC = () => {
                           >
                             {product.description || "상품 설명이 없습니다."}
                           </Typography>
-                        </>
+                          <Typography variant="caption" color="text.secondary">
+                            등록일: {formatDateTime(product.createdAt)} · 수정일:{" "}
+                            {formatDateTime(product.updatedAt)}
+                          </Typography>
+                        </Box>
                       }
                     />
                     <Chip label="상세보기" size="small" />

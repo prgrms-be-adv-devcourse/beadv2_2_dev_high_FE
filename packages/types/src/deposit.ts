@@ -37,6 +37,45 @@ export interface DepositOrderInfo {
   status: DepositOrderStatus;
   createdAt: string;
 }
+
+export type DepositPaymentStatus =
+  | "READY"
+  | "IN_PROGRESS"
+  | "CONFIRMED"
+  | "CANCELED"
+  | "FAILED";
+
+export interface DepositPaymentDetail {
+  orderId: string;
+  userId: string;
+  paymentKey: string;
+  method: string;
+  amount: number;
+  requestedAt: string;
+  status: DepositPaymentStatus;
+  approvalNum?: string | null;
+  approvedAt?: string | null;
+  createdAt?: string | null;
+}
+
+export type PagedDepositPaymentResponse =
+  PagedApiResponse<DepositPaymentDetail>;
+
+export interface DepositPaymentFailureHistoryDetail {
+  id: number;
+  orderId: string;
+  userId: string;
+  code?: string | null;
+  message?: string | null;
+}
+
+export type PagedDepositPaymentFailureHistoryResponse =
+  PagedApiResponse<DepositPaymentFailureHistoryDetail>;
+
+export interface DepositPaymentFailureHistorySearchRequest {
+  orderId?: string;
+  userId?: string;
+}
 /**
  * /deposit/histories/me 응답 레코드 (DepositHistoryInfo)
  */

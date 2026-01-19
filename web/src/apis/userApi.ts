@@ -68,6 +68,25 @@ export const userApi = {
     const response = await client.get("/users/profile");
     return response.data;
   },
+  /**
+   * 사용자 프로필을 변경합니다.
+   */
+  updateProfile: async (params: {
+    name?: string;
+    nickname?: string;
+    phone_number?: string;
+  }): Promise<ApiResponseDto<User>> => {
+    const response = await client.put("/users/profile", params);
+    return response.data;
+  },
+  /**
+   * 사용자 ID 목록으로 사용자 정보를 조회합니다. (임시 엔드포인트)
+   * TODO: 백엔드 엔드포인트에 맞게 경로/파라미터를 조정하세요.
+   */
+  getUsersByIds: async (userIds: string[]): Promise<ApiResponseDto<User[]>> => {
+    const response = await client.post("/users/ids", { userIds });
+    return response.data;
+  },
   getSellerInfo: async (): Promise<ApiResponseDto<any>> => {
     const res = await client.get("/sellers/profile");
     return res.data;

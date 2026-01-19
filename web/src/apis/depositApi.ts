@@ -4,8 +4,12 @@ import type {
   DepositInfo,
   DepositOrderInfo,
   PagedDepositHistoryResponse,
+  PagedDepositPaymentFailureHistoryResponse,
+  PagedDepositPaymentResponse,
+  DepositPaymentFailureHistorySearchRequest,
   PaymentFailReqeuest,
   PaymentSuccessReqeuest,
+  DepositType,
 } from "@moreauction/types";
 import { client } from "@/apis/client";
 
@@ -71,10 +75,51 @@ export const depositApi = {
    * 페이징 응답을 그대로 반환합니다. (ApiResponseDto로 감싸져 있지 않음)
    */
   getDepositHistories: async (params?: {
+    type?: DepositType;
     page?: number;
     size?: number;
   }): Promise<ApiResponseDto<PagedDepositHistoryResponse>> => {
     const res = await client.get("/deposit/histories/me", { params });
+    return res.data;
+  },
+
+  /**
+   * /deposit/payments/me - 예치금 결제 내역 조회
+   */
+  getDepositPayments: async (params?: {
+    page?: number;
+    size?: number;
+    sort?: string;
+  }): Promise<ApiResponseDto<PagedDepositPaymentResponse>> => {
+    const res = await client.get("/deposit/payments/me", { params });
+    return res.data;
+  },
+
+  /**
+   * /deposit/payments/fail/search/user/userId - 결제 실패 내역 조회
+   */
+  getDepositPaymentFailuresByUser: async (
+    request: DepositPaymentFailureHistorySearchRequest,
+    params?: { page?: number; size?: number; sort?: string }
+  ): Promise<ApiResponseDto<PagedDepositPaymentFailureHistoryResponse>> => {
+    const res = await client.post(
+      "/deposit/payments/fail/search/user/userId",
+      request,
+      { params }
+    );
+    return res.data;
+  },
+
+  /**
+   * /deposit/payments/fail/paymentId - 결제 실패 내역(주문 ID 기준)
+   */
+  getDepositPaymentFailuresByOrderId: async (
+    request: DepositPaymentFailureHistorySearchRequest,
+    params?: { page?: number; size?: number; sort?: string }
+  ): Promise<ApiResponseDto<PagedDepositPaymentFailureHistoryResponse>> => {
+    const res = await client.post("/deposit/payments/fail/paymentId", request, {
+      params,
+    });
     return res.data;
   },
 };

@@ -7,10 +7,6 @@ import {
   Box,
   Skeleton,
   Alert,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   Button,
   CircularProgress,
 } from "@mui/material";
@@ -22,14 +18,14 @@ import {
   useQueryClient,
   type QueryKey,
 } from "@tanstack/react-query";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@moreauction/auth";
 import { notificationApi } from "@/apis/notificationApi";
 import type {
   NotificationInfo,
   PagedNotificationResponse,
 } from "@moreauction/types";
-import { queryKeys } from "@/queries/queryKeys";
-import { getErrorMessage } from "@/utils/getErrorMessage";
+import { queryKeys } from "@/shared/queries/queryKeys";
+import { getErrorMessage } from "@/shared/utils/getErrorMessage";
 
 const sortNotifications = (items: NotificationInfo[]) => {
   return [...items].sort((a, b) => {
@@ -46,9 +42,7 @@ const Notifications: React.FC = () => {
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
-  const [detailOpen, setDetailOpen] = useState(false);
-  const [selectedNotification, setSelectedNotification] =
-    useState<NotificationInfo | null>(null);
+  const [showUnreadOnly, setShowUnreadOnly] = useState(true);
   const queryClient = useQueryClient();
 
   const notificationsQuery = useInfiniteQuery<
@@ -61,7 +55,6 @@ const Notifications: React.FC = () => {
     queryKey: queryKeys.notifications.list(user?.userId),
     queryFn: async ({ pageParam = 0 }) =>
       notificationApi.getNotifications({
-        userId: user?.userId,
         page: pageParam,
         size: 20,
       }),
@@ -78,6 +71,11 @@ const Notifications: React.FC = () => {
     return sortNotifications(merged);
   }, [notificationsQuery.data?.pages]);
 
+  const visibleNotifications = useMemo(() => {
+    if (!showUnreadOnly) return notifications;
+    return notifications.filter((item) => !item.readYn);
+  }, [notifications, showUnreadOnly]);
+
   const errorMessage = useMemo(() => {
     if (!notificationsQuery.isError) return null;
     return getErrorMessage(
@@ -87,7 +85,8 @@ const Notifications: React.FC = () => {
   }, [notificationsQuery.error, notificationsQuery.isError]);
 
   const markAsReadMutation = useMutation({
-    mutationFn: (notificationId: string) => notificationApi.getNotifi(notificationId),
+    mutationFn: (notificationId: string) =>
+      notificationApi.getNotifi(notificationId),
     onSuccess: (_, notificationId) => {
       queryClient.setQueryData(
         queryKeys.notifications.list(user?.userId),
@@ -104,11 +103,59 @@ const Notifications: React.FC = () => {
           };
         }
       );
+      queryClient.setQueriesData(
+        { queryKey: queryKeys.notifications.headerListBase(user?.userId) },
+        (oldData: any) => {
+          if (!oldData?.content) return oldData;
+          return {
+            ...oldData,
+            content: oldData.content.map((n: NotificationInfo) =>
+              n.id === notificationId ? { ...n, readYn: true } : n
+            ),
+          };
+        }
+      );
       queryClient.setQueryData(
         queryKeys.notifications.unreadCount(),
         (prev: number | undefined) =>
           Math.max((typeof prev === "number" ? prev : 0) - 1, 0)
       );
+    },
+  });
+
+  const markAllAsReadMutation = useMutation({
+    mutationFn: () => notificationApi.readAll(),
+    onSuccess: () => {
+      queryClient.setQueryData(
+        queryKeys.notifications.list(user?.userId),
+        (oldData: any) => {
+          if (!oldData?.pages) return oldData;
+          return {
+            ...oldData,
+            pages: oldData.pages.map((page: any) => ({
+              ...page,
+              content: (page.content ?? []).map((n: NotificationInfo) => ({
+                ...n,
+                readYn: true,
+              })),
+            })),
+          };
+        }
+      );
+      queryClient.setQueriesData(
+        { queryKey: queryKeys.notifications.headerListBase(user?.userId) },
+        (oldData: any) => {
+          if (!oldData?.content) return oldData;
+          return {
+            ...oldData,
+            content: oldData.content.map((n: NotificationInfo) => ({
+              ...n,
+              readYn: true,
+            })),
+          };
+        }
+      );
+      queryClient.setQueryData(queryKeys.notifications.unreadCount(), 0);
     },
   });
 
@@ -131,12 +178,6 @@ const Notifications: React.FC = () => {
 
     if (target.relatedUrl) {
       navigate(target.relatedUrl);
-    } else {
-      setSelectedNotification({
-        ...target,
-        readYn: true,
-      });
-      setDetailOpen(true);
     }
   };
 
@@ -148,8 +189,7 @@ const Notifications: React.FC = () => {
   };
 
   const showSkeleton =
-    (notificationsQuery.isLoading ||
-      notificationsQuery.isFetchingNextPage) &&
+    (notificationsQuery.isLoading || notificationsQuery.isFetchingNextPage) &&
     notifications.length === 0 &&
     !errorMessage;
 
@@ -170,6 +210,54 @@ const Notifications: React.FC = () => {
               새로운 알림이 없습니다.
             </Alert>
           )}
+          {!showSkeleton &&
+            !errorMessage &&
+            notifications.length > 0 &&
+            showUnreadOnly &&
+            visibleNotifications.length === 0 && (
+              <Alert severity="info" sx={{ width: "100%", mb: 2 }}>
+                안 읽은 알림이 없습니다.
+              </Alert>
+            )}
+          {!showSkeleton && !errorMessage && notifications.length > 0 && (
+            <Box
+              sx={{
+                display: "flex",
+                gap: 1,
+                alignItems: "center",
+                justifyContent: "space-between",
+                mb: 2,
+              }}
+            >
+              <Box sx={{ display: "flex", gap: 1 }}>
+                <Button
+                  size="small"
+                  variant={showUnreadOnly ? "contained" : "outlined"}
+                  onClick={() => setShowUnreadOnly(true)}
+                >
+                  안 읽은 알림
+                </Button>
+                <Button
+                  size="small"
+                  variant={!showUnreadOnly ? "contained" : "outlined"}
+                  onClick={() => setShowUnreadOnly(false)}
+                >
+                  전체 보기
+                </Button>
+              </Box>
+              <Button
+                size="small"
+                variant="text"
+                onClick={() => markAllAsReadMutation.mutate()}
+                disabled={
+                  markAllAsReadMutation.isPending ||
+                  notifications.every((n) => n.readYn)
+                }
+              >
+                모두 읽기
+              </Button>
+            </Box>
+          )}
           <Box sx={{ maxHeight: "60vh", overflowY: "auto" }}>
             {showSkeleton &&
               Array.from({ length: 6 }).map((_, idx) => (
@@ -189,7 +277,7 @@ const Notifications: React.FC = () => {
 
             {!showSkeleton &&
               !errorMessage &&
-              notifications.map((notification, index) => (
+              visibleNotifications.map((notification, index) => (
                 <Box
                   key={notification.id ?? index}
                   onClick={() => handleClickNotification(notification)}
@@ -243,42 +331,24 @@ const Notifications: React.FC = () => {
 
             {!showSkeleton &&
               !errorMessage &&
-              notifications.length > 0 &&
+              visibleNotifications.length > 0 &&
               notificationsQuery.hasNextPage && (
-              <Box sx={{ display: "flex", justifyContent: "center", py: 1 }}>
-                <Button
-                  variant="outlined"
-                  onClick={() => notificationsQuery.fetchNextPage()}
-                  disabled={notificationsQuery.isFetchingNextPage}
-                >
-                  {notificationsQuery.isFetchingNextPage ? (
-                    <CircularProgress size={18} />
-                  ) : (
-                    "더 보기"
-                  )}
-                </Button>
-              </Box>
-            )}
+                <Box sx={{ display: "flex", justifyContent: "center", py: 1 }}>
+                  <Button
+                    variant="outlined"
+                    onClick={() => notificationsQuery.fetchNextPage()}
+                    disabled={notificationsQuery.isFetchingNextPage}
+                  >
+                    {notificationsQuery.isFetchingNextPage ? (
+                      <CircularProgress size={18} />
+                    ) : (
+                      "더 보기"
+                    )}
+                  </Button>
+                </Box>
+              )}
           </Box>
         </Paper>
-        <Dialog
-          open={detailOpen}
-          onClose={() => setDetailOpen(false)}
-          fullWidth
-        >
-          <DialogTitle>{selectedNotification?.title}</DialogTitle>
-          <DialogContent dividers>
-            <Typography variant="caption" color="text.secondary">
-              받은 시각: {formatDateTime(selectedNotification?.createdAt)}
-            </Typography>
-            <Typography variant="body1" sx={{ mt: 2, whiteSpace: "pre-line" }}>
-              {selectedNotification?.content}
-            </Typography>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setDetailOpen(false)}>닫기</Button>
-          </DialogActions>
-        </Dialog>
       </Box>
     </Container>
   );

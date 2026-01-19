@@ -12,7 +12,7 @@ import { Controller, useForm } from "react-hook-form";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { userApi } from "@/apis/userApi";
-import FormContainer from "@/shared/components/FormContainer";
+import { FormContainer } from "@moreauction/ui";
 import type { SignupParams } from "@moreauction/types";
 
 // 회원가입 폼에 필요한 모든 필드 타입을 정의
@@ -340,7 +340,7 @@ const SignUp: React.FC = () => {
                 // 영문, 숫자, 특수문자 조합 검증
                 const hasLetter = /[a-zA-Z]/.test(value);
                 const hasNumber = /\d/.test(value);
-                const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(
+                const hasSpecial = /[!@#$%^&*()_+=\\[\\]{};':"|,.<>\/?-]/.test(
                   value
                 );
 
@@ -567,7 +567,6 @@ const SignUp: React.FC = () => {
           />
         </Box>
 
-
         {/* 회원가입 버튼 */}
         <Button
           type="submit"
@@ -585,7 +584,6 @@ const SignUp: React.FC = () => {
             이미 계정이 있으신가요? 로그인
           </MuiLink>
         </Box>
-
       </Box>
     </FormContainer>
   );

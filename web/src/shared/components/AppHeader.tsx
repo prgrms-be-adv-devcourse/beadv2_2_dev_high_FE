@@ -16,10 +16,6 @@ import {
   ListItemText,
   Divider,
   Skeleton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
 } from "@mui/material";
 import {
   Search as SearchIcon,
@@ -33,11 +29,12 @@ import {
   Settings as SettingsIcon,
   ManageAccounts as ManageAccountsIcon,
   Logout as LogoutIcon,
+  Close as CloseIcon,
 } from "@mui/icons-material";
 import { Link as RouterLink } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
-import { useThemeContext } from "@/contexts/ThemeProvider";
-import { useEffect, useMemo, useState } from "react";
+import { useAuth } from "@moreauction/auth";
+import { useThemeContext } from "@moreauction/ui";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { notificationApi } from "@/apis/notificationApi";
 import { orderApi } from "@/apis/orderApi";
@@ -46,21 +43,34 @@ import { userApi } from "@/apis/userApi";
 import { OrderStatus, type NotificationInfo } from "@moreauction/types";
 import { formatWon } from "@moreauction/utils";
 import { useNavigate } from "react-router-dom";
-import { queryKeys } from "@/queries/queryKeys";
+import { queryKeys } from "@/shared/queries/queryKeys";
+import { useNotificationSse } from "@/features/notifications/hooks/useNotificationSse";
 
 export const AppHeader: React.FC = () => {
   const { isAuthenticated, user, logout } = useAuth();
   const { mode, toggleColorMode } = useThemeContext();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [toastQueue, setToastQueue] = useState<NotificationInfo[]>([]);
+  const [toastNotification, setToastNotification] =
+    useState<NotificationInfo | null>(null);
+  const [toastOpen, setToastOpen] = useState(false);
+  const toastHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastTimingsRef = useRef({ hideMs: 4200, exitMs: 260 });
+  const [now, setNow] = useState(() => Date.now());
+  const handleIncomingNotification = useCallback(
+    (payload: NotificationInfo) => {
+      setToastQueue((prev) => [...prev, payload]);
+    },
+    []
+  );
+  useNotificationSse({ onNotification: handleIncomingNotification });
   const [notificationAnchorEl, setNotificationAnchorEl] =
     useState<HTMLElement | null>(null);
   const [accountAnchorEl, setAccountAnchorEl] = useState<HTMLElement | null>(
     null
   );
-  const [detailOpen, setDetailOpen] = useState(false);
-  const [selectedNotification, setSelectedNotification] =
-    useState<NotificationInfo | null>(null);
   const isNotificationOpen = Boolean(notificationAnchorEl);
   const storedBalance = useMemo(() => {
     const raw = localStorage.getItem("depositBalance");
@@ -78,12 +88,9 @@ export const AppHeader: React.FC = () => {
   });
 
   const notificationsQuery = useQuery({
-    queryKey: queryKeys.notifications.headerList(user?.userId),
+    queryKey: queryKeys.notifications.headerList(user?.userId, "unread"),
     queryFn: () =>
-      notificationApi.getNotifications({
-        page: 0,
-        size: 50,
-      }),
+      notificationApi.getUnreadNotifications({ page: 0, size: 50 }),
     enabled: isAuthenticated && !!user?.userId && isNotificationOpen,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
@@ -99,6 +106,8 @@ export const AppHeader: React.FC = () => {
         return bTime - aTime;
       });
   }, [notificationsQuery.data?.content]);
+
+  const visibleNotifications = unreadNotifications;
 
   const depositQuery = useQuery({
     queryKey: queryKeys.deposit.balance(),
@@ -128,18 +137,6 @@ export const AppHeader: React.FC = () => {
       notificationApi.getNotifi(notificationId),
     onSuccess: (_, notificationId) => {
       queryClient.setQueryData(
-        queryKeys.notifications.headerList(user?.userId),
-        (oldData: any) => {
-          if (!oldData?.content) return oldData;
-          return {
-            ...oldData,
-            content: oldData.content.map((n: NotificationInfo) =>
-              n.id === notificationId ? { ...n, readYn: true } : n
-            ),
-          };
-        }
-      );
-      queryClient.setQueryData(
         queryKeys.notifications.list(user?.userId),
         (oldData: any) => {
           if (!oldData?.pages) return oldData;
@@ -151,6 +148,18 @@ export const AppHeader: React.FC = () => {
                 n.id === notificationId ? { ...n, readYn: true } : n
               ),
             })),
+          };
+        }
+      );
+      queryClient.setQueriesData(
+        { queryKey: queryKeys.notifications.headerListBase(user?.userId) },
+        (oldData: any) => {
+          if (!oldData?.content) return oldData;
+          return {
+            ...oldData,
+            content: oldData.content.map((n: NotificationInfo) =>
+              n.id === notificationId ? { ...n, readYn: true } : n
+            ),
           };
         }
       );
@@ -186,26 +195,109 @@ export const AppHeader: React.FC = () => {
       navigate(notification.relatedUrl);
       return;
     }
-
-    setSelectedNotification({
-      ...notification,
-      readYn: true,
-    });
-    setDetailOpen(true);
+    navigate("/notifications");
   };
 
-  const formatDateTime = (value?: string) => {
-    if (!value) return "";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value;
-    return date.toLocaleString();
-  };
   const safeText = (value?: unknown) =>
     typeof value === "string" ? value : "";
 
-  const handleMarkAllRead = () => {
-    queryClient.setQueryData(
-      queryKeys.notifications.headerList(user?.userId),
+  useEffect(() => {
+    if (toastNotification || toastQueue.length === 0) return;
+    const [next, ...rest] = toastQueue;
+    setToastNotification(next);
+    setToastQueue(rest);
+    setToastOpen(true);
+  }, [toastNotification, toastQueue]);
+
+  useEffect(() => {
+    return () => {
+      if (toastHideTimerRef.current) {
+        clearTimeout(toastHideTimerRef.current);
+      }
+      if (toastExitTimerRef.current) {
+        clearTimeout(toastExitTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setNow(Date.now());
+    }, 60_000);
+    return () => clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    if (!toastNotification || !toastOpen) return;
+    if (toastHideTimerRef.current) {
+      clearTimeout(toastHideTimerRef.current);
+    }
+    toastHideTimerRef.current = setTimeout(() => {
+      setToastOpen(false);
+      toastHideTimerRef.current = null;
+    }, toastTimingsRef.current.hideMs);
+  }, [toastNotification, toastOpen]);
+
+  useEffect(() => {
+    if (toastOpen || !toastNotification) return;
+    if (toastExitTimerRef.current) {
+      clearTimeout(toastExitTimerRef.current);
+    }
+    toastExitTimerRef.current = setTimeout(() => {
+      setToastQueue((prev) => {
+        if (prev.length === 0) {
+          setToastNotification(null);
+          return prev;
+        }
+        const [next, ...rest] = prev;
+        setToastNotification(next);
+        setToastOpen(true);
+        return rest;
+      });
+      toastExitTimerRef.current = null;
+    }, toastTimingsRef.current.exitMs);
+  }, [toastOpen, toastNotification]);
+
+  const handleToastClick = async () => {
+    const target = toastNotification;
+    if (!target) return;
+    setToastOpen(false);
+    if (target.id && !target.readYn) {
+      try {
+        await markAsReadMutation.mutateAsync(target.id);
+      } catch (error) {
+        console.error("알림 읽음 처리 실패:", error);
+      }
+    }
+    if (target.relatedUrl) {
+      navigate(target.relatedUrl);
+      return;
+    }
+    navigate("/notifications");
+  };
+
+  const formatRelativeTime = (value?: string) => {
+    if (!value) return "";
+    const time = new Date(value);
+    if (Number.isNaN(time.getTime())) return "";
+    const diffMs = now - time.getTime();
+    if (diffMs < 60_000) return "방금 전";
+    const minutes = Math.floor(diffMs / 60_000);
+    if (minutes < 60) return `${minutes}분 전`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}시간 전`;
+    const days = Math.floor(hours / 24);
+    return `${days}일 전`;
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await notificationApi.readAll();
+    } catch (error) {
+      console.error("알림 전체 읽음 처리 실패:", error);
+    }
+    queryClient.setQueriesData(
+      { queryKey: queryKeys.notifications.headerListBase(user?.userId) },
       (oldData: any) => {
         if (!oldData?.content) return oldData;
         return {
@@ -316,6 +408,8 @@ export const AppHeader: React.FC = () => {
                   ? formatWon(depositQuery.data)
                   : depositQuery.isLoading
                   ? "불러오는 중"
+                  : depositQuery.isError
+                  ? "조회 실패"
                   : "-"}
               </Typography>
             )}
@@ -388,7 +482,14 @@ export const AppHeader: React.FC = () => {
                   </IconButton>
                 </Tooltip>
                 <Tooltip title="로그아웃">
-                  <IconButton color="inherit" onClick={logout}>
+                  <IconButton
+                    color="inherit"
+                    onClick={() => {
+                      if (window.confirm("로그아웃하시겠습니까?")) {
+                        logout();
+                      }
+                    }}
+                  >
                     <LogoutIcon />
                   </IconButton>
                 </Tooltip>
@@ -445,14 +546,14 @@ export const AppHeader: React.FC = () => {
               </Box>
             ))}
           {!notificationsQuery.isLoading &&
-            unreadNotifications.length === 0 && (
+            visibleNotifications.length === 0 && (
               <Typography variant="body2" color="text.secondary">
                 새로운 알림이 없습니다.
               </Typography>
             )}
-          {!notificationsQuery.isLoading && unreadNotifications.length > 0 && (
+          {!notificationsQuery.isLoading && visibleNotifications.length > 0 && (
             <List disablePadding>
-              {unreadNotifications.map((notification) => (
+              {visibleNotifications.map((notification) => (
                 <ListItemButton
                   key={notification.id ?? notification.createdAt}
                   onClick={() => handleClickNotification(notification)}
@@ -515,20 +616,121 @@ export const AppHeader: React.FC = () => {
           설정
         </MenuItem>
       </Menu>
-      <Dialog open={detailOpen} onClose={() => setDetailOpen(false)} fullWidth>
-        <DialogTitle>{safeText(selectedNotification?.title)}</DialogTitle>
-        <DialogContent dividers>
-          <Typography variant="caption" color="text.secondary">
-            받은 시각: {formatDateTime(selectedNotification?.createdAt)}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {safeText(selectedNotification?.content)}
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDetailOpen(false)}>닫기</Button>
-        </DialogActions>
-      </Dialog>
+      {toastNotification && (
+        <Box
+          sx={(theme) => ({
+            position: "fixed",
+            top: 32,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: theme.zIndex.snackbar,
+            pointerEvents: "none",
+            width: "min(440px, calc(100vw - 32px))",
+          })}
+        >
+          <Box sx={{ position: "relative" }}>
+            {toastQueue.slice(0, 2).map((item, index) => (
+              <Box
+                key={`${item.id}-${index}`}
+                sx={(theme) => ({
+                  position: "absolute",
+                  inset: 0,
+                  borderRadius: 2,
+                  bgcolor:
+                    theme.palette.mode === "light" ? "#f8fafc" : "#111827",
+                  border: "1px solid",
+                  borderColor:
+                    theme.palette.mode === "light"
+                      ? "rgba(15, 23, 42, 0.12)"
+                      : "rgba(148, 163, 184, 0.4)",
+                  boxShadow:
+                    theme.palette.mode === "light"
+                      ? "0 12px 26px rgba(15, 23, 42, 0.15)"
+                      : "0 18px 34px rgba(0, 0, 0, 0.55)",
+                  transform: `translateY(${(index + 1) * 12}px) scale(${
+                    1 - (index + 1) * 0.018
+                  })`,
+                  opacity: 0.68 - index * 0.18,
+                  zIndex: 1,
+                })}
+              />
+            ))}
+            {toastNotification && (
+              <Box
+                onClick={handleToastClick}
+                sx={(theme) => ({
+                  pointerEvents: "auto",
+                  cursor: "pointer",
+                  position: "relative",
+                  borderRadius: 2,
+                  bgcolor:
+                    theme.palette.mode === "light" ? "#ffffff" : "#0f172a",
+                  border: "1px solid",
+                  borderColor:
+                    theme.palette.mode === "light"
+                      ? "rgba(15, 23, 42, 0.14)"
+                      : "rgba(148, 163, 184, 0.4)",
+                  borderLeft: "4px solid",
+                  borderLeftColor: theme.palette.primary.main,
+                  boxShadow:
+                    theme.palette.mode === "light"
+                      ? "0 18px 36px rgba(15, 23, 42, 0.2)"
+                      : "0 20px 40px rgba(0, 0, 0, 0.55)",
+                  p: 2,
+                  width: "100%",
+                  minHeight: 72,
+                  maxWidth: 440,
+                  zIndex: 3,
+                  opacity: toastOpen ? 1 : 0,
+                  transform: toastOpen
+                    ? "translateY(0) scale(1)"
+                    : "translateY(-10px) scale(0.97)",
+                  transition:
+                    "opacity 260ms ease, transform 260ms ease, box-shadow 260ms ease",
+                })}
+              >
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    justifyContent: "space-between",
+                    gap: 1.5,
+                  }}
+                >
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography variant="subtitle2" fontWeight={700} noWrap>
+                      {safeText(toastNotification?.title) || "새 알림"}
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      noWrap
+                      sx={{ overflow: "hidden", textOverflow: "ellipsis" }}
+                    >
+                      {safeText(toastNotification?.content)}
+                    </Typography>
+                    {!!toastNotification?.createdAt && (
+                      <Typography variant="caption" color="text.secondary">
+                        {formatRelativeTime(toastNotification.createdAt)}
+                      </Typography>
+                    )}
+                  </Box>
+                  <IconButton
+                    size="small"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setToastOpen(false);
+                    }}
+                    aria-label="알림 닫기"
+                  >
+                    <CloseIcon fontSize="small" />
+                  </IconButton>
+                </Box>
+              </Box>
+            )}
+          </Box>
+        </Box>
+      )}
     </AppBar>
   );
 };

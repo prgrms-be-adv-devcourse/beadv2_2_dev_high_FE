@@ -14,9 +14,9 @@ import { hasRole, UserRole } from "@moreauction/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { depositApi } from "@/apis/depositApi";
 import { userApi } from "@/apis/userApi";
-import { useAuth } from "@/contexts/AuthContext";
-import { queryKeys } from "@/queries/queryKeys";
-import { getErrorMessage } from "@/utils/getErrorMessage";
+import { useAuth } from "@moreauction/auth";
+import { queryKeys } from "@/shared/queries/queryKeys";
+import { getErrorMessage } from "@/shared/utils/getErrorMessage";
 
 export const DepositSummaryTab: React.FC = () => {
   const { user } = useAuth();
@@ -50,7 +50,7 @@ export const DepositSummaryTab: React.FC = () => {
           localStorage.setItem("depositBalance", String(res.data.balance));
         }
         await queryClient.invalidateQueries({
-          queryKey: queryKeys.deposit.history(),
+          queryKey: queryKeys.deposit.historyAll(),
         });
       }
     } catch (err: any) {

@@ -15,12 +15,12 @@ import {
   Typography,
 } from "@mui/material";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { settlementApi } from "@/apis/settlementApi";
 import type { SettlementResponse, SettlementSummary } from "@moreauction/types";
 import { formatNumber, formatWon } from "@moreauction/utils";
-import { queryKeys } from "@/queries/queryKeys";
-import { getErrorMessage } from "@/utils/getErrorMessage";
+import { queryKeys } from "@/shared/queries/queryKeys";
+import { getErrorMessage } from "@/shared/utils/getErrorMessage";
 
 type SettlementView = "SUMMARY" | "HISTORY";
 
@@ -39,7 +39,14 @@ const formatDate = (value?: string | null) => {
 };
 
 export const SettlementTab: React.FC = () => {
-  const [view, setView] = useState<SettlementView>("SUMMARY");
+  const [view, setView] = useState<SettlementView>(() => {
+    const stored = sessionStorage.getItem("settlementView");
+    return (stored as SettlementView) ?? "SUMMARY";
+  });
+
+  useEffect(() => {
+    sessionStorage.setItem("settlementView", view);
+  }, [view]);
 
   const pageSize = 20;
 

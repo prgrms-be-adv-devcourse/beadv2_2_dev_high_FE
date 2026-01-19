@@ -2,7 +2,7 @@ import { Box, CircularProgress, Typography } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { userApi } from "@/apis/userApi";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@moreauction/auth";
 import type { SocialProvider } from "@moreauction/types";
 
 const OAuthRedirect: React.FC<{ provider: SocialProvider }> = ({
@@ -105,9 +105,7 @@ const OAuthRedirect: React.FC<{ provider: SocialProvider }> = ({
     >
       <CircularProgress />
       <Typography variant="body2" color="text.secondary">
-        {errorMessage
-          ? errorMessage
-          : "소셜 로그인 처리 중..."}
+        {errorMessage ? errorMessage : "소셜 로그인 처리 중..."}
       </Typography>
       {isPopup && errorMessage && (
         <Typography variant="caption" color="text.secondary">

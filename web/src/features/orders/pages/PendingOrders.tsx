@@ -20,12 +20,12 @@ import { depositApi } from "@/apis/depositApi";
 import { orderApi } from "@/apis/orderApi";
 import { DepositChargeDialog } from "@/features/mypage/components/DepositChargeDialog";
 import { requestTossPayment } from "@/shared/utils/requestTossPayment";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@moreauction/auth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { OrderStatus, type OrderResponse } from "@moreauction/types";
 import { formatWon } from "@moreauction/utils";
-import { queryKeys } from "@/queries/queryKeys";
-import { getErrorMessage } from "@/utils/getErrorMessage";
+import { queryKeys } from "@/shared/queries/queryKeys";
+import { getErrorMessage } from "@/shared/utils/getErrorMessage";
 
 const PendingOrders: React.FC = () => {
   const location = useLocation();
@@ -60,8 +60,19 @@ const PendingOrders: React.FC = () => {
   const pendingQuery = useQuery({
     queryKey: queryKeys.orders.pending(user?.userId),
     queryFn: async () => {
-      const res = await orderApi.getOrderByStatus("bought", OrderStatus.UNPAID);
-      return Array.isArray(res.data) ? res.data : [];
+      const res = await orderApi.getOrderByStatus(
+        "bought",
+        OrderStatus.UNPAID,
+        { page: 0, size: 50, sort: "updatedAt,desc" }
+      );
+      const payload: any = res.data;
+      if (payload?.content && Array.isArray(payload.content)) {
+        return payload.content as OrderResponse[];
+      }
+      if (payload?.data?.content && Array.isArray(payload.data.content)) {
+        return payload.data.content as OrderResponse[];
+      }
+      return [];
     },
     enabled: isAuthenticated,
     staleTime: 30_000,
@@ -151,7 +162,7 @@ const PendingOrders: React.FC = () => {
           queryKey: queryKeys.deposit.account(),
         }),
         queryClient.invalidateQueries({
-          queryKey: queryKeys.deposit.history(),
+          queryKey: queryKeys.deposit.historyAll(),
         }),
       ]);
     } catch (err: any) {

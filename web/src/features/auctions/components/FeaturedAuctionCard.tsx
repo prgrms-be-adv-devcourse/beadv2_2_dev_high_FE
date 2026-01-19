@@ -13,13 +13,18 @@ import React, { useMemo } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { auctionApi } from "@/apis/auctionApi";
-import { AuctionStatus, type PagedAuctionResponse } from "@moreauction/types";
+import {
+  AuctionStatus,
+  type AuctionDetailResponse,
+  type AuctionRankingResponse,
+  type PagedAuctionResponse,
+} from "@moreauction/types";
 import { getAuctionStatusText } from "@moreauction/utils";
 import RemainingTime from "@/shared/components/RemainingTime";
 import { formatWon } from "@moreauction/utils";
-import { queryKeys } from "@/queries/queryKeys";
+import { queryKeys } from "@/shared/queries/queryKeys";
 import { ImageWithFallback } from "@/shared/components/common/ImageWithFallback";
-import { getErrorMessage } from "@/utils/getErrorMessage";
+import { getErrorMessage } from "@/shared/utils/getErrorMessage";
 
 /**
  * 홈 히어로에 들어갈 "오늘의 인기 경매" 카드
@@ -29,13 +34,9 @@ const FeaturedAuctionCard: React.FC = () => {
   const topAuctionQuery = useQuery({
     queryKey: queryKeys.auctions.featured(AuctionStatus.IN_PROGRESS),
     queryFn: async () => {
-      const res = await auctionApi.getAuctions({
-        page: 0,
-        size: 1,
-        status: [AuctionStatus.IN_PROGRESS],
-        sort: ["currentBid,DESC"],
-      });
-      return res.data as PagedAuctionResponse;
+      const res = await auctionApi.getTopAuctions(1);
+      const items = res.data as AuctionRankingResponse[];
+      return items[0]?.auction ?? null;
     },
     staleTime: 30_000,
   });
@@ -48,7 +49,7 @@ const FeaturedAuctionCard: React.FC = () => {
     );
   }, [topAuctionQuery.error, topAuctionQuery.isError]);
 
-  const auction = topAuctionQuery.data?.content?.[0];
+  const auction = topAuctionQuery.data as AuctionDetailResponse | null;
   const hasBid = (auction?.currentBid ?? 0) > 0;
   const highestBidPrice = hasBid ? (auction?.currentBid as number) : null;
 

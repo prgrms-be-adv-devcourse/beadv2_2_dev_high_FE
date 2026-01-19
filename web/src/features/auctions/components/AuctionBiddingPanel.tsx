@@ -1,8 +1,9 @@
 import { People, Timer } from "@mui/icons-material";
-import { Box, Paper, Stack, Typography } from "@mui/material";
+import { Box, Paper, Skeleton, Stack, Typography } from "@mui/material";
 import RemainingTime from "@/shared/components/RemainingTime";
 import { AuctionStatus } from "@moreauction/types";
 import { formatWon } from "@moreauction/utils";
+import { useEffect, useRef, useState } from "react";
 
 const formatDateTime = (value?: string) => {
   if (!value) return "-";
@@ -16,22 +17,78 @@ interface AuctionBiddingPanelProps {
   startBid: number;
   currentBidPrice: number;
   hasAnyBid: boolean;
-  highestBidderInfo: { id?: string; username?: string } | null;
+  highestBidderId?: string;
+  highestBidderLabel?: string | null;
+  isBidderLoading?: boolean;
   currentUserCount: number;
   auctionEndAt: string;
   auctionStartAt: string;
 }
+
+const useAnimatedNumber = (value: number, enabled: boolean, duration = 700) => {
+  const [displayValue, setDisplayValue] = useState(value);
+  const displayRef = useRef(value);
+  const rafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    displayRef.current = displayValue;
+  }, [displayValue]);
+
+  useEffect(() => {
+    if (!enabled) {
+      setDisplayValue(value);
+      displayRef.current = value;
+      return;
+    }
+
+    const from = displayRef.current;
+    const to = value;
+    if (from === to) {
+      setDisplayValue(to);
+      return;
+    }
+
+    const start = performance.now();
+    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+
+    const tick = (now: number) => {
+      const elapsed = now - start;
+      const t = Math.min(elapsed / duration, 1);
+      const eased = easeOutCubic(t);
+      const next = Math.round(from + (to - from) * eased);
+      setDisplayValue(next);
+      if (t < 1) {
+        rafRef.current = requestAnimationFrame(tick);
+      } else {
+        setDisplayValue(to);
+      }
+    };
+
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+      }
+    };
+  }, [duration, enabled, value]);
+
+  return displayValue;
+};
 
 const AuctionBiddingPanel: React.FC<AuctionBiddingPanelProps> = ({
   status,
   startBid,
   currentBidPrice,
   hasAnyBid,
-  highestBidderInfo,
+  highestBidderId,
+  highestBidderLabel,
+  isBidderLoading = false,
   currentUserCount,
   auctionEndAt,
   auctionStartAt,
 }) => {
+  const animatedCurrentBid = useAnimatedNumber(currentBidPrice, hasAnyBid);
+
   return (
     <Paper sx={{ p: 2 }}>
       <Box sx={{ mb: 3 }}>
@@ -47,7 +104,7 @@ const AuctionBiddingPanel: React.FC<AuctionBiddingPanelProps> = ({
               최고 입찰가
             </Typography>
             <Typography variant="h3" fontWeight="bold" color="primary.main">
-              {hasAnyBid ? formatWon(currentBidPrice) : "-"}
+              {hasAnyBid ? formatWon(animatedCurrentBid) : "-"}
             </Typography>
             {!hasAnyBid && (
               <Typography variant="caption" color="text.secondary">
@@ -56,12 +113,17 @@ const AuctionBiddingPanel: React.FC<AuctionBiddingPanelProps> = ({
             )}
             <Typography variant="body2" color="text.secondary">
               최고 입찰자:{" "}
-              {highestBidderInfo?.id
-                ? `${highestBidderInfo.username} (${highestBidderInfo.id.slice(
-                    0,
-                    4
-                  )}****)`
-                : "없음"}
+              {highestBidderId ? (
+                highestBidderLabel ? (
+                  highestBidderLabel
+                ) : isBidderLoading ? (
+                  <Skeleton width={120} sx={{ display: "inline-block" }} />
+                ) : (
+                  "-"
+                )
+              ) : (
+                "없음"
+              )}
             </Typography>
           </>
         )}

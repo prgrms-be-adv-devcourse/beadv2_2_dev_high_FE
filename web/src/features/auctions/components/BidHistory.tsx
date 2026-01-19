@@ -8,6 +8,7 @@ import {
   ListItem,
   ListItemText,
   Paper,
+  Skeleton,
   Typography,
 } from "@mui/material";
 import { format } from "date-fns";
@@ -23,6 +24,8 @@ interface BidHistoryProps {
   bidHistory: AuctionBidMessage[];
   fetchMoreHistory: () => void;
   hasMore: boolean;
+  getBidderLabel?: (userId?: string, fallbackName?: string) => string | null;
+  isBidderLoading?: boolean;
 }
 
 const BidHistory: React.FC<BidHistoryProps> = ({
@@ -30,6 +33,8 @@ const BidHistory: React.FC<BidHistoryProps> = ({
   bidHistory,
   fetchMoreHistory,
   hasMore,
+  getBidderLabel,
+  isBidderLoading = false,
 }) => {
   const navigate = useNavigate();
 
@@ -92,11 +97,27 @@ const BidHistory: React.FC<BidHistoryProps> = ({
                 }
                 secondary={
                   <>
-                    <Typography component="span" display="block">
-                      입찰자: {bid?.highestUsername} (ID:{" "}
-                      {bid.highestUserId?.slice(0, 4)}
-                      ****)
-                    </Typography>
+                  <Typography component="span" display="block">
+                    입찰자:{" "}
+                    {(() => {
+                      const label = getBidderLabel
+                        ? getBidderLabel(
+                            bid.highestUserId,
+                            bid.highestUsername
+                          )
+                        : bid.highestUsername ?? null;
+                      if (label) return label;
+                      if (isBidderLoading) {
+                        return (
+                          <Skeleton
+                            width={120}
+                            sx={{ display: "inline-block" }}
+                          />
+                        );
+                      }
+                      return "-";
+                    })()}
+                  </Typography>
                     <Typography
                       component="span"
                       display="block"

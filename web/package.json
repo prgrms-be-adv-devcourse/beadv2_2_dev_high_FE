@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@moreauction/api-client": "workspace:*",
+    "@moreauction/auth": "workspace:*",
+    "@moreauction/ui": "workspace:*",
     "@moreauction/types": "workspace:*",
     "@moreauction/utils": "workspace:*",
     "@dnd-kit/core": "^6.3.1",

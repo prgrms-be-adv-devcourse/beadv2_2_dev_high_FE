@@ -45,7 +45,8 @@ export const useChat = () => {
           setSessionId(nextSessionId);
         }
         const reply =
-          response.data?.reply ?? "요청을 처리하지 못했습니다. 다시 시도해 주세요.";
+          response.data?.reply ??
+          "요청을 처리하지 못했습니다. 다시 시도해 주세요.";
         setMessages((prev) => [...prev, createMessage("assistant", reply)]);
       } catch (err) {
         setError("메시지 전송에 실패했습니다. 잠시 후 다시 시도해 주세요.");
@@ -57,7 +58,9 @@ export const useChat = () => {
   );
 
   const reset = useCallback(() => {
-    setMessages([createMessage("assistant", "안녕하세요! 무엇을 도와드릴까요?")]);
+    setMessages([
+      createMessage("assistant", "안녕하세요! 무엇을 도와드릴까요?"),
+    ]);
     setSessionId(null);
     setError(null);
   }, []);

@@ -17,6 +17,7 @@ interface AuctionDialogsProps {
   setOpenDepositPrompt: (open: boolean) => void;
   handleCloseDepositPrompt: () => void;
   depositAmount: number;
+  isDepositLoading?: boolean;
 
   openWithdrawnPopup: boolean;
   setOpenWithdrawnPopup: (open: boolean) => void;
@@ -32,6 +33,7 @@ const AuctionDialogs: React.FC<AuctionDialogsProps> = ({
   setOpenDepositPrompt,
   handleCloseDepositPrompt,
   depositAmount,
+  isDepositLoading = false,
   openWithdrawnPopup,
   setOpenWithdrawnPopup,
   handleWithdraw,
@@ -56,7 +58,11 @@ const AuctionDialogs: React.FC<AuctionDialogsProps> = ({
       {/* 보증금 프롬프트 */}
       <Dialog
         open={openDepositPrompt}
-        onClose={() => setOpenDepositPrompt(false)}
+        onClose={() => {
+          if (!isDepositLoading) {
+            setOpenDepositPrompt(false);
+          }
+        }}
       >
         <DialogTitle>보증금 필요</DialogTitle>
         <DialogContent>
@@ -69,8 +75,17 @@ const AuctionDialogs: React.FC<AuctionDialogsProps> = ({
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenDepositPrompt(false)}>취소</Button>
-          <Button onClick={handleCloseDepositPrompt} autoFocus>
+          <Button
+            onClick={() => setOpenDepositPrompt(false)}
+            disabled={isDepositLoading}
+          >
+            취소
+          </Button>
+          <Button
+            onClick={handleCloseDepositPrompt}
+            autoFocus
+            disabled={isDepositLoading}
+          >
             보증금 결제
           </Button>
         </DialogActions>

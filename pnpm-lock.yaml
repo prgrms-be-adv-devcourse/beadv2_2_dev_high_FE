@@ -6,7 +6,14 @@ settings:
 
 importers:
 
-  .: {}
+  .:
+    devDependencies:
+      '@types/react':
+        specifier: ^19.2.5
+        version: 19.2.7
+      '@types/react-dom':
+        specifier: ^19.2.3
+        version: 19.2.3(@types/react@19.2.7)
 
   admin:
     dependencies:
@@ -25,9 +32,15 @@ importers:
       '@moreauction/api-client':
         specifier: workspace:*
         version: link:../packages/api-client
+      '@moreauction/auth':
+        specifier: workspace:*
+        version: link:../packages/auth
       '@moreauction/types':
         specifier: workspace:*
         version: link:../packages/types
+      '@moreauction/ui':
+        specifier: workspace:*
+        version: link:../packages/ui
       '@moreauction/utils':
         specifier: workspace:*
         version: link:../packages/utils
@@ -123,7 +136,45 @@ importers:
         specifier: ^1.13.2
         version: 1.13.2
 
+  packages/auth:
+    dependencies:
+      '@moreauction/types':
+        specifier: workspace:*
+        version: link:../types
+      '@mui/material':
+        specifier: ^7.3.6
+        version: 7.3.6(@emotion/react@11.14.0(@types/react@19.2.7)(react@19.2.3))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.7)(react@19.2.3))(@types/react@19.2.7)(react@19.2.3))(@types/react@19.2.7)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      '@tanstack/react-query':
+        specifier: ^5.90.12
+        version: 5.90.16(react@19.2.3)
+      react:
+        specifier: ^19.2.0
+        version: 19.2.3
+    devDependencies:
+      '@types/react':
+        specifier: ^19.2.5
+        version: 19.2.7
+
   packages/types: {}
+
+  packages/ui:
+    dependencies:
+      '@emotion/react':
+        specifier: ^11.14.0
+        version: 11.14.0(@types/react@19.2.7)(react@19.2.3)
+      '@emotion/styled':
+        specifier: ^11.14.1
+        version: 11.14.1(@emotion/react@11.14.0(@types/react@19.2.7)(react@19.2.3))(@types/react@19.2.7)(react@19.2.3)
+      '@mui/material':
+        specifier: ^7.3.6
+        version: 7.3.6(@emotion/react@11.14.0(@types/react@19.2.7)(react@19.2.3))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.7)(react@19.2.3))(@types/react@19.2.7)(react@19.2.3))(@types/react@19.2.7)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      react:
+        specifier: ^19.2.0
+        version: 19.2.3
+    devDependencies:
+      '@types/react':
+        specifier: ^19.2.5
+        version: 19.2.7
 
   packages/utils:
     dependencies:
@@ -151,9 +202,15 @@ importers:
       '@moreauction/api-client':
         specifier: workspace:*
         version: link:../packages/api-client
+      '@moreauction/auth':
+        specifier: workspace:*
+        version: link:../packages/auth
       '@moreauction/types':
         specifier: workspace:*
         version: link:../packages/types
+      '@moreauction/ui':
+        specifier: workspace:*
+        version: link:../packages/ui
       '@moreauction/utils':
         specifier: workspace:*
         version: link:../packages/utils
