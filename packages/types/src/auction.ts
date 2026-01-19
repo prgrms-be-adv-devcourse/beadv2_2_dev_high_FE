@@ -13,7 +13,7 @@ export const AuctionStatus = {
 
 export type AuctionStatus = (typeof AuctionStatus)[keyof typeof AuctionStatus];
 
-export type PagedAuctionResponse = PagedApiResponse<Auction>;
+export type PagedAuctionResponse = PagedApiResponse<AuctionDetailResponse>;
 
 export interface AuctionQueryParams {
   auctionStartAt?: string; // "2025-12-10T00:00:00" 형식, 선택적
@@ -37,29 +37,6 @@ export interface AuctionLiveState {
   bidCount: number; // 백엔드에서 직접 제공되지 않으면 프론트엔드에서 계산 또는 별도 API 필요
   version: number;
   updatedAt: string;
-}
-
-/**
- * 경매 정보 인터페이스
- */
-export interface Auction {
-  id?: string;
-  auctionId?: string;
-  productId?: string;
-  productName: string;
-  status: AuctionStatus;
-  startBid: number;
-  auctionStartAt: string; // ISO 8601 string
-  auctionEndAt: string; // ISO 8601 string
-  currentBid?: number;
-  deletedYn: "Y" | "N";
-  deletedAt?: string;
-  createdBy: string;
-  createdAt: string;
-  updatedBy: string;
-  updatedAt: string;
-  imageUrl?: string;
-  filePath?: string;
 }
 
 /**
@@ -100,19 +77,19 @@ export interface AuctionLiveStateResponse {
  */
 export interface AuctionDetailResponse {
   id: string;
+  auctionId?: string; // 경매 ID
   productId: string; // 상품 ID 추가
   status: AuctionStatus;
   startBid: number; // BigDecimal → number
   currentBid: number; // BigDecimal → number
   highestUserId?: string | null;
-  description: string;
-  productName: string;
+  description?: string;
+  productName?: string;
   sellerId: string;
   auctionStartAt: string; // LocalDateTime → ISO 문자열
   auctionEndAt: string; // LocalDateTime → ISO 문자열
   depositAmount: number; // BigDecimal → number
   deletedYn: boolean;
-  files: string;
 }
 
 export interface AuctionParticipationResponse {

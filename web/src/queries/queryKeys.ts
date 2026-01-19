@@ -1,0 +1,151 @@
+const toStableIdList = (
+  items?: Array<string | number | null | undefined>
+) => {
+  if (!items || items.length === 0) return [];
+  return items
+    .filter((item): item is string | number => item !== null && item !== undefined)
+    .map((item) => (typeof item === "string" ? item : String(item)))
+    .filter((item) => item.length > 0)
+    .sort();
+};
+
+export const queryKeys = {
+  auctions: {
+    all: ["auctions"] as const,
+    lists: () => [...queryKeys.auctions.all, "list"] as const,
+    list: (statusKey: string, sortOption?: string, limit?: number) =>
+      [
+        ...queryKeys.auctions.all,
+        "list",
+        statusKey || "all",
+        sortOption ?? "default",
+        limit ?? "all",
+      ] as const,
+    details: () => [...queryKeys.auctions.all, "detail"] as const,
+    detail: (auctionId?: string | null) =>
+      [...queryKeys.auctions.all, "detail", auctionId ?? "unknown"] as const,
+    byProduct: (productId?: string | null) =>
+      [...queryKeys.auctions.all, "byProduct", productId ?? "unknown"] as const,
+    participation: (auctionId?: string | null) =>
+      [
+        ...queryKeys.auctions.all,
+        "participation",
+        auctionId ?? "unknown",
+      ] as const,
+    bidHistory: (auctionId?: string | null) =>
+      [...queryKeys.auctions.all, "bidHistory", auctionId ?? "unknown"] as const,
+    featured: (status?: string | null) =>
+      [...queryKeys.auctions.all, "featured", status ?? "all"] as const,
+  },
+  products: {
+    all: ["products"] as const,
+    lists: () => [...queryKeys.products.all, "list"] as const,
+    list: (page?: number | null) =>
+      [...queryKeys.products.all, "list", page ?? "all"] as const,
+    details: () => [...queryKeys.products.all, "detail"] as const,
+    detail: (productId?: string | null) =>
+      [...queryKeys.products.all, "detail", productId ?? "unknown"] as const,
+    mine: (userId?: string | null) =>
+      [...queryKeys.products.all, "mine", userId ?? "anonymous"] as const,
+    many: (productIds?: Array<string | number | null | undefined>) =>
+      [...queryKeys.products.all, "many", toStableIdList(productIds)] as const,
+  },
+  files: {
+    all: ["files"] as const,
+    group: (groupId?: string | number | null) =>
+      [...queryKeys.files.all, "group", groupId ?? "unknown"] as const,
+    groups: (groupIds?: Array<string | number | null | undefined>) =>
+      [...queryKeys.files.all, "groups", toStableIdList(groupIds)] as const,
+    searchGroups: (groupIds?: Array<string | number | null | undefined>) =>
+      [
+        ...queryKeys.files.all,
+        "groups",
+        "search",
+        toStableIdList(groupIds),
+      ] as const,
+  },
+  categories: {
+    all: ["categories"] as const,
+  },
+  notifications: {
+    all: ["notifications"] as const,
+    lists: () => [...queryKeys.notifications.all, "list"] as const,
+    unreadCount: () => [...queryKeys.notifications.all, "unreadCount"] as const,
+    list: (userId?: string | null) =>
+      [...queryKeys.notifications.all, "list", userId ?? "anonymous"] as const,
+    headerList: (userId?: string | null) =>
+      [
+        ...queryKeys.notifications.all,
+        "list",
+        "header",
+        userId ?? "anonymous",
+      ] as const,
+  },
+  deposit: {
+    all: ["deposit"] as const,
+    balance: () => [...queryKeys.deposit.all, "balance"] as const,
+    account: () => [...queryKeys.deposit.all, "account"] as const,
+    history: () => [...queryKeys.deposit.all, "history"] as const,
+  },
+  orders: {
+    all: ["orders"] as const,
+    pendings: () => [...queryKeys.orders.all, "pending"] as const,
+    histories: () => [...queryKeys.orders.all, "history"] as const,
+    history: (kind?: string | null, userId?: string | null) =>
+      [
+        ...queryKeys.orders.all,
+        "history",
+        kind ?? "all",
+        userId ?? "anonymous",
+      ] as const,
+    detail: (orderId?: string | null) =>
+      [...queryKeys.orders.all, "detail", orderId ?? "unknown"] as const,
+    pendingCount: () => [...queryKeys.orders.all, "pendingCount"] as const,
+    pending: (userId?: string | null) =>
+      [...queryKeys.orders.all, "pending", userId ?? "anonymous"] as const,
+  },
+  wishlist: {
+    all: ["wishlist"] as const,
+    list: (userId?: string | null) =>
+      [...queryKeys.wishlist.all, userId ?? "anonymous"] as const,
+  },
+  user: {
+    all: ["user"] as const,
+    me: () => [...queryKeys.user.all, "me"] as const,
+  },
+  seller: {
+    all: ["seller"] as const,
+    info: () => [...queryKeys.seller.all, "info"] as const,
+  },
+  settlement: {
+    all: ["settlement"] as const,
+    summary: (pageSize: number) =>
+      [...queryKeys.settlement.all, "summary", pageSize] as const,
+    history: (pageSize: number) =>
+      [...queryKeys.settlement.all, "history", pageSize] as const,
+  },
+  search: {
+    all: ["search"] as const,
+    auctions: (
+      keyword: string,
+      status: string,
+      categoryKey: string,
+      minStartPrice: string,
+      maxStartPrice: string,
+      startFrom: string,
+      startTo: string,
+      page: number
+    ) =>
+      [
+        ...queryKeys.search.all,
+        keyword,
+        status,
+        categoryKey,
+        minStartPrice,
+        maxStartPrice,
+        startFrom,
+        startTo,
+        page,
+      ] as const,
+  },
+};

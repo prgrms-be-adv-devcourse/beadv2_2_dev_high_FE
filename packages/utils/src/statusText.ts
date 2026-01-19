@@ -1,4 +1,4 @@
-import { AuctionStatus, ProductStatus } from "@moreauction/types";
+import { AuctionStatus } from "@moreauction/types";
 
 /**
  * 공통 상태 텍스트 매핑
@@ -8,20 +8,21 @@ export const getCommonStatusText = (
   status: string | null | undefined
 ): string => {
   switch (status) {
-    case ProductStatus.READY:
     case AuctionStatus.READY:
+    case "READY":
       return "대기중";
-    case ProductStatus.IN_PROGESS:
     case AuctionStatus.IN_PROGRESS:
+    case "IN_PROGESS":
+    case "IN_PROGRESS":
       return "진행중";
-    case ProductStatus.COMPLETED:
     case AuctionStatus.COMPLETED:
+    case "COMPLETED":
       return "종료";
-    case ProductStatus.FAILED:
     case AuctionStatus.FAILED:
+    case "FAILED":
       return "유찰";
-    case ProductStatus.CANCELLED:
     case AuctionStatus.CANCELLED:
+    case "CANCELLED":
       return "취소됨";
     default:
       return "알 수 없음";

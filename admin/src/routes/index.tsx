@@ -1,9 +1,9 @@
 import { createBrowserRouter } from "react-router-dom";
-import AdminLayout from "../components/AdminLayout";
-import Login from "../pages/Login";
-import AdminDashboard from "../pages/admin/AdminDashboard";
-import AdminPlaceholder from "../pages/admin/AdminPlaceholder";
-import ProtectedRoute from "./ProtectedRoute";
+import AdminLayout from "@/components/AdminLayoutx";
+import Login from "@/pages/Loginx";
+import AdminDashboard from "@/pages/admin/AdminDashboardx";
+import AdminPlaceholder from "@/pages/admin/AdminPlaceholderx";
+import ProtectedRoute from "@/routes/ProtectedRoutex";
 
 /**
  * React Router v6.4+의 createBrowserRouter를 사용한 라우터 설정입니다.

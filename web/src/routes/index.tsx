@@ -1,23 +1,28 @@
 import { createBrowserRouter } from "react-router-dom";
-import App from "../App";
-import AuctionDetail from "../pages/AuctionDetail";
-import AuctionRegistration from "../pages/AuctionRegistration";
-import Home from "../pages/Home";
-import Login from "../pages/Login";
-import MyPage from "../pages/MyPage";
-import Notifications from "../pages/Notifications";
-import ProductDetail from "../pages/ProductDetail";
-import PendingOrders from "../pages/PendingOrders";
-import ProductRegistration from "../pages/ProductRegistration";
-import Products from "../pages/Products";
-import SellerRegistration from "../pages/SellerRegistration";
-import SignUp from "../pages/SignUp";
-import Wishlist from "../pages/Wishlist"; // 새로운 임포트
-import ProtectedRoute from "./ProtectedRoute";
-import PaymentSuccess from "../pages/payment/PaymentSuccess";
-import PaymentFail from "../pages/payment/PayementFail";
-import SearchPage from "../pages/Search";
-import OrderDetail from "../pages/OrderDetail";
+import App from "@/App";
+import AuctionDetail from "@/features/auctions/pages/AuctionDetail";
+import AuctionRegistration from "@/features/auctions/pages/AuctionRegistration";
+import Home from "@/features/home/pages/Home";
+import Login from "@/features/auth/pages/Login";
+import MyPage from "@/features/mypage/pages/MyPage";
+import Notifications from "@/features/notifications/pages/Notifications";
+import ProductDetail from "@/features/products/pages/ProductDetail";
+import PendingOrders from "@/features/orders/pages/PendingOrders";
+import Settings from "@/features/settings/pages/Settings";
+import ProfileAddresses from "@/features/profile/pages/ProfileAddresses";
+import ProfileEdit from "@/features/profile/pages/ProfileEdit";
+import ProfilePassword from "@/features/profile/pages/ProfilePassword";
+import ProductRegistration from "@/features/products/pages/ProductRegistration";
+import SellerRegistration from "@/features/auth/pages/SellerRegistration";
+import SignUp from "@/features/auth/pages/SignUp";
+import Wishlist from "@/features/wishlist/pages/Wishlist";
+import ProtectedRoute from "@/routes/ProtectedRoute";
+import PaymentSuccess from "@/features/payments/pages/payment/PaymentSuccess";
+import PaymentFail from "@/features/payments/pages/payment/PayementFail";
+import SearchPage from "@/features/search/pages/Search";
+import OrderDetail from "@/features/orders/pages/OrderDetail";
+import OAuthRedirect from "@/features/auth/pages/oauth/OAuthRedirect";
+import NotFound from "@/shared/pages/NotFound";
 
 /**
  * React Router v6.4+의 createBrowserRouter를 사용한 라우터 설정입니다.
@@ -44,12 +49,16 @@ export const router = createBrowserRouter([
         element: <Login />,
       },
       {
-        path: "signup",
-        element: <SignUp />,
+        path: "oauth/google/redirect",
+        element: <OAuthRedirect provider="google" />,
       },
       {
-        path: "products",
-        element: <Products />,
+        path: "oauth/naver/redirect",
+        element: <OAuthRedirect provider="naver" />,
+      },
+      {
+        path: "signup",
+        element: <SignUp />,
       },
       {
         path: "products/:id",
@@ -95,6 +104,10 @@ export const router = createBrowserRouter([
             element: <AuctionRegistration />,
           },
           {
+            path: "auctions/new/:productId",
+            element: <AuctionRegistration />,
+          },
+          {
             path: "auctions/re-register/:productId",
             element: <AuctionRegistration />,
           },
@@ -105,6 +118,26 @@ export const router = createBrowserRouter([
           {
             path: "mypage",
             element: <MyPage />,
+          },
+          {
+            path: "settings",
+            element: <Settings />,
+          },
+          {
+            path: "profile",
+            element: <Settings />,
+          },
+          {
+            path: "profile/edit",
+            element: <ProfileEdit />,
+          },
+          {
+            path: "profile/password",
+            element: <ProfilePassword />,
+          },
+          {
+            path: "profile/addresses",
+            element: <ProfileAddresses />,
           },
           {
             path: "wishlist", // 찜 목록 라우트 추가
@@ -119,6 +152,10 @@ export const router = createBrowserRouter([
             element: <OrderDetail />,
           },
         ],
+      },
+      {
+        path: "*",
+        element: <NotFound />,
       },
     ],
   },

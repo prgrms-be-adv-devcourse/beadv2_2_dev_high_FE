@@ -23,6 +23,7 @@ export const useStomp = ({ topic, onMessage }: UseStompProps) => {
   const retryCountRef = useRef(0);
   const isCleanupRef = useRef(false); // 페이지 이동 등으로 인한 cleanup 플래그
   const reconnectTimeoutRef = useRef<any | null>(null);
+  const connectionStateRef = useRef(connectionState);
   const MAX_RETRIES = 3;
   const RECONNECT_DELAY = 3000; // 운영용으로 3초로 복원
 
@@ -107,12 +108,24 @@ export const useStomp = ({ topic, onMessage }: UseStompProps) => {
         return;
       }
 
+      const isOffline =
+        typeof navigator !== "undefined" && navigator?.onLine === false;
+      if (isOffline) {
+        setConnectionState("failed");
+        return;
+      }
       // 서버 문제로 인한 연결 끊김 - 재연결 시도
       attemptReconnect();
     };
 
     client.onStompError = () => {
       console.error("STOMP: 브로커 오류");
+      const isOffline =
+        typeof navigator !== "undefined" && navigator?.onLine === false;
+      if (isOffline) {
+        setConnectionState("failed");
+        return;
+      }
 
       if (
         !isCleanupRef.current &&
@@ -126,6 +139,12 @@ export const useStomp = ({ topic, onMessage }: UseStompProps) => {
 
     client.onWebSocketError = () => {
       console.error("STOMP: 웹소켓 오류");
+      const isOffline =
+        typeof navigator !== "undefined" && navigator?.onLine === false;
+      if (isOffline) {
+        setConnectionState("failed");
+        return;
+      }
 
       if (
         !isCleanupRef.current &&
@@ -176,14 +195,33 @@ export const useStomp = ({ topic, onMessage }: UseStompProps) => {
     retryCountRef.current = 0; // 새로운 연결 시작 시 재시도 횟수 초기화
 
     connect();
+    const handleOnline = () => {
+      if (isCleanupRef.current) return;
+      if (connectionStateRef.current === "failed") {
+        attemptReconnect();
+      }
+    };
+    const handleOffline = () => {
+      if (isCleanupRef.current) return;
+      setConnectionState("failed");
+      disconnect(true);
+    };
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
 
     // cleanup 함수
     return () => {
       // 컴포넌트가 unmount될 때 (페이지 이동, HMR 등) 연결을 정리합니다.
       isCleanupRef.current = true;
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
       disconnect();
     };
-  }, [topic, onMessage]);
+  }, [topic, onMessage, attemptReconnect, connect, disconnect]);
+
+  useEffect(() => {
+    connectionStateRef.current = connectionState;
+  }, [connectionState]);
 
   // 메시지 전송 함수
   const sendMessage = useCallback(

@@ -1,7 +1,7 @@
 // src/apis/fileApi.ts
 
-import type { ApiResponseDto } from "@moreauction/types";
-import { client } from "./client";
+import type { ApiResponseDto, FileGroup } from "@moreauction/types";
+import { client } from "@/apis/client";
 
 export interface UploadedFileInfo {
   id: string;
@@ -38,7 +38,21 @@ export const fileApi = {
   /**
    * 단일 파일 업로드 (하위 호환)
    */
+
   uploadFile: async (file: File) => {
     return fileApi.uploadFiles([file]);
+  },
+
+  getFiles: async (fileGroupId: string): Promise<ApiResponseDto<FileGroup>> => {
+    const response = await client.get(`/files/groups/${fileGroupId}`);
+    return response.data;
+  },
+
+  getFileGroupsByIds: async (
+    fileGroupIds: string[]
+  ): Promise<ApiResponseDto<FileGroup[]>> => {
+    const ids = fileGroupIds.filter(Boolean).map(encodeURIComponent).join(",");
+    const response = await client.get(`/files/groups/${ids}/many`);
+    return response.data;
   },
 };

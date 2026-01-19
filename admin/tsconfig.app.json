@@ -2,6 +2,7 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
+      "@/*": ["src/*"],
       "@moreauction/api-client": ["../packages/api-client/src"],
       "@moreauction/types": ["../packages/types/src"],
       "@moreauction/utils": ["../packages/utils/src"]

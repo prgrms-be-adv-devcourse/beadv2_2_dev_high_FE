@@ -1,7 +1,7 @@
 // src/apis/categoryApi.ts
 import type { ApiResponseDto } from "@moreauction/types";
 import type { ProductCategory } from "@moreauction/types";
-import { client } from "./client";
+import { client } from "@/apis/client";
 
 export const categoryApi = {
   getCategories: async (): Promise<ApiResponseDto<ProductCategory[]>> => {

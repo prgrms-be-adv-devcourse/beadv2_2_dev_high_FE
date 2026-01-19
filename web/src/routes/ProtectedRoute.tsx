@@ -1,7 +1,7 @@
 import React from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Box, Button, Paper, Typography } from "@mui/material";
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 /**
  * 인증된 사용자만 접근할 수 있는 페이지를 위한 라우트 컴포넌트입니다.

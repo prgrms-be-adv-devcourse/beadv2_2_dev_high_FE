@@ -3,7 +3,7 @@ import type {
   PagedSettlementResponse,
   PagedSettlementSummary,
 } from "@moreauction/types";
-import { client } from "./client";
+import { client } from "@/apis/client";
 
 export const settlementApi = {
   /**

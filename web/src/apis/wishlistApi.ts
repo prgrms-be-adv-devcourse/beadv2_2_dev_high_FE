@@ -1,5 +1,5 @@
 import type { ApiResponseDto, PagedApiResponse } from "@moreauction/types";
-import { client } from "./client";
+import { client } from "@/apis/client";
 
 // 백엔드 Wishlist 엔티티 (id, userId, productId만 포함된다고 가정)
 export interface WishlistEntry {

@@ -1,6 +1,6 @@
 import type { ApiResponseDto } from "@moreauction/types";
 import type { LoginParams, LoginResponse } from "@moreauction/types";
-import { client } from "./client";
+import { client } from "@/apis/client";
 
 export const userApi = {
   login: async (

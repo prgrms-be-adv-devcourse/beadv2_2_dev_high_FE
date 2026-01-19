@@ -1,15 +1,17 @@
 import { Box } from "@mui/material";
 import React from "react";
-import { Outlet } from "react-router-dom";
-import { AppHeader } from "./components/AppHeader";
-import Footer from "./components/Footer";
+import { Outlet, useLocation } from "react-router-dom";
+import { AppHeader } from "@/shared/components/AppHeader";
+import Footer from "@/shared/components/Footer";
+import { ChatWidget } from "@/features/chat/components/ChatWidget";
 
-/**
- * 애플리케이션의 메인 레이아웃 컴포넌트입니다.
- * 모든 페이지에 공통적으로 적용될 헤더(AppBar)와
- * 라우팅된 페이지 컨텐츠가 렌더링될 영역(Outlet)을 포함합니다.
- */
 function App() {
+  const location = useLocation();
+  const isPopup =
+    typeof window !== "undefined" && !!window.opener && !window.opener.closed;
+  const isOAuthRoute = location.pathname.startsWith("/oauth");
+  const hideChrome = isPopup && isOAuthRoute;
+
   return (
     <Box
       sx={{
@@ -18,11 +20,12 @@ function App() {
         minHeight: "100vh",
       }}
     >
-      <AppHeader />
-      <Box component="main" sx={{ flexGrow: 1, my: 3 }}>
+      {!hideChrome && <AppHeader />}
+      <Box component="main" sx={{ flexGrow: 1, my: hideChrome ? 0 : 3 }}>
         <Outlet />
       </Box>
-      <Footer />
+      {!hideChrome && <Footer />}
+      {!hideChrome && <ChatWidget />}
     </Box>
   );
 }

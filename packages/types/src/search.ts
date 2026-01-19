@@ -14,6 +14,7 @@ export interface AuctionDocument {
   auctionEndAt?: string;
   status: string;
   imageUrl?: string;
+  fileGroupId?: string | null;
 }
 
 export type PagedAuctionDocument = PagedApiResponse<AuctionDocument>;
