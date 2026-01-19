@@ -9,7 +9,7 @@ import {
   Typography,
 } from "@mui/material";
 import {
-  Dashboard as DashboardIcon,
+  DashboardCustomize as DashboardIcon,
   People as PeopleIcon,
   Gavel as GavelIcon,
   Inventory2 as InventoryIcon,
@@ -17,6 +17,7 @@ import {
   Settings as SettingsIcon,
   Logout as LogoutIcon,
   AccountBalanceWallet as SettlementIcon,
+  Payment as PaymentsIcon,
 } from "@mui/icons-material";
 import React, { useMemo, useState } from "react";
 import { Link as RouterLink, Outlet, useLocation } from "react-router-dom";
@@ -32,6 +33,8 @@ const navItems = [
   { label: "상품 관리", to: "/products", icon: <InventoryIcon /> },
   { label: "주문 관리", to: "/orders", icon: <OrdersIcon /> },
   { label: "정산 관리", to: "/settlements", icon: <SettlementIcon /> },
+  { label: "결제 관리", to: "/payments", icon: <PaymentsIcon /> },
+
   { label: "설정", to: "/settings", icon: <SettingsIcon /> },
 ];
 

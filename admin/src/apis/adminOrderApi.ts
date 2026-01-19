@@ -63,6 +63,14 @@ export const adminOrderApi = {
     });
     return extractData<PagedApiResponse<OrderResponse>>(response.data);
   },
+  getOrdersCount: async (
+    status?: OrderStatus
+  ): Promise<ApiResponseDto<number>> => {
+    const response = await client.get("/admin/orders/count", {
+      params: { status },
+    });
+    return response.data;
+  },
   updateOrder: async (
     orderId: string,
     payload: OrderUpdateRequest

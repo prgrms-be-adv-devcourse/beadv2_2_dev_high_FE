@@ -3,6 +3,8 @@ import type {
   PagedApiResponse,
   AuctionDetailResponse,
   AuctionStatus,
+  AuctionCreationRequest,
+  AuctionUpdateRequest,
 } from "@moreauction/types";
 import { client } from "@/apis/client";
 
@@ -16,12 +18,11 @@ type AdminAuctionListParams = {
   sellerId?: string;
   minBid?: number;
   maxBid?: number;
-  startFrom?: string;
-  startTo?: string;
-  endFrom?: string;
-  endTo?: string;
+  startFrom?: string | null;
+  startTo?: string | null;
+  endFrom?: string | null;
+  endTo?: string | null;
 };
-
 
 const extractData = <T>(payload: ApiResponseDto<T> | T): T => {
   if (payload && typeof payload === "object" && "data" in payload) {
@@ -37,12 +38,56 @@ export const adminAuctionApi = {
     const response = await client.get("/admin/auctions", { params });
     return extractData<PagedApiResponse<AuctionDetailResponse>>(response.data);
   },
-  startNow: async (auctionId: string): Promise<ApiResponseDto<null>> => {
+  getAuctionsByProductId: async (
+    productId: string
+  ): Promise<ApiResponseDto<AuctionDetailResponse[]>> => {
+    const response = await client.get(
+      `/admin/auctions/by-product/${productId}`
+    );
+    return response.data;
+  },
+  getAuctionsCount: async (
+    status?: AuctionStatus
+  ): Promise<ApiResponseDto<number>> => {
+    const response = await client.get("/admin/auctions/count", {
+      params: { status },
+    });
+    return response.data;
+  },
+  getAuctionCountEndingSoon: async (): Promise<ApiResponseDto<number>> => {
+    const response = await client.get("/admin/auctions/count/ending-soon");
+    return response.data;
+  },
+
+  startNow: async (
+    auctionId: string
+  ): Promise<ApiResponseDto<AuctionDetailResponse>> => {
     const response = await client.put(`/admin/auctions/${auctionId}/start-now`);
     return response.data;
   },
-  endNow: async (auctionId: string): Promise<ApiResponseDto<null>> => {
+  endNow: async (
+    auctionId: string
+  ): Promise<ApiResponseDto<AuctionDetailResponse>> => {
     const response = await client.put(`/admin/auctions/${auctionId}/end-now`);
+    return response.data;
+  },
+  deleteAuction: async (
+    auctionId: string
+  ): Promise<ApiResponseDto<AuctionDetailResponse>> => {
+    const response = await client.delete(`/admin/auctions/${auctionId}`);
+    return response.data;
+  },
+  createAuction: async (
+    payload: AuctionCreationRequest
+  ): Promise<ApiResponseDto<AuctionDetailResponse>> => {
+    const response = await client.post("/admin/auctions", payload);
+    return response.data;
+  },
+  modifyAuction: async (
+    auctionId: string,
+    payload: AuctionUpdateRequest
+  ): Promise<ApiResponseDto<AuctionDetailResponse>> => {
+    const response = await client.put(`/admin/auctions/${auctionId}`, payload);
     return response.data;
   },
 };

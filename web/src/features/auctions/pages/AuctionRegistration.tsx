@@ -1,5 +1,6 @@
 import type {
   AuctionDetailResponse,
+  AuctionFormData,
   AuctionRecommendationResponse,
   AuctionUpdateRequest,
   Product,
@@ -42,12 +43,7 @@ import {
 } from "date-fns";
 import { ko } from "date-fns/locale";
 import { MoneyInput } from "@/shared/components/inputs/MoneyInput";
-
-interface AuctionFormData {
-  startBid: number;
-  auctionStartAt: string;
-  auctionEndAt: string;
-}
+import { toISOString } from "@moreauction/utils";
 
 const amountFormatter = new Intl.NumberFormat("ko-KR");
 
@@ -59,13 +55,6 @@ const formatAmount = (value?: number | null) => {
 const formatCount = (value?: number | null) => {
   if (value == null || Number.isNaN(value)) return "0";
   return amountFormatter.format(value);
-};
-
-const formatDateTime = (value?: string | null) => {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return format(date, "yyyy.MM.dd HH:mm", { locale: ko });
 };
 
 const AuctionRegistration: React.FC = () => {
@@ -135,11 +124,10 @@ const AuctionRegistration: React.FC = () => {
       );
 
       reset({
-        auctionStartAt: format(nextHour, "yyyy-MM-dd HH:mm", { locale: ko }),
+        auctionStartAt: format(nextHour, "yyyy-MM-dd HH:mm"),
         auctionEndAt: format(
           nextHour.setDate(nextHour.getDate() + 1),
-          "yyyy-MM-dd HH:mm",
-          { locale: ko }
+          "yyyy-MM-dd HH:mm"
         ),
       });
     },
@@ -296,13 +284,10 @@ const AuctionRegistration: React.FC = () => {
     setActionLoading(true);
     setSubmitError(null);
 
-    const auctionStart = format(data.auctionStartAt, "yyyy-MM-dd HH:mm:00", {
-      locale: ko,
-    });
+    const auctionStart = toISOString(data.auctionStartAt);
 
-    const auctionEnd = format(data.auctionEndAt, "yyyy-MM-dd HH:mm:00", {
-      locale: ko,
-    });
+    const auctionEnd = toISOString(data.auctionEndAt);
+
     try {
       if (isEditMode && auctionId) {
         const auctionData: AuctionUpdateRequest = {

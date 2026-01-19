@@ -1,16 +1,31 @@
 import {
+  adminOrderApi,
+  type OrderAdminSearchFilter,
+} from "@/apis/adminOrderApi";
+import {
+  OrderStatus,
+  getOrderStatusLabel,
+  type AuctionDetailResponse,
+  type OrderResponse,
+} from "@moreauction/types";
+import { formatDate, formatWon } from "@moreauction/utils";
+import { Check } from "@mui/icons-material";
+import {
+  Alert,
   Box,
   Button,
   Chip,
-  IconButton,
-  InputAdornment,
-  MenuItem,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
+  InputAdornment,
+  MenuItem,
+  Pagination,
   Paper,
   Select,
+  Stack,
   Table,
   TableBody,
   TableCell,
@@ -19,11 +34,7 @@ import {
   TextField,
   Tooltip,
   Typography,
-  Pagination,
-  Stack,
-  Alert,
 } from "@mui/material";
-import { Check } from "@mui/icons-material";
 import {
   keepPreviousData,
   useMutation,
@@ -31,22 +42,9 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import {
-  OrderStatus,
-  getOrderStatusLabel,
-  AuctionStatus,
-  type OrderResponse,
-  type AuctionDetailResponse,
-} from "@moreauction/types";
-import { formatWon } from "@moreauction/utils";
-import {
-  adminOrderApi,
-  type OrderAdminSearchFilter,
-} from "@/apis/adminOrderApi";
-import { adminAuctionApi } from "@/apis/adminAuctionApi";
+import OrderCreateDialog from "../dialog/OrderCreateDialog";
 
 const PAGE_SIZE = 10;
-const COMPLETED_AUCTION_PAGE_SIZE = 5;
 
 const statusOptions = [
   { value: "all", label: "전체" },
@@ -81,6 +79,7 @@ const AdminOrders = () => {
   );
   const [createOrderOpen, setCreateOrderOpen] = useState(false);
   const [completedPage, setCompletedPage] = useState(1);
+  const [deleteTarget, setDeleteTarget] = useState<OrderResponse | null>(null);
 
   const toOffsetDateTime = (value?: string | null) => {
     if (!value) return undefined;
@@ -89,19 +88,6 @@ const AdminOrders = () => {
     return parsed.toISOString();
   };
 
-  const formatDateTime = (value?: string | null) => {
-    if (!value) return "-";
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return "-";
-    return parsed.toLocaleString(undefined, {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
-  };
   const toPayLimitDateOnly = (value?: string | null) => {
     if (!value) return "";
     const match = value.match(/^(\d{4}-\d{2}-\d{2})/);
@@ -150,19 +136,6 @@ const AdminOrders = () => {
           ...filters,
         },
       }),
-    staleTime: 20_000,
-    placeholderData: keepPreviousData,
-  });
-  const completedAuctionsQuery = useQuery({
-    queryKey: ["admin", "auctions", "completed", completedPage],
-    queryFn: () =>
-      adminAuctionApi.getAuctions({
-        page: completedPage - 1,
-        size: COMPLETED_AUCTION_PAGE_SIZE,
-        sort: "auctionEndAt,desc",
-        status: AuctionStatus.COMPLETED,
-      }),
-    enabled: createOrderOpen,
     staleTime: 20_000,
     placeholderData: keepPreviousData,
   });
@@ -217,14 +190,16 @@ const AdminOrders = () => {
         id: params.orderId,
         payLimitDate: params.payLimitDate,
       }),
-    onSuccess: (_, variables) => {
+    onSuccess: (response, variables) => {
+      const updatedOrder = {
+        ...response.data,
+        updatedAt: new Date().toISOString(),
+      };
       queryClient.setQueryData(ordersQueryKey, (prev: any) => {
         if (!prev) return prev;
         const content = Array.isArray(prev.content) ? prev.content : [];
         const nextContent = content.map((item: OrderResponse) =>
-          item.id === variables.orderId
-            ? { ...item, payLimitDate: variables.payLimitDate }
-            : item
+          item.id === variables.orderId ? { ...item, ...updatedOrder } : item
         );
         return {
           ...prev,
@@ -252,7 +227,6 @@ const AdminOrders = () => {
     }) => adminOrderApi.createOrder(payload),
     onSuccess: () => {
       alert("주문이 생성되었습니다.");
-      setCreateOrderOpen(false);
       queryClient.invalidateQueries({ queryKey: ["admin", "orders"] });
       queryClient.invalidateQueries({
         queryKey: ["admin", "auctions", "completed"],
@@ -287,13 +261,12 @@ const AdminOrders = () => {
           totalElements,
         };
       });
+      setDeleteTarget(null);
     },
   });
 
   const totalPages = ordersQuery.data?.totalPages ?? 1;
   const orders = ordersQuery.data?.content ?? [];
-  const completedTotalPages = completedAuctionsQuery.data?.totalPages ?? 1;
-  const completedAuctions = completedAuctionsQuery.data?.content ?? [];
 
   const showEmpty =
     !ordersQuery.isLoading && !ordersQuery.isError && orders.length === 0;
@@ -301,10 +274,6 @@ const AdminOrders = () => {
     if (!ordersQuery.isError) return null;
     return "주문 목록을 불러오지 못했습니다.";
   }, [ordersQuery.isError]);
-  const completedErrorMessage = useMemo(() => {
-    if (!completedAuctionsQuery.isError) return null;
-    return "종료된 경매 목록을 불러오지 못했습니다.";
-  }, [completedAuctionsQuery.isError]);
 
   const handleStatusChange = (order: OrderResponse, next: OrderStatus) => {
     if (order.status === next) return;
@@ -354,6 +323,15 @@ const AdminOrders = () => {
           </Typography>
         </Box>
         <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+          <Button
+            variant="outlined"
+            onClick={() => {
+              setCompletedPage(1);
+              setCreateOrderOpen(true);
+            }}
+          >
+            주문 생성
+          </Button>
           <Select
             size="small"
             value={statusFilter}
@@ -421,6 +399,9 @@ const AdminOrders = () => {
       </Stack>
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
         <Stack spacing={2}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+            필터
+          </Typography>
           <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
             <TextField
               label="주문 ID"
@@ -507,15 +488,6 @@ const AdminOrders = () => {
             <Button
               variant="outlined"
               onClick={() => {
-                setCompletedPage(1);
-                setCreateOrderOpen(true);
-              }}
-            >
-              주문 생성
-            </Button>
-            <Button
-              variant="outlined"
-              onClick={() => {
                 setDraftFilters({ deletedYn: "N" });
                 setFilters({ deletedYn: "N" });
                 setPage(1);
@@ -541,7 +513,6 @@ const AdminOrders = () => {
       </Paper>
 
       <Paper variant="outlined">
-        {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
         <Table size="small" sx={{ "& th, & td": { py: 1.25, px: 1 } }}>
           <TableHead>
             <TableRow>
@@ -560,6 +531,14 @@ const AdminOrders = () => {
             </TableRow>
           </TableHead>
           <TableBody>
+            {errorMessage && (
+              <TableRow>
+                <TableCell colSpan={12}>
+                  <Alert severity="error">{errorMessage}</Alert>
+                </TableCell>
+              </TableRow>
+            )}
+
             {orders.map((order) => (
               <TableRow key={order.id} hover sx={{ height: 56 }}>
                 <TableCell align="center">{order.id}</TableCell>
@@ -676,16 +655,16 @@ const AdminOrders = () => {
                     size="small"
                     label={
                       order.payCompleteDate
-                        ? formatDateTime(order.payCompleteDate)
+                        ? formatDate(order.payCompleteDate)
                         : "-"
                     }
                   />
                 </TableCell>
                 <TableCell align="center">
-                  <Chip size="small" label={formatDateTime(order.createdAt)} />
+                  <Chip size="small" label={formatDate(order.createdAt)} />
                 </TableCell>
                 <TableCell align="center">
-                  <Chip size="small" label={formatDateTime(order.updatedAt)} />
+                  <Chip size="small" label={formatDate(order.updatedAt)} />
                 </TableCell>
                 <TableCell align="center">
                   <Button
@@ -697,26 +676,7 @@ const AdminOrders = () => {
                       deleteMutation.isPending ||
                       !BLOCKED_TARGETS.includes(order.status)
                     }
-                    onClick={() => {
-                      if (
-                        order.deletedYn === true ||
-                        order.deletedYn === "Y"
-                      ) {
-                        return;
-                      }
-                      if (!BLOCKED_TARGETS.includes(order.status)) {
-                        alert("구매 대기 상태에서만 삭제할 수 있습니다.");
-                        return;
-                      }
-                      const confirmId = window.prompt(
-                        "삭제하려면 주문 ID를 입력해 주세요."
-                      );
-                      if (confirmId !== order.id) {
-                        alert("주문 ID가 일치하지 않습니다.");
-                        return;
-                      }
-                      deleteMutation.mutate(order.id);
-                    }}
+                    onClick={() => setDeleteTarget(order)}
                   >
                     삭제
                   </Button>
@@ -736,118 +696,10 @@ const AdminOrders = () => {
         </Table>
       </Paper>
 
-      <Dialog
-        open={createOrderOpen}
-        onClose={() => setCreateOrderOpen(false)}
-        maxWidth="lg"
-        fullWidth
-      >
-        <DialogTitle>주문 생성</DialogTitle>
-        <DialogContent>
-          <Stack spacing={1.5} sx={{ mt: 1 }}>
-            <Typography variant="body2" color="text.secondary">
-              종료된 경매(COMPLETED)에서 주문서를 생성합니다.
-            </Typography>
-            {completedErrorMessage && (
-              <Alert severity="error">{completedErrorMessage}</Alert>
-            )}
-            <Table size="small" sx={{ "& th, & td": { py: 1, px: 1 } }}>
-              <TableHead>
-                <TableRow>
-                  <TableCell align="center">경매 ID</TableCell>
-                  <TableCell align="center">상품명</TableCell>
-                  <TableCell align="center">판매자</TableCell>
-                  <TableCell align="center">최고 입찰자</TableCell>
-                  <TableCell align="center">낙찰가</TableCell>
-                  <TableCell align="center">종료일</TableCell>
-                  <TableCell align="center">작업</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {completedAuctionsQuery.isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={7} align="center">
-                      <Typography color="text.secondary">
-                        불러오는 중입니다.
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                ) : completedAuctions.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} align="center">
-                      <Typography color="text.secondary">
-                        종료된 경매가 없습니다.
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  completedAuctions.map((auction) => (
-                    <TableRow key={auction.id} hover>
-                      <TableCell align="center">{auction.id}</TableCell>
-                      <TableCell align="center">
-                        {auction.productName ?? "-"}
-                      </TableCell>
-                      <TableCell align="center">
-                        {auction.sellerId ?? "-"}
-                      </TableCell>
-                      <TableCell align="center">
-                        {auction.highestUserId ?? "-"}
-                      </TableCell>
-                      <TableCell align="center">
-                        {formatWon(getDisplayBid(auction))}
-                      </TableCell>
-                      <TableCell align="center">
-                        <Chip
-                          size="small"
-                          label={formatDateTime(auction.auctionEndAt)}
-                        />
-                      </TableCell>
-                      <TableCell align="center">
-                        <Button
-                          size="small"
-                          variant="contained"
-                          onClick={() => {
-                            if (!auction.highestUserId) {
-                              return;
-                            }
-                            createOrderMutation.mutate({
-                              sellerId: auction.sellerId,
-                              buyerId: auction.highestUserId,
-                              productId: auction.productId,
-                              productName: auction.productName ?? "",
-                              auctionId: auction.id,
-                              winningAmount: getDisplayBid(auction),
-                              depositAmount: auction.depositAmount ?? 0,
-                              winningDate: auction.auctionEndAt,
-                            });
-                          }}
-                          disabled={
-                            createOrderMutation.isPending ||
-                            !auction.highestUserId
-                          }
-                        >
-                          주문 생성
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-            <Pagination
-              count={Math.max(completedTotalPages, 1)}
-              page={completedPage}
-              onChange={(_, value) => setCompletedPage(value)}
-              disabled={completedTotalPages === 0}
-              size="small"
-              sx={{ display: "flex", justifyContent: "center" }}
-            />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setCreateOrderOpen(false)}>닫기</Button>
-        </DialogActions>
-      </Dialog>
+      <OrderCreateDialog
+        createOrderOpen={createOrderOpen}
+        setCreateOrderOpen={setCreateOrderOpen}
+      />
 
       <Box sx={{ display: "flex", justifyContent: "center", mt: 3 }}>
         <Pagination
@@ -857,6 +709,46 @@ const AdminOrders = () => {
           color="primary"
         />
       </Box>
+
+      <Dialog
+        open={!!deleteTarget}
+        onClose={() => {
+          if (deleteMutation.isPending) return;
+          setDeleteTarget(null);
+        }}
+      >
+        <DialogTitle>주문 삭제</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            선택한 주문을 삭제하시겠습니까? 삭제된 주문은 복구할 수 없습니다.
+          </Typography>
+          <Typography variant="body2" sx={{ mt: 1 }} color="text.secondary">
+            대상: {deleteTarget?.productName ?? "-"} (주문 ID:{" "}
+            {deleteTarget?.id})
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              if (deleteMutation.isPending) return;
+              setDeleteTarget(null);
+            }}
+          >
+            취소
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            disabled={!deleteTarget || deleteMutation.isPending}
+            onClick={() => {
+              if (!deleteTarget) return;
+              deleteMutation.mutate(deleteTarget.id);
+            }}
+          >
+            삭제
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
