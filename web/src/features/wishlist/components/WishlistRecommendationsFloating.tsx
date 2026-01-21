@@ -94,7 +94,7 @@ const WishlistRecommendationsFloating: React.FC<
               whiteSpace: "nowrap",
             }}
           >
-            찜 기반 추천 확인
+            추천 상품 확인
           </Typography>
         </Stack>
       </Paper>
@@ -119,10 +119,10 @@ const WishlistRecommendationsFloating: React.FC<
       >
         <Box sx={{ mb: 1.5 }}>
           <Typography variant="h6" sx={{ fontWeight: 700 }}>
-            찜 기반 추천
+            회원님을 위한 추천
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            {summary || "찜한 상품과 비슷한 경매를 추천할 예정입니다."}
+            {summary || "회원님께 어울릴 만한 상품을 추천드려요."}
           </Typography>
         </Box>
         <Box
@@ -168,19 +168,19 @@ const WishlistRecommendationsFloating: React.FC<
                 textAlign: "center",
               }}
             >
-              추천할 찜 기반 상품이 아직 없어요.
+              회원님을 위한 추천을 준비 중이에요.
             </Paper>
           )}
           {!isLoading && items.length > 0 && (
             <Stack direction="row" spacing={1.5} sx={{ overflowX: "auto" }}>
               {items.map((item) => {
                 const categoryLabels = (item.categories ?? []).filter(
-                  (label): label is string => !!label
+                  (label): label is string => !!label,
                 );
                 const primaryCategories = categoryLabels.slice(0, 2);
                 const remainingCategoryCount = Math.max(
                   categoryLabels.length - primaryCategories.length,
-                  0
+                  0,
                 );
                 const auctionDate = item.auctionStartAt
                   ? new Date(item.auctionStartAt).toLocaleDateString()
