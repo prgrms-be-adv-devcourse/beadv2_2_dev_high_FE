@@ -28,10 +28,12 @@ export interface OrderResponse {
   sellerId: string;
   buyerId: string;
   auctionId: string;
+  deletedYn?: boolean | "Y" | "N";
   winningAmount: number;
   confirmDate?: string | null;
   status: OrderStatus;
   payCompleteDate?: string | null;
+  payLimitDate?: string | null;
   createdAt: string;
   updatedAt: string;
   depositAmount?: number;

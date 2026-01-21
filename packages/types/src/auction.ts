@@ -85,6 +85,8 @@ export interface AuctionDetailResponse {
   highestUserId?: string | null;
   description?: string;
   productName?: string;
+  productFileGroupId?: string | number | null;
+  fileGroupId?: string | number | null;
   sellerId: string;
   auctionStartAt: string; // LocalDateTime → ISO 문자열
   auctionEndAt: string; // LocalDateTime → ISO 문자열
@@ -108,10 +110,16 @@ export interface AuctionParticipationResponse {
   isWithdrawn: boolean;
   isRefund: boolean;
   depositAmount?: number; // BigDecimal → number
+  createdAt?: string; // LocalDateTime → ISO 문자열
   withdrawnAt?: string; // LocalDateTime → ISO 문자열
   refundAt?: string; // LocalDateTime → ISO 문자열
   lastBidPrice?: number; // BigDecimal → number
+  status?: AuctionStatus;
+  productName?: string;
 }
+
+export type PagedAuctionParticipationResponse =
+  PagedApiResponse<AuctionParticipationResponse>;
 
 /**
  * 입찰 내역 페이지네이션 응답 타입
@@ -123,6 +131,7 @@ export type PagedBidHistoryResponse = PagedApiResponse<AuctionBidMessage>;
  */
 export interface AuctionCreationRequest {
   productId: string;
+  productName?: string;
   startBid: number;
   auctionStartAt: string;
   auctionEndAt: string;
@@ -132,7 +141,28 @@ export interface AuctionCreationRequest {
  * 경매 수정을 위한 요청 데이터 인터페이스
  */
 export interface AuctionUpdateRequest {
+  productName?: string;
   startBid: number;
   auctionStartAt: string;
   auctionEndAt: string;
+}
+
+export interface AuctionRecommendationResponse {
+  productId: string;
+  available: boolean;
+  message: string;
+  referencePrice: number | null;
+  recommendedStartBid: number | null;
+  priceRangeMin: number | null;
+  priceRangeMax: number | null;
+  aiResult: {
+    price: number | null;
+    reason: string | null;
+  } | null;
+  recommendedStartAt: string | null;
+  recommendedEndAt: string | null;
+  similarProductCount: number;
+  winningOrderCount: number;
+  auctionCount: number;
+  winningOrderCountPaidLike: number;
 }

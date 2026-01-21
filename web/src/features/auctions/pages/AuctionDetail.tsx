@@ -14,6 +14,7 @@ import {
   Grid,
   Drawer,
   IconButton,
+  Paper,
   Skeleton,
   Stack,
   Typography,
@@ -28,12 +29,10 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import { auctionApi } from "@/apis/auctionApi";
 import { depositApi } from "@/apis/depositApi";
 import { fileApi } from "@/apis/fileApi";
-import { productApi } from "@/apis/productApi";
-import { wishlistApi, type WishlistEntry } from "@/apis/wishlistApi";
 import { userApi } from "@/apis/userApi";
 import {
   type InfiniteData,
@@ -49,10 +48,13 @@ import AuctionDialogs from "@/features/auctions/components/AuctionDialogs";
 import AuctionInfoPanel from "@/features/auctions/components/AuctionInfoPanel";
 import BidHistory from "@/features/auctions/components/BidHistory";
 import ProductInfo from "@/features/auctions/components/ProductInfo";
+import { SimilarAuctionsSection } from "@/features/auctions/components/SimilarAuctionsSection";
 import { DepositChargeDialog } from "@/features/mypage/components/DepositChargeDialog";
 import { requestTossPayment } from "@/shared/utils/requestTossPayment";
 import { useAuth } from "@moreauction/auth";
 import { useStomp } from "@/features/auctions/hooks/useStomp";
+import { useAuctionDetailQueries } from "@/features/auctions/hooks/useAuctionDetailQueries";
+import { useWishlistToggle } from "@/features/auctions/hooks/useWishlistToggle";
 import { formatWon } from "@moreauction/utils";
 import {
   type AuctionBidMessage,
@@ -60,7 +62,6 @@ import {
   type AuctionParticipationResponse,
   type PagedBidHistoryResponse,
   AuctionStatus,
-  type Product,
   type User,
 } from "@moreauction/types";
 import { DepositType } from "@moreauction/types";
@@ -72,6 +73,7 @@ const AuctionDetail: React.FC = () => {
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
   const [productDrawerOpen, setProductDrawerOpen] = useState(false);
+  const [similarDrawerOpen, setSimilarDrawerOpen] = useState(false);
 
   const [highestBidderInfo, setHighestBidderInfo] = useState<{
     id?: string;
@@ -84,16 +86,12 @@ const AuctionDetail: React.FC = () => {
   const [openDepositPrompt, setOpenDepositPrompt] = useState(false);
   const [openWithdrawnPopup, setOpenWithdrawnPopup] = useState(false);
 
-  const [isWish, setIsWish] = useState(false);
-  const [wishLoading, setWishLoading] = useState(false);
-  const wishActionSeqRef = useRef(0);
-  const wishInFlightRef = useRef(false);
-  const wishDesiredRef = useRef(false);
-  const wishServerRef = useRef(false);
+  const withdrawInFlightRef = useRef(false);
 
   const [bidLoading, setBidLoading] = useState(false);
   const [withdrawLoading, setWithdrawLoading] = useState(false);
   const [depositLoading, setDepositLoading] = useState(false);
+  const [socketWindowActive, setSocketWindowActive] = useState(false);
   const queryClient = useQueryClient();
   const [insufficientDepositOpen, setInsufficientDepositOpen] = useState(false);
   const [insufficientDepositInfo, setInsufficientDepositInfo] = useState<{
@@ -106,155 +104,36 @@ const AuctionDetail: React.FC = () => {
   const [chargeLoading, setChargeLoading] = useState(false);
   const [chargeAmount, setChargeAmount] = useState("");
   const [chargeError, setChargeError] = useState<string | null>(null);
+  const [autoPayAfterCharge, setAutoPayAfterCharge] = useState(true);
 
-  const auctionDetailQuery = useQuery({
-    queryKey: queryKeys.auctions.detail(auctionId),
-    queryFn: async () => {
-      const res = await auctionApi.getAuctionDetail(auctionId as string);
-      return res.data as AuctionDetailResponse;
-    },
-    enabled: !!auctionId,
-    staleTime: 30_000,
-    placeholderData: () =>
-      queryClient.getQueryData(queryKeys.auctions.detail(auctionId)),
+  const {
+    auctionDetailQuery,
+    auctionDetail,
+    participationQuery,
+    participationStatus,
+    productId,
+    similarProducts,
+    similarLoading,
+    similarAuctionsById,
+    similarProductsById,
+    wishlistQuery,
+    productDetailQuery,
+  } = useAuctionDetailQueries({
+    auctionId,
+    isAuthenticated,
+    userId: user?.userId,
   });
 
-  const participationQuery = useQuery({
-    queryKey: queryKeys.auctions.participation(auctionId),
-    queryFn: async () => {
-      const res = await auctionApi.checkParticipationStatus(
-        auctionId as string
-      );
-      return res.data as AuctionParticipationResponse;
+  const { isWish, wishLoading, handleToggleWish } = useWishlistToggle({
+    user,
+    productId,
+    wishlistEntry: wishlistQuery.data ?? null,
+    productDetail: productDetailQuery.data ?? null,
+    onRequireLogin: () => {
+      alert("로그인 후 찜하기를 사용할 수 있습니다.");
+      navigate("/login");
     },
-    enabled: !!auctionId && isAuthenticated,
-    staleTime: 30_000,
   });
-
-  const auctionDetail = auctionDetailQuery.data ?? null;
-  const participationStatus = participationQuery.data ?? {
-    isParticipated: false,
-    isWithdrawn: false,
-    isRefund: false,
-  };
-  const productId = auctionDetail?.productId;
-
-  const wishlistQuery = useQuery({
-    queryKey: queryKeys.wishlist.detail(user?.userId, productId),
-    queryFn: async () => {
-      if (!productId) return null;
-      try {
-        const res = await wishlistApi.getWishlistByProductId(productId);
-        return res.data;
-      } catch (err: any) {
-        if (err?.response?.status === 404) {
-          return null;
-        }
-        throw err;
-      }
-    },
-    enabled: !!productId && !!user?.userId,
-    staleTime: 30_000,
-    retry: false,
-  });
-
-  const productDetailQuery = useQuery({
-    queryKey: queryKeys.products.detail(productId),
-    queryFn: async () => {
-      const response = await productApi.getProductById(productId as string);
-      return response.data;
-    },
-    enabled: !!productId,
-    staleTime: 30_000,
-  });
-
-  const updateWishlistCaches = useCallback(
-    (nextDesired: boolean) => {
-      if (!user?.userId || !productId) return;
-      const userId = user.userId;
-      const now = new Date().toISOString();
-      const buildEntry = (
-        overrides?: Partial<WishlistEntry>
-      ): WishlistEntry => ({
-        id: overrides?.id ?? `optimistic-${userId}-${productId}`,
-        userId,
-        productId,
-        deletedYn: overrides?.deletedYn ?? "N",
-        deletedAt: overrides?.deletedAt ?? null,
-        createdBy: overrides?.createdBy ?? userId,
-        createdAt: overrides?.createdAt ?? now,
-        updatedBy: overrides?.updatedBy ?? userId,
-        updatedAt: overrides?.updatedAt ?? now,
-      });
-
-      queryClient.setQueryData(
-        queryKeys.wishlist.detail(userId, productId),
-        (prev?: WishlistEntry | null) => {
-          if (!nextDesired) return null;
-          const base = prev ?? buildEntry();
-          return {
-            ...base,
-            deletedYn: "N",
-            deletedAt: null,
-            updatedAt: now,
-            updatedBy: userId,
-          };
-        }
-      );
-
-      queryClient.setQueryData(
-        queryKeys.wishlist.list(userId),
-        (
-          prev:
-            | {
-                entries: WishlistEntry[];
-                products: Product[];
-              }
-            | undefined
-        ) => {
-          if (!prev) return prev;
-          if (nextDesired) {
-            const exists = prev.entries.some(
-              (entry) => entry.productId === productId
-            );
-            const nextEntries = exists
-              ? prev.entries
-              : [buildEntry(), ...prev.entries];
-            const productForList = productDetailQuery.data;
-            const nextProducts =
-              productForList &&
-              !prev.products.some((product) => product.id === productId)
-                ? [productForList, ...prev.products]
-                : prev.products;
-            return { entries: nextEntries, products: nextProducts };
-          }
-          return {
-            entries: prev.entries.filter(
-              (entry) => entry.productId !== productId
-            ),
-            products: prev.products.filter(
-              (product) => product.id !== productId
-            ),
-          };
-        }
-      );
-    },
-    [productDetailQuery.data, productId, queryClient, user?.userId]
-  );
-
-  useEffect(() => {
-    if (!productId) return;
-    if (!user) {
-      setIsWish(false);
-      wishDesiredRef.current = false;
-      wishServerRef.current = false;
-      return;
-    }
-    const exists = !!wishlistQuery.data && wishlistQuery.data.deletedYn !== "Y";
-    setIsWish(exists);
-    wishDesiredRef.current = exists;
-    wishServerRef.current = exists;
-  }, [productId, user, wishlistQuery.data]);
 
   const getProductImageUrls = useCallback(() => {
     const raw: unknown = (auctionDetail as any)?.files;
@@ -426,8 +305,16 @@ const AuctionDetail: React.FC = () => {
     if (highestBidderInfo?.id) {
       ids.push(highestBidderInfo.id);
     }
+    if (sellerId) {
+      ids.push(sellerId);
+    }
     return Array.from(new Set(ids));
-  }, [auctionDetail?.highestUserId, bidHistory, highestBidderInfo?.id]);
+  }, [
+    auctionDetail?.highestUserId,
+    bidHistory,
+    highestBidderInfo?.id,
+    sellerId,
+  ]);
 
   const cachedUsers = useMemo(() => {
     const map = new Map<string, User>();
@@ -444,7 +331,7 @@ const AuctionDetail: React.FC = () => {
     return bidderUserIds.filter((id) => {
       const cached = cachedUsers.get(id);
       if (!cached) return true;
-      return !cached.email;
+      return !cached.nickname && !cached.email;
     });
   }, [bidderUserIds, cachedUsers]);
 
@@ -466,43 +353,39 @@ const AuctionDetail: React.FC = () => {
     staleTime: 5 * 60_000,
   });
 
-  const userLabelMap = useMemo(() => {
-    const map = new Map<string, string>();
+  const userInfoMap = useMemo(() => {
+    const map = new Map<string, User>();
     cachedUsers.forEach((userInfo, userId) => {
-      const nickname = userInfo.nickname?.trim();
-      const email = userInfo.email?.trim();
-      if (nickname && email) {
-        map.set(userId, `${nickname} (${email})`);
-      } else if (nickname) {
-        map.set(userId, nickname);
-      } else if (email) {
-        map.set(userId, email);
-      }
+      map.set(userId, userInfo);
     });
     (usersQuery.data ?? []).forEach((userInfo) => {
       if (!userInfo?.userId) return;
-      const nickname = userInfo.nickname?.trim();
-      const email = userInfo.email?.trim();
-      if (nickname && email) {
-        map.set(userInfo.userId, `${nickname} (${email})`);
-      } else if (nickname) {
-        map.set(userInfo.userId, nickname);
-      } else if (email) {
-        map.set(userInfo.userId, email);
-      }
+      map.set(userInfo.userId, userInfo);
     });
     return map;
   }, [cachedUsers, usersQuery.data]);
 
+  const formatUserLabel = (user?: User | null): string | null => {
+    if (!user) return null;
+    const nickname = user.nickname?.trim();
+    const name = user.name?.trim();
+    const email = (user.maskedEmail ?? user.email)?.trim();
+    const displayName = nickname || name;
+    if (displayName && email) return `${displayName} (${email})`;
+    if (displayName) return displayName;
+    if (email) return email;
+    return null;
+  };
+
   const getBidderLabel = useCallback(
     (userId?: string, fallbackName?: string) => {
       if (!userId) return "-";
-      const label = userLabelMap.get(userId);
+      const label = formatUserLabel(userInfoMap.get(userId));
       if (label) return label;
       if (fallbackName) return fallbackName;
       return null;
     },
-    [userLabelMap]
+    [userInfoMap]
   );
 
   const isUserInfoLoading = missingUserIds.length > 0 && usersQuery.isLoading;
@@ -513,6 +396,49 @@ const AuctionDetail: React.FC = () => {
     resolvedHighestBidderId,
     highestBidderInfo?.username
   );
+  const sellerLabel = getBidderLabel(sellerId) ?? sellerId ?? "-";
+
+  useEffect(() => {
+    const startValue = auctionDetail?.auctionStartAt;
+    const endValue = auctionDetail?.auctionEndAt;
+    if (!startValue || !endValue) {
+      setSocketWindowActive(auctionDetail?.status === AuctionStatus.IN_PROGRESS);
+      return;
+    }
+    const startAt = new Date(startValue).getTime();
+    const endAt = new Date(endValue).getTime();
+    if (Number.isNaN(startAt) || Number.isNaN(endAt)) {
+      setSocketWindowActive(auctionDetail?.status === AuctionStatus.IN_PROGRESS);
+      return;
+    }
+
+    const windowStart = startAt - 10 * 60 * 1000;
+    const windowEnd = endAt + 10 * 60 * 1000;
+    let timerId: number | undefined;
+
+    const updateWindow = () => {
+      const now = Date.now();
+      setSocketWindowActive(now >= windowStart && now <= windowEnd);
+      if (now < windowStart) {
+        timerId = window.setTimeout(
+          updateWindow,
+          Math.max(0, windowStart - now)
+        );
+      } else if (now < windowEnd) {
+        timerId = window.setTimeout(
+          updateWindow,
+          Math.max(0, windowEnd - now)
+        );
+      }
+    };
+
+    updateWindow();
+    return () => {
+      if (timerId) {
+        window.clearTimeout(timerId);
+      }
+    };
+  }, [auctionDetail?.auctionEndAt, auctionDetail?.auctionStartAt, auctionDetail?.status]);
 
   const handleNewMessage = useCallback(
     (message: IMessage) => {
@@ -586,7 +512,7 @@ const AuctionDetail: React.FC = () => {
   );
 
   const shouldConnect =
-    auctionDetail?.status === AuctionStatus.IN_PROGRESS && !!auctionId;
+    socketWindowActive && !!auctionId;
   const { isConnected, isRetrying, connectionState } = useStomp({
     topic: shouldConnect ? `/topic/auction.${auctionId}` : "",
     onMessage: handleNewMessage,
@@ -619,6 +545,10 @@ const AuctionDetail: React.FC = () => {
     }
     if (participationStatus.isWithdrawn) {
       alert("경매 참여를 포기하여 입찰할 수 없습니다.");
+      return;
+    }
+    if (participationStatus.isRefund) {
+      alert("보증금이 환급되어 입찰할 수 없습니다.");
       return;
     }
     if (!participationStatus.isParticipated) {
@@ -688,8 +618,9 @@ const AuctionDetail: React.FC = () => {
   };
 
   const handleWithdraw = async () => {
-    if (withdrawLoading) return;
+    if (withdrawLoading || withdrawInFlightRef.current) return;
     try {
+      withdrawInFlightRef.current = true;
       setWithdrawLoading(true);
       const res = await auctionApi.withdrawnParticipation(auctionId!);
       setNewBidAmount("");
@@ -717,6 +648,7 @@ const AuctionDetail: React.FC = () => {
       alert(err?.data?.message);
     } finally {
       setWithdrawLoading(false);
+      withdrawInFlightRef.current = false;
     }
   };
 
@@ -762,22 +694,15 @@ const AuctionDetail: React.FC = () => {
       });
 
       queryClient.setQueryData(
-        queryKeys.deposit.balance(),
-        (prev: number | undefined) => {
-          const base = typeof prev === "number" ? prev : 0;
-          const next = Math.max(base - depositAmount, 0);
-          localStorage.setItem("depositBalance", String(next));
-          return next;
-        }
-      );
-
-      queryClient.setQueryData(
         queryKeys.auctions.participation(auctionId),
         res.data
       );
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: queryKeys.deposit.account(),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.deposit.balance(),
         }),
         queryClient.invalidateQueries({
           queryKey: queryKeys.deposit.historyAll(),
@@ -788,6 +713,7 @@ const AuctionDetail: React.FC = () => {
     } catch (error: any) {
       alert(error?.data?.message ?? "보증금 결제중 에러가 발생했습니다.");
     } finally {
+      setOpenDepositPrompt(false);
       setDepositLoading(false);
     }
   };
@@ -843,7 +769,7 @@ const AuctionDetail: React.FC = () => {
               <Stack spacing={2}>
                 <Skeleton variant="text" width="70%" />
                 <Skeleton variant="text" width="60%" />
-                <Skeleton variant="rectangular" height={160} />
+                <Skeleton variant="rectangular" height={420} />
               </Stack>
             </CardContent>
           </Card>
@@ -860,6 +786,11 @@ const AuctionDetail: React.FC = () => {
     auctionDetail?.status === AuctionStatus.READY &&
     user &&
     user?.userId === auctionDetail.sellerId;
+  const canReregister =
+    isSeller &&
+    !!auctionDetail?.productId &&
+    (auctionDetail.status === AuctionStatus.FAILED ||
+      auctionDetail.status === AuctionStatus.CANCELLED);
 
   return (
     <>
@@ -936,7 +867,7 @@ const AuctionDetail: React.FC = () => {
                       <Skeleton variant="text" width="70%" />
                       <Skeleton variant="text" width="40%" />
                     </Stack>
-                  ) : canRenderDetail ? (
+                  ) : canRenderDetail && participationQuery.data ? (
                     <>
                       {showParticipationWarning && (
                         <Alert severity="warning" sx={{ mb: 1 }}>
@@ -953,6 +884,10 @@ const AuctionDetail: React.FC = () => {
                         refundRequest={refundRequest}
                       />
                     </>
+                  ) : canRenderDetail ? (
+                    <Alert severity="error">
+                      참여 현황을 불러오지 못했습니다.
+                    </Alert>
                   ) : (
                     <Alert severity="error">
                       경매 정보를 불러오지 못했습니다.
@@ -968,14 +903,23 @@ const AuctionDetail: React.FC = () => {
             <CardHeader
               title="실시간 현황"
               action={
-                <Button
-                  size="small"
-                  variant="outlined"
-                  onClick={() => setProductDrawerOpen(true)}
-                  disabled={!canRenderDetail}
-                >
-                  상품 정보
-                </Button>
+                <Stack direction="row" spacing={1}>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => setSimilarDrawerOpen(true)}
+                  >
+                    비슷한 경매
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => setProductDrawerOpen(true)}
+                    disabled={!canRenderDetail}
+                  >
+                    상품 정보
+                  </Button>
+                </Stack>
               }
             />
             <CardContent>
@@ -1038,6 +982,7 @@ const AuctionDetail: React.FC = () => {
                     showConnectionStatus={shouldConnect}
                     isRetrying={isRetrying}
                     isWithdrawn={participationStatus.isWithdrawn}
+                    isRefund={participationStatus.isRefund}
                     isAuthenticated={isAuthenticated}
                     isParticipationUnavailable={isParticipationUnavailable}
                     isSeller={isSeller}
@@ -1047,72 +992,24 @@ const AuctionDetail: React.FC = () => {
                     경매 정보를 불러오면 입찰할 수 있습니다.
                   </Alert>
                 )}
+                {canReregister && (
+                  <>
+                    <Divider />
+                    <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+                      <Button
+                        variant="contained"
+                        component={RouterLink}
+                        to={`/auctions/new/${auctionDetail?.productId}`}
+                      >
+                        경매 재등록
+                      </Button>
+                    </Box>
+                  </>
+                )}
               </Stack>
             </CardContent>
           </Card>
         </Grid>
-      </Container>
-
-      <Container
-        maxWidth={false}
-        sx={{
-          px: { xs: 2, md: 4 },
-          mb: 6,
-        }}
-      >
-        <Stack
-          direction={{ xs: "column", md: "row" }}
-          justifyContent="space-between"
-          alignItems={{ xs: "flex-start", md: "center" }}
-          spacing={2}
-          sx={{ mb: 3 }}
-        >
-          <Box>
-            <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
-              비슷한 경매
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              이 경매와 비슷한 항목을 추천해 드려요.
-            </Typography>
-          </Box>
-          <Button size="small" disabled>
-            더 보기 (준비 중)
-          </Button>
-        </Stack>
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: {
-              xs: "1fr",
-              sm: "repeat(2, 1fr)",
-              md: "repeat(3, 1fr)",
-              lg: "repeat(4, 1fr)",
-            },
-            gap: 4,
-          }}
-        >
-          {Array.from({ length: 4 }).map((_, idx) => (
-            <Card
-              key={`similar-auction-${idx}`}
-              sx={{ height: "100%", display: "flex", flexDirection: "column" }}
-            >
-              <Skeleton variant="rectangular" height={200} />
-              <CardContent
-                sx={{
-                  flexGrow: 1,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 1,
-                  mt: 1,
-                }}
-              >
-                <Skeleton variant="text" width="80%" />
-                <Skeleton variant="text" width="60%" />
-                <Skeleton variant="text" width="50%" />
-              </CardContent>
-            </Card>
-          ))}
-        </Box>
       </Container>
 
       <AuctionDialogs
@@ -1128,26 +1025,56 @@ const AuctionDetail: React.FC = () => {
         setOpenWithdrawnPopup={setOpenWithdrawnPopup}
         handleWithdraw={handleWithdraw}
         isCurrentUserHighestBidder={resolvedHighestBidderId === user?.userId}
+        isWithdrawLoading={withdrawLoading}
       />
 
       <Dialog
         open={insufficientDepositOpen}
         onClose={() => setInsufficientDepositOpen(false)}
       >
-        <DialogTitle>예치금 잔액이 부족합니다</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" sx={{ mt: 1 }}>
-            현재 잔액: {formatWon(insufficientDepositInfo?.balance ?? 0)}
-          </Typography>
-          <Typography variant="body2">
-            필요 금액: {formatWon(insufficientDepositInfo?.needed ?? 0)}
-          </Typography>
-          <Typography variant="body2">
-            부족 금액: {formatWon(insufficientDepositInfo?.shortage ?? 0)}
-          </Typography>
-          <Typography variant="body2" sx={{ mt: 1 }}>
-            예치금을 충전한 뒤 보증금 결제를 진행할 수 있어요.
-          </Typography>
+        <DialogTitle sx={{ pb: 0 }}>예치금이 부족해요</DialogTitle>
+        <DialogContent sx={{ pt: 1.5 }}>
+          <Stack spacing={2}>
+            <Typography variant="body2" color="text.secondary">
+              보증금 결제를 위해 충전이 필요합니다. 부족한 금액으로 자동 계산해둘게요.
+            </Typography>
+            <Paper
+              variant="outlined"
+              sx={{
+                p: 2,
+                borderRadius: 2,
+                backgroundColor: "background.paper",
+              }}
+            >
+              <Stack spacing={1}>
+                <Stack direction="row" justifyContent="space-between">
+                  <Typography variant="body2" color="text.secondary">
+                    현재 잔액
+                  </Typography>
+                  <Typography variant="subtitle2" fontWeight={700}>
+                    {formatWon(insufficientDepositInfo?.balance ?? 0)}
+                  </Typography>
+                </Stack>
+                <Stack direction="row" justifyContent="space-between">
+                  <Typography variant="body2" color="text.secondary">
+                    필요 금액
+                  </Typography>
+                  <Typography variant="subtitle2" fontWeight={700}>
+                    {formatWon(insufficientDepositInfo?.needed ?? 0)}
+                  </Typography>
+                </Stack>
+                <Divider />
+                <Stack direction="row" justifyContent="space-between">
+                  <Typography variant="body2" color="text.secondary">
+                    부족 금액
+                  </Typography>
+                  <Typography variant="subtitle1" fontWeight={800}>
+                    {formatWon(insufficientDepositInfo?.shortage ?? 0)}
+                  </Typography>
+                </Stack>
+              </Stack>
+            </Paper>
+          </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setInsufficientDepositOpen(false)}>
@@ -1156,14 +1083,19 @@ const AuctionDetail: React.FC = () => {
           <Button
             variant="contained"
             onClick={() => {
-              const amount = insufficientDepositInfo?.recommendedCharge ?? 0;
-              setChargeAmount(amount > 0 ? String(amount) : "");
+              const shortage = insufficientDepositInfo?.shortage ?? 0;
+              const recommendedCharge = Math.max(
+                1000,
+                Math.ceil(shortage / 100) * 100
+              );
+              setChargeAmount(shortage > 0 ? String(recommendedCharge) : "1000");
               setChargeError(null);
+              setAutoPayAfterCharge(true);
               setInsufficientDepositOpen(false);
               setChargeOpen(true);
             }}
           >
-            충전하기
+            부족 금액 충전
           </Button>
         </DialogActions>
       </Dialog>
@@ -1179,6 +1111,7 @@ const AuctionDetail: React.FC = () => {
           setChargeOpen(false);
           setChargeAmount("");
           setChargeError(null);
+          setAutoPayAfterCharge(true);
         }}
         onSubmit={async () => {
           if (chargeLoading) return;
@@ -1192,20 +1125,24 @@ const AuctionDetail: React.FC = () => {
           setChargeError(null);
           try {
             const depositOrder = await depositApi.createDepositOrder(amount);
-            if (depositOrder?.data?.orderId && auctionId) {
+            if (depositOrder?.data?.id && auctionId) {
               const depositAmount = Number(auctionDetail?.depositAmount ?? 0);
               const bidPrice = Number(newBidAmount);
-              sessionStorage.setItem(
-                "autoAuctionDepositAfterCharge",
-                JSON.stringify({
-                  auctionId,
-                  depositAmount,
-                  bidPrice: Number.isFinite(bidPrice) ? bidPrice : undefined,
-                  createdAt: Date.now(),
-                })
-              );
+              if (autoPayAfterCharge) {
+                sessionStorage.setItem(
+                  "autoAuctionDepositAfterCharge",
+                  JSON.stringify({
+                    auctionId,
+                    depositAmount,
+                    bidPrice: Number.isFinite(bidPrice) ? bidPrice : undefined,
+                    createdAt: Date.now(),
+                  })
+                );
+              } else {
+                sessionStorage.removeItem("autoAuctionDepositAfterCharge");
+              }
               requestTossPayment(
-                depositOrder.data.orderId,
+                depositOrder.data.id,
                 depositOrder.data.amount
               );
               setChargeOpen(false);
@@ -1219,6 +1156,9 @@ const AuctionDetail: React.FC = () => {
             setChargeLoading(false);
           }
         }}
+        showAutoPayOption
+        autoPayOptionChecked={autoPayAfterCharge}
+        onChangeAutoPayOption={setAutoPayAfterCharge}
       />
 
       <Drawer
@@ -1275,6 +1215,7 @@ const AuctionDetail: React.FC = () => {
                   auctionDetail?.productName ??
                   ""
                 }
+                sellerLabel={sellerLabel}
                 description={
                   productDetailQuery.data?.description ??
                   auctionDetail?.description ??
@@ -1283,57 +1224,7 @@ const AuctionDetail: React.FC = () => {
                 action={
                   <IconButton
                     size="small"
-                    onClick={async () => {
-                      if (!user) {
-                        alert("로그인 후 찜하기를 사용할 수 있습니다.");
-                        navigate("/login");
-                        return;
-                      }
-                      if (!productId) return;
-
-                      wishActionSeqRef.current += 1;
-                      const seqAtClick = wishActionSeqRef.current;
-
-                      const nextDesired = !wishDesiredRef.current;
-                      wishDesiredRef.current = nextDesired;
-                      setIsWish(nextDesired);
-                      updateWishlistCaches(nextDesired);
-
-                      if (wishInFlightRef.current) return;
-                      wishInFlightRef.current = true;
-                      setWishLoading(true);
-
-                      try {
-                        while (
-                          wishServerRef.current !== wishDesiredRef.current
-                        ) {
-                          const target = wishDesiredRef.current;
-                          if (target) {
-                            await wishlistApi.add(productId);
-                          } else {
-                            await wishlistApi.remove(productId);
-                          }
-                          wishServerRef.current = target;
-                          updateWishlistCaches(target);
-                        }
-                      } catch (err: any) {
-                        console.error("찜 토글 실패:", err);
-                        if (wishActionSeqRef.current === seqAtClick) {
-                          wishDesiredRef.current = wishServerRef.current;
-                          setIsWish(wishServerRef.current);
-                          updateWishlistCaches(wishServerRef.current);
-                        }
-                        alert(
-                          err?.response?.data?.message ??
-                            "찜하기 처리 중 오류가 발생했습니다."
-                        );
-                      } finally {
-                        wishInFlightRef.current = false;
-                        if (wishActionSeqRef.current === seqAtClick) {
-                          setWishLoading(false);
-                        }
-                      }
-                    }}
+                    onClick={handleToggleWish}
                     disabled={wishLoading}
                   >
                     {isWish ? (
@@ -1347,6 +1238,48 @@ const AuctionDetail: React.FC = () => {
             </>
           )}
         </Stack>
+      </Drawer>
+
+      <Drawer
+        anchor="top"
+        open={similarDrawerOpen}
+        onClose={() => setSimilarDrawerOpen(false)}
+        PaperProps={{
+          sx: {
+            borderBottomLeftRadius: 16,
+            borderBottomRightRadius: 16,
+            backgroundColor: "background.paper",
+          },
+        }}
+      >
+        <Box
+          sx={{
+            p: { xs: 2, md: 3 },
+            maxHeight: { xs: "85vh", md: "70vh" },
+            overflow: "auto",
+          }}
+        >
+          <Stack
+            direction="row"
+            justifyContent="space-between"
+            alignItems="center"
+            sx={{ mb: 2 }}
+          >
+            <Typography variant="subtitle1" fontWeight={700}>
+              비슷한 경매
+            </Typography>
+            <Button size="small" onClick={() => setSimilarDrawerOpen(false)}>
+              닫기
+            </Button>
+          </Stack>
+          <SimilarAuctionsSection
+            items={similarProducts}
+            loading={similarLoading}
+            auctionsById={similarAuctionsById}
+            productsById={similarProductsById}
+            showHeader={false}
+          />
+        </Box>
       </Drawer>
     </>
   );

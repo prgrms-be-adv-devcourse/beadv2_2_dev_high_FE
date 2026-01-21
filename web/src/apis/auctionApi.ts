@@ -4,13 +4,17 @@ import type {
   AuctionCreationRequest,
   AuctionDetailResponse,
   AuctionParticipationResponse,
+  AuctionResponse,
+  PagedAuctionParticipationResponse,
   AuctionQueryParams,
   AuctionRankingResponse,
+  AuctionRecommendationResponse,
   AuctionStatus,
   AuctionUpdateRequest,
   PagedAuctionDocument,
   PagedAuctionResponse,
   PagedBidHistoryResponse,
+  SimilarProductResponse,
 } from "@moreauction/types";
 import { client } from "@/apis/client";
 // Auction 타입 임포트
@@ -31,6 +35,19 @@ export const auctionApi = {
       params,
       paramsSerializer: (params) =>
         qs.stringify(params, { arrayFormat: "repeat" }),
+    });
+    return res.data;
+  },
+
+  /**
+   * 경매 ID 리스트로 경매 정보를 조회합니다.
+   */
+  getAuctionsByIds: async (
+    auctionIds: string[]
+  ): Promise<ApiResponseDto<AuctionResponse[]>> => {
+    const encodedIds = auctionIds.map((id) => encodeURIComponent(id)).join(",");
+    const res = await client.get(`/auctions/by-ids`, {
+      params: { auctionIds: encodedIds },
     });
     return res.data;
   },
@@ -84,10 +101,12 @@ export const auctionApi = {
   },
 
   // 내 경매 참여 이력 조회
-  getParticipationHistory: async (): Promise<
-    ApiResponseDto<AuctionParticipationResponse[]>
-  > => {
-    const res = await client.get("/auctions/participation/me");
+  getParticipationHistory: async (params?: {
+    page?: number;
+    size?: number;
+    sort?: string;
+  }): Promise<ApiResponseDto<PagedAuctionParticipationResponse>> => {
+    const res = await client.get("/auctions/participation/me", { params });
     return res.data;
   },
 
@@ -171,6 +190,15 @@ export const auctionApi = {
     });
     return res.data;
   },
+  getSimilarProducts: async (
+    productId: string,
+    limit = 4
+  ): Promise<ApiResponseDto<SimilarProductResponse[]>> => {
+    const res = await client.get("/search/similar", {
+      params: { productId, limit },
+    });
+    return res.data;
+  },
 
   /**
    * 경매를 삭제합니다.
@@ -184,9 +212,18 @@ export const auctionApi = {
   getTopAuctions: async (
     limit = 10
   ): Promise<ApiResponseDto<AuctionRankingResponse[]>> => {
-    console.log(`최고 경매 조회 API 호출`);
+    console.log(`인기 경매 조회 API 호출`);
     const response = await client.get(`/auctions/top/today`, {
       params: { limit },
+    });
+    return response.data;
+  },
+  getAuctionRecommendation: async (
+    productId: string
+  ): Promise<ApiResponseDto<AuctionRecommendationResponse>> => {
+    console.log(`경매 추천 조회 API 호출: ${productId}`);
+    const response = await client.get("/auctions/recommendation", {
+      params: { productId },
     });
     return response.data;
   },

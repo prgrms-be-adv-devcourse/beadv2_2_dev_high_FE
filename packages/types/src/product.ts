@@ -48,6 +48,7 @@ export interface ProductCreationRequest {
   name: string;
   description: string;
   fileGrpId?: number | string;
+  fileURL?: string;
   categoryIds: string[];
   sellerId?: string;
 }
@@ -59,6 +60,7 @@ export interface ProductUpdateRequest {
   name: string;
   description: string;
   fileGrpId?: null | string;
+  fileURL?: string;
   categoryIds: string[];
   sellerId?: string;
 }

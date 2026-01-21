@@ -127,7 +127,6 @@ const Login: React.FC = () => {
       auth.login(data.payload);
       sessionStorage.removeItem("postLoginRedirect");
       localStorage.removeItem("naver_oauth_state");
-      popupRef.current?.close();
     };
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);

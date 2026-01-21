@@ -50,9 +50,9 @@ const AuctionParticipationStatus: React.FC<{
     if (highestUserId && currentUserId && highestUserId === currentUserId) {
       statusChip = <Chip label="낙찰" color="success" />;
     } else if (isParticipated) {
-      statusChip = <Chip label="낙찰 실패" color="default" />;
+      statusChip = <Chip label="마감" color="default" />;
     } else {
-      statusChip = <Chip label="경매 종료" color="default" />;
+      statusChip = <Chip label="마감" color="default" />;
     }
   } else if (isParticipated) {
     if (lastBidPrice && lastBidPrice > 0) {
@@ -80,7 +80,7 @@ const AuctionParticipationStatus: React.FC<{
     if (!isParticipated && isAuctionEnded) {
       return {
         severity: "info" as const,
-        text: "참여하지 않은 상태로 경매가 종료되었습니다.",
+        text: "참여하지 않은 상태로 경매가 마감되었습니다.",
       };
     }
     if (!isParticipated) {

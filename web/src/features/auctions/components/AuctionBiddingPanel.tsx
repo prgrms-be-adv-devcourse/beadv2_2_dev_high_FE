@@ -88,6 +88,10 @@ const AuctionBiddingPanel: React.FC<AuctionBiddingPanelProps> = ({
   auctionStartAt,
 }) => {
   const animatedCurrentBid = useAnimatedNumber(currentBidPrice, hasAnyBid);
+  const isEnded =
+    status === AuctionStatus.COMPLETED ||
+    status === AuctionStatus.FAILED ||
+    status === AuctionStatus.CANCELLED;
 
   return (
     <Paper sx={{ p: 2 }}>
@@ -159,6 +163,15 @@ const AuctionBiddingPanel: React.FC<AuctionBiddingPanelProps> = ({
                     auctionStartAt={auctionStartAt}
                     status={status}
                   />
+                </Typography>
+              </Stack>
+            ) : isEnded ? (
+              <Stack spacing={0.25}>
+                <Typography variant="caption" color="text.secondary">
+                  종료시간: {formatDateTime(auctionEndAt)}
+                </Typography>
+                <Typography variant="h6" fontWeight="medium">
+                  마감됨
                 </Typography>
               </Stack>
             ) : (

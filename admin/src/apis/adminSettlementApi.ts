@@ -1,19 +1,16 @@
-import type { ApiResponseDto, PagedApiResponse } from "@moreauction/types";
-import type { SettlementResponse, SettlementStatus } from "@moreauction/types";
+import type { ApiResponseDto } from "@moreauction/types";
+import {
+  SettlementStatus,
+  type PagedSettlementResponse,
+  type PagedSettlementSummary,
+  type SettlementSummary,
+} from "@moreauction/types";
 import { client } from "@/apis/client";
 
 export type SettlementAdminSearchFilter = {
-  settlementId?: string;
-  orderId?: string;
   sellerId?: string;
-  buyerId?: string;
-  auctionId?: string;
-  status?: SettlementStatus;
-  completeYn?: string;
-  createdFrom?: string;
-  createdTo?: string;
-  completeFrom?: string;
-  completeTo?: string;
+  settlementDateFrom?: string;
+  settlementDateTo?: string;
 };
 
 type SettlementListParams = {
@@ -24,7 +21,8 @@ type SettlementListParams = {
 };
 
 type SettlementUpdateRequest = {
-  status?: SettlementStatus;
+  id: string;
+  status: SettlementStatus;
 };
 
 const extractData = <T>(payload: ApiResponseDto<T> | T): T => {
@@ -37,7 +35,7 @@ const extractData = <T>(payload: ApiResponseDto<T> | T): T => {
 export const adminSettlementApi = {
   getSettlements: async (
     params: SettlementListParams
-  ): Promise<PagedApiResponse<SettlementResponse>> => {
+  ): Promise<PagedSettlementSummary> => {
     const response = await client.get("/admin/settles", {
       params: {
         page: params.page,
@@ -46,22 +44,37 @@ export const adminSettlementApi = {
         ...(params.filter ?? {}),
       },
     });
-    return extractData<PagedApiResponse<SettlementResponse>>(response.data);
+    return extractData<PagedSettlementSummary>(response.data);
   },
-  updateSettlement: async (
-    settlementId: string,
-    payload: SettlementUpdateRequest
-  ): Promise<ApiResponseDto<SettlementResponse>> => {
-    const response = await client.patch(
-      `/admin/settles/${settlementId}`,
-      payload
-    );
+  getSettlementGroupItems: async (
+    groupId: string,
+    params?: {
+      page?: number;
+      size?: number;
+      sort?: string | string[];
+    }
+  ): Promise<PagedSettlementResponse> => {
+    const response = await client.get(`/admin/settles/group/${groupId}/items`, {
+      params,
+    });
+    return extractData<PagedSettlementResponse>(response.data);
+  },
+  createSettlement: async (orderId: string): Promise<ApiResponseDto<null>> => {
+    const response = await client.post(`/admin/settles/${orderId}`);
     return response.data;
   },
-  deleteSettlement: async (
-    settlementId: string
+  runSettlementBatch: async (
+    status: SettlementStatus = SettlementStatus.WAITING
   ): Promise<ApiResponseDto<null>> => {
-    const response = await client.delete(`/admin/settles/${settlementId}`);
+    const response = await client.post("/admin/settles/run", null, {
+      params: { status },
+    });
+    return response.data;
+  },
+  updateSettlement: async (
+    payload: SettlementUpdateRequest
+  ): Promise<ApiResponseDto<null>> => {
+    const response = await client.patch("/admin/settles", payload);
     return response.data;
   },
 };

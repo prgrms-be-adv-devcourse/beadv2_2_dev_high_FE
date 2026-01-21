@@ -83,8 +83,8 @@ export const useNotificationSse = (options?: {
         }
       );
 
-      queryClient.setQueryData(
-        queryKeys.notifications.list(user.userId),
+      queryClient.setQueriesData(
+        { queryKey: queryKeys.notifications.lists() },
         (
           oldData: InfiniteData<PagedNotificationResponse, number> | undefined
         ) => {
@@ -186,6 +186,17 @@ export const useNotificationSse = (options?: {
           }
         }
       } catch (error) {
+        if (controller.signal.aborted) {
+          shouldReconnect = false;
+          return;
+        }
+        if (
+          error instanceof DOMException &&
+          error.name === "AbortError"
+        ) {
+          shouldReconnect = false;
+          return;
+        }
         if (!isClosed) {
           console.warn("알림 SSE 연결 종료:", error);
         }

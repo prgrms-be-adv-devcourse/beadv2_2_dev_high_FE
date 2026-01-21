@@ -97,10 +97,21 @@ export const productApi = {
    * @param params - 필터링 등을 위한 쿼리 파라미터
    */
   getMyProducts: async (
-    sellerId?: string
-  ): Promise<ApiResponseDto<Product[]>> => {
-    console.log("내 상품 목록 조회 API 호출:", sellerId);
-    const response = await client.get(`/products/users/${sellerId}`);
+    sellerId?: string,
+    params?: ProductQueryParams
+  ): Promise<ApiResponseDto<PagedProductResponse>> => {
+    console.log("내 상품 목록 조회 API 호출:", sellerId, params);
+    const finalParams: ProductQueryParams = {
+      ...params,
+    };
+    if (!finalParams.sort) {
+      finalParams.sort = ["createdAt,DESC"];
+    }
+    const response = await client.get(`/products/users/${sellerId}`, {
+      params: finalParams,
+      paramsSerializer: (params) =>
+        qs.stringify(params, { arrayFormat: "repeat" }),
+    });
     return response.data;
   },
 
@@ -151,7 +162,7 @@ export const productApi = {
     params.files.forEach((f) => form.append("file", f));
 
     const res = await client.post<ApiResponseDto<AiGeneratedProductDetail>>(
-      `/products/generate-detail-draft-from-images?retryCount=${
+      `/products/recommend/generate-detail-draft-from-images?retryCount=${
         params.retryCount ?? 0
       }`,
       form

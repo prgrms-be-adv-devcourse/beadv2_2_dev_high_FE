@@ -22,6 +22,7 @@ type AdminAuctionListParams = {
   endTo?: string;
 };
 
+
 const extractData = <T>(payload: ApiResponseDto<T> | T): T => {
   if (payload && typeof payload === "object" && "data" in payload) {
     return (payload as ApiResponseDto<T>).data;
@@ -35,5 +36,13 @@ export const adminAuctionApi = {
   ): Promise<PagedApiResponse<AuctionDetailResponse>> => {
     const response = await client.get("/admin/auctions", { params });
     return extractData<PagedApiResponse<AuctionDetailResponse>>(response.data);
+  },
+  startNow: async (auctionId: string): Promise<ApiResponseDto<null>> => {
+    const response = await client.put(`/admin/auctions/${auctionId}/start-now`);
+    return response.data;
+  },
+  endNow: async (auctionId: string): Promise<ApiResponseDto<null>> => {
+    const response = await client.put(`/admin/auctions/${auctionId}/end-now`);
+    return response.data;
   },
 };

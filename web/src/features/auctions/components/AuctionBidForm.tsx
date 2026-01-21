@@ -18,6 +18,7 @@ interface AuctionBidFormProps {
   showConnectionStatus: boolean;
   isRetrying: boolean;
   isWithdrawn: boolean;
+  isRefund: boolean;
   isAuthenticated: boolean;
   isParticipationUnavailable?: boolean;
   isSeller?: boolean;
@@ -37,6 +38,7 @@ const AuctionBidForm: React.FC<AuctionBidFormProps> = ({
   showConnectionStatus,
   isRetrying,
   isWithdrawn,
+  isRefund,
   isAuthenticated,
   isParticipationUnavailable = false,
   isSeller = false,
@@ -76,6 +78,11 @@ const AuctionBidForm: React.FC<AuctionBidFormProps> = ({
               참여 현황을 불러오지 못해 입찰을 진행할 수 없습니다.
             </Alert>
           )}
+          {isAuthenticated && isRefund && (
+            <Alert severity="warning">
+              보증금이 환급 완료되어 입찰할 수 없습니다.
+            </Alert>
+          )}
           {isAuthenticated && isSeller && (
             <Alert severity="warning">
               본인의 상품에는 입찰할 수 없습니다.
@@ -103,6 +110,7 @@ const AuctionBidForm: React.FC<AuctionBidFormProps> = ({
           onFocus={() => !newBidAmount && setNewBidAmount(String(minBidPrice))}
           disabled={
             isWithdrawn ||
+            isRefund ||
             !isAuctionInProgress ||
             isParticipationUnavailable ||
             isSeller
@@ -116,6 +124,7 @@ const AuctionBidForm: React.FC<AuctionBidFormProps> = ({
           size="large"
           disabled={
             isWithdrawn ||
+            isRefund ||
             bidLoading ||
             !isAuctionInProgress ||
             isParticipationUnavailable ||

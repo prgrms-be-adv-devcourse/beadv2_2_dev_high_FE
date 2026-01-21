@@ -50,14 +50,14 @@ export const depositApi = {
   createDepositOrder: async (
     amount: number
   ): Promise<ApiResponseDto<DepositOrderInfo>> => {
-    const res = await client.post(`/deposit/orders`, { amount });
+    const res = await client.post(`/payments/orders`, { amount });
 
     return res.data;
   },
   paymentSuccess: async (
     params: PaymentSuccessReqeuest
   ): Promise<ApiResponseDto<unknown>> => {
-    const res = await client.post(`/deposit/payments/confirm`, params);
+    const res = await client.post(`/payments/confirm`, params);
 
     return res.data;
   },
@@ -65,7 +65,7 @@ export const depositApi = {
   paymentFail: async (
     params: PaymentFailReqeuest
   ): Promise<ApiResponseDto<unknown>> => {
-    const res = await client.post(`/deposit/payments/fail`, params);
+    const res = await client.post(`/payments/fail`, params);
 
     return res.data;
   },
@@ -91,7 +91,7 @@ export const depositApi = {
     size?: number;
     sort?: string;
   }): Promise<ApiResponseDto<PagedDepositPaymentResponse>> => {
-    const res = await client.get("/deposit/payments/me", { params });
+    const res = await client.get("/payments/me", { params });
     return res.data;
   },
 
@@ -103,7 +103,7 @@ export const depositApi = {
     params?: { page?: number; size?: number; sort?: string }
   ): Promise<ApiResponseDto<PagedDepositPaymentFailureHistoryResponse>> => {
     const res = await client.post(
-      "/deposit/payments/fail/search/user/userId",
+      "/payments/fail/search/user/userId",
       request,
       { params }
     );
@@ -117,7 +117,7 @@ export const depositApi = {
     request: DepositPaymentFailureHistorySearchRequest,
     params?: { page?: number; size?: number; sort?: string }
   ): Promise<ApiResponseDto<PagedDepositPaymentFailureHistoryResponse>> => {
-    const res = await client.post("/deposit/payments/fail/paymentId", request, {
+    const res = await client.post("/payments/fail/paymentId", request, {
       params,
     });
     return res.data;
