@@ -8,15 +8,16 @@ import type {
 interface CreateApiClientOptions {
   baseUrl: string;
   onUpdateToken: (token: string | null) => void;
+  refreshTokenUrl?: string;
 }
 
 let refreshFailed = false;
 let refreshPromise: Promise<string | null> | null = null;
 
-const refreshToken = async (baseUrl: string): Promise<string | null> => {
+const refreshToken = async (refreshUrl: string): Promise<string | null> => {
   try {
     const response = await axios.post(
-      `${baseUrl}/auth/refresh/token`,
+      refreshUrl,
       {},
       {
         withCredentials: true,
@@ -38,6 +39,7 @@ const refreshToken = async (baseUrl: string): Promise<string | null> => {
 export const createApiClient = ({
   baseUrl,
   onUpdateToken,
+  refreshTokenUrl,
 }: CreateApiClientOptions): AxiosInstance => {
   const client = axios.create({
     baseURL: baseUrl,
@@ -110,7 +112,9 @@ export const createApiClient = ({
           }
 
           if (!refreshPromise) {
-            refreshPromise = refreshToken(baseUrl)
+            const refreshUrl =
+              refreshTokenUrl ?? `${baseUrl}/auth/refresh/token`;
+            refreshPromise = refreshToken(refreshUrl)
               .then((newToken) => {
                 if (!newToken) {
                   refreshFailed = true;

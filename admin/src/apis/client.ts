@@ -18,6 +18,7 @@ export const API_BASE_URL = `${API_ORIGIN}/api/v1`;
  */
 export const client = createApiClient({
   baseUrl: API_BASE_URL + "/admin",
+  refreshTokenUrl: `${API_BASE_URL}/auth/refresh/token`,
   onUpdateToken: updateAccessTokenOutsideReact,
 });
 
