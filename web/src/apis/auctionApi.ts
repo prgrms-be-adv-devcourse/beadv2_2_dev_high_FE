@@ -203,7 +203,9 @@ export const auctionApi = {
   /**
    * 경매를 삭제합니다.
    */
-  removeAuction: async (auctionId: string): Promise<ApiResponseDto<void>> => {
+  removeAuction: async (
+    auctionId: string
+  ): Promise<ApiResponseDto<AuctionDetailResponse>> => {
     console.log(`경매 삭제 API 호출: ${auctionId}`);
     const response = await client.delete(`/auctions/${auctionId}`);
     return response.data;

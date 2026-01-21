@@ -1,11 +1,21 @@
+import { adminAuctionApi } from "@/apis/adminAuctionApi";
 import {
+  AuctionStatus,
+  type AuctionDetailResponse,
+  type PagedApiResponse,
+} from "@moreauction/types";
+import { formatDate, formatWon } from "@moreauction/utils";
+import {
+  Alert,
   Box,
   Button,
   Chip,
   Divider,
   MenuItem,
+  Pagination,
   Paper,
   Select,
+  Stack,
   Table,
   TableBody,
   TableCell,
@@ -13,9 +23,6 @@ import {
   TableRow,
   TextField,
   Typography,
-  Pagination,
-  Stack,
-  Alert,
 } from "@mui/material";
 import {
   keepPreviousData,
@@ -24,13 +31,9 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import {
-  AuctionStatus,
-  type AuctionDetailResponse,
-  type PagedApiResponse,
-} from "@moreauction/types";
-import { formatWon } from "@moreauction/utils";
-import { adminAuctionApi } from "@/apis/adminAuctionApi";
+import AuctionCreateDialog from "../dialog/AuctionCreateDialog";
+import AuctionDeleteDialog from "../dialog/AuctionDeleteDialog";
+import ProductInfoDialog from "../dialog/ProductInfoDialog";
 
 const PAGE_SIZE = 10;
 
@@ -48,26 +51,11 @@ const deletedOptions = [
   { value: "Y", label: "삭제됨" },
 ];
 
-const toOffsetDateTime = (value?: string) => {
-  if (!value) return undefined;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return undefined;
-  return parsed.toISOString();
-};
-
-const formatDateTime = (value?: string | null) => {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "-";
-  return parsed.toLocaleString(undefined, {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-};
+const DELETE_TARGETS: AuctionStatus[] = [
+  AuctionStatus.READY,
+  AuctionStatus.CANCELLED,
+  AuctionStatus.FAILED,
+];
 
 const AdminAuctions = () => {
   const queryClient = useQueryClient();
@@ -94,6 +82,11 @@ const AdminAuctions = () => {
     endFrom: "",
     endTo: "",
   });
+  const [deleteTarget, setDeleteTarget] =
+    useState<AuctionDetailResponse | null>(null);
+  const [productDetailOpen, setProductDetailOpen] = useState<string | null>(
+    null
+  );
 
   const auctionsQuery = useQuery({
     queryKey: [
@@ -121,14 +114,17 @@ const AdminAuctions = () => {
         maxBid: appliedFilters.maxBid
           ? Number(appliedFilters.maxBid)
           : undefined,
-        startFrom: toOffsetDateTime(appliedFilters.startFrom),
-        startTo: toOffsetDateTime(appliedFilters.startTo),
-        endFrom: toOffsetDateTime(appliedFilters.endFrom),
-        endTo: toOffsetDateTime(appliedFilters.endTo),
+        startFrom: formatDate(appliedFilters.startFrom),
+        startTo: formatDate(appliedFilters.startTo),
+        endFrom: formatDate(appliedFilters.endFrom),
+        endTo: formatDate(appliedFilters.endTo),
       }),
     staleTime: 20_000,
     placeholderData: keepPreviousData,
   });
+
+  const [createAuctionOpen, setCreateAuctionOpen] = useState(false);
+
   const updateAuctionStatus = (auctionId: string, status: AuctionStatus) => {
     queryClient.setQueriesData<PagedApiResponse<AuctionDetailResponse>>(
       { queryKey: ["admin", "auctions"] },
@@ -164,6 +160,34 @@ const AdminAuctions = () => {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (auctionId: string) => adminAuctionApi.deleteAuction(auctionId),
+    onSuccess: (_response, auctionId) => {
+      queryClient.setQueryData(
+        [
+          "admin",
+          "auctions",
+          page,
+          statusFilter,
+          deletedFilter,
+          appliedFilters,
+        ],
+        (oldData: any) => {
+          if (!oldData) return oldData;
+          return {
+            ...oldData,
+            content: oldData.content.map((auction: AuctionDetailResponse) =>
+              auction.id === auctionId
+                ? { ...auction, deletedYn: true }
+                : auction
+            ),
+          };
+        }
+      );
+      setDeleteTarget(null);
+    },
+  });
+
   const totalPages = auctionsQuery.data?.totalPages ?? 1;
   const auctions = auctionsQuery.data?.content ?? [];
 
@@ -174,9 +198,34 @@ const AdminAuctions = () => {
     return "경매 목록을 불러오지 못했습니다.";
   }, [auctionsQuery.isError]);
 
-  const canStartNow = (status: AuctionStatus) => status === AuctionStatus.READY;
-  const canEndNow = (status: AuctionStatus) =>
-    status === AuctionStatus.IN_PROGRESS;
+  const isNotDeleted = (auction: AuctionDetailResponse) =>
+    !auction.deletedYn || auction.deletedYn === "N";
+
+  const isMutating =
+    startNowMutation.isPending ||
+    endNowMutation.isPending ||
+    deleteMutation.isPending;
+  // (삭제 mutation도 있으면 여기에 추가)  || deleteMutation.isPending
+
+  // 즉시 시작: READY && 삭제 아님 && 뮤테이션 중 아님
+  const canStartNow = (auction: AuctionDetailResponse) =>
+    auction.status === AuctionStatus.READY &&
+    isNotDeleted(auction) &&
+    !isMutating;
+
+  // 즉시 종료: IN_PROGRESS && 삭제 아님 && 뮤테이션 중 아님
+  const canEndNow = (auction: AuctionDetailResponse) =>
+    auction.status === AuctionStatus.IN_PROGRESS &&
+    isNotDeleted(auction) &&
+    !isMutating;
+
+  // 삭제: (DELETE_TARGETS에 포함된 상태일 때) && 삭제 아님 && 삭제 실행 중 아님
+  // => 네 문장 기준 그대로면 "포함된 상태일 때"가 삭제 가능 조건
+  const canDelete = (auction: AuctionDetailResponse) =>
+    DELETE_TARGETS.includes(auction.status) &&
+    isNotDeleted(auction) &&
+    !isMutating;
+
   const getDisplayBid = (auction: AuctionDetailResponse) => {
     const currentBid = auction.currentBid ?? 0;
     if (currentBid > 0) return currentBid;
@@ -201,6 +250,12 @@ const AdminAuctions = () => {
           </Typography>
         </Box>
         <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+          <Button
+            variant="contained"
+            onClick={() => setCreateAuctionOpen(true)}
+          >
+            경매 등록
+          </Button>
           <Select
             size="small"
             value={statusFilter}
@@ -233,6 +288,9 @@ const AdminAuctions = () => {
       </Stack>
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
         <Stack spacing={2}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+            필터
+          </Typography>
           <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
             <TextField
               label="상품 ID"
@@ -338,9 +396,7 @@ const AdminAuctions = () => {
             />
           </Stack>
           <Stack direction="row" spacing={1} justifyContent="flex-end">
-            <Typography variant="body2" color="text.secondary">
-              시간 필터는 ISO DateTime으로 전송됩니다.
-            </Typography>
+            <Typography variant="body2" color="text.secondary"></Typography>
             <Box sx={{ flexGrow: 1 }} />
             <Button
               size="small"
@@ -378,7 +434,6 @@ const AdminAuctions = () => {
       </Paper>
 
       <Paper variant="outlined">
-        {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
         <Table>
           <TableHead>
             <TableRow>
@@ -391,13 +446,20 @@ const AdminAuctions = () => {
               <TableCell align="center">최고 입찰자</TableCell>
               <TableCell align="center">시작일</TableCell>
               <TableCell align="center">종료일</TableCell>
-              <TableCell align="center">삭제</TableCell>
-              <TableCell align="center">즉시 제어</TableCell>
+              <TableCell align="center">삭제 상태</TableCell>
+              <TableCell align="center">작업</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
+            {errorMessage && (
+              <TableRow>
+                <TableCell colSpan={11}>
+                  <Alert severity="error">{errorMessage}</Alert>
+                </TableCell>
+              </TableRow>
+            )}
             {auctions.map((auction: AuctionDetailResponse) => (
-              <TableRow key={auction.id} hover>
+              <TableRow key={auction.id} hover sx={{ height: 56 }}>
                 <TableCell align="center">{auction.id}</TableCell>
                 <TableCell align="center">
                   {auction.productName ?? "-"}
@@ -416,10 +478,10 @@ const AdminAuctions = () => {
                   {auction.highestUserId ?? "-"}
                 </TableCell>
                 <TableCell align="center">
-                  {formatDateTime(auction.auctionStartAt)}
+                  {formatDate(auction.auctionStartAt)}
                 </TableCell>
                 <TableCell align="center">
-                  {formatDateTime(auction.auctionEndAt)}
+                  {formatDate(auction.auctionEndAt)}
                 </TableCell>
                 <TableCell align="center">
                   {(() => {
@@ -445,11 +507,7 @@ const AdminAuctions = () => {
                     <Button
                       size="small"
                       variant="outlined"
-                      disabled={
-                        !canStartNow(auction.status) ||
-                        startNowMutation.isPending ||
-                        endNowMutation.isPending
-                      }
+                      disabled={!canStartNow(auction)}
                       onClick={() => {
                         if (!window.confirm("경매를 즉시 시작할까요?")) return;
                         startNowMutation.mutate(auction.id);
@@ -462,17 +520,30 @@ const AdminAuctions = () => {
                       size="small"
                       variant="contained"
                       color="error"
-                      disabled={
-                        !canEndNow(auction.status) ||
-                        startNowMutation.isPending ||
-                        endNowMutation.isPending
-                      }
+                      disabled={!canEndNow(auction)}
                       onClick={() => {
                         if (!window.confirm("경매를 즉시 종료할까요?")) return;
                         endNowMutation.mutate(auction.id);
                       }}
                     >
                       즉시 종료
+                    </Button>
+                    <Divider orientation="vertical" flexItem />
+                    <Button
+                      size="small"
+                      color="info"
+                      disabled={!canStartNow(auction)}
+                    >
+                      수정
+                    </Button>
+                    <Divider orientation="vertical" flexItem />
+                    <Button
+                      size="small"
+                      color="error"
+                      disabled={!canDelete(auction)}
+                      onClick={() => setDeleteTarget(auction)}
+                    >
+                      삭제
                     </Button>
                   </Stack>
                 </TableCell>
@@ -499,6 +570,21 @@ const AdminAuctions = () => {
           color="primary"
         />
       </Box>
+
+      <AuctionDeleteDialog
+        deleteTarget={deleteTarget}
+        setDeleteTarget={setDeleteTarget}
+        deleteMutation={deleteMutation}
+      />
+
+      <ProductInfoDialog
+        productDetailOpen={productDetailOpen}
+        setProductDetailOpen={setProductDetailOpen}
+      />
+      <AuctionCreateDialog
+        createAuctionOpen={createAuctionOpen}
+        setCreateAuctionOpen={setCreateAuctionOpen}
+      />
     </Box>
   );
 };

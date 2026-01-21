@@ -1,4 +1,4 @@
-const formatter = new Intl.NumberFormat("ko-KR");
+const numberFormater = new Intl.NumberFormat("ko-KR");
 
 const parseNumber = (value: unknown): number | null => {
   if (value == null) return null;
@@ -17,11 +17,11 @@ const parseNumber = (value: unknown): number | null => {
 export const formatNumber = (value: unknown, fallback = "-") => {
   const num = parseNumber(value);
   if (num == null) return fallback;
-  return formatter.format(Math.round(num));
+  return numberFormater.format(Math.round(num));
 };
 
 export const formatWon = (value: unknown, fallback = "-") => {
   const num = parseNumber(value);
   if (num == null) return fallback;
-  return `${formatter.format(Math.round(num))}원`;
+  return `${numberFormater.format(Math.round(num))}원`;
 };
