@@ -47,13 +47,30 @@ export const depositApi = {
     return response.data;
   },
 
-  createDepositOrder: async (params: {
+  createDepositChargeOrder: async (params: {
     amount: number;
-    depositUsage?: number;
   }): Promise<ApiResponseDto<DepositOrderInfo>> => {
-    const res = await client.post(`/payments/orders`, {
+    const res = await client.post(`/payments/orders/deposit-charge`, {
       amount: params.amount,
     });
+
+    return res.data;
+  },
+  createOrderPayment: async (params: {
+    amount: number;
+    deposit?: number;
+  }): Promise<ApiResponseDto<DepositOrderInfo>> => {
+    const res = await client.post(`/payments/orders/order-payment`, {
+      amount: params.amount,
+      deposit: params.deposit,
+    });
+
+    return res.data;
+  },
+  payOrderByDeposit: async (params: {
+    id: string;
+  }): Promise<ApiResponseDto<DepositOrderInfo>> => {
+    const res = await client.post(`/payments/orders/pay-by-deposit`, params);
 
     return res.data;
   },

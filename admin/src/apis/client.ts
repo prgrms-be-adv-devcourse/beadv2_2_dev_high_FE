@@ -7,7 +7,7 @@ import { updateAccessTokenOutsideReact } from "@moreauction/auth";
 const API_ORIGIN = (
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000"
 ).replace(/\/$/, "");
-const API_BASE_URL = `${API_ORIGIN}/api/v1`;
+export const API_BASE_URL = `${API_ORIGIN}/api/v1`;
 
 /**
  * 기본 axios 인스턴스입니다.

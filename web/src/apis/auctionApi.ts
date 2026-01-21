@@ -190,6 +190,15 @@ export const auctionApi = {
     });
     return res.data;
   },
+  searchAutocomplete: async (
+    prefix: string,
+    size = 10
+  ): Promise<ApiResponseDto<{ suggestions: string[] }>> => {
+    const res = await client.get("/search/autocomplete", {
+      params: { prefix, size },
+    });
+    return res.data;
+  },
   getSimilarProducts: async (
     productId: string,
     limit = 4

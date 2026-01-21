@@ -1,4 +1,5 @@
 import {
+  Autocomplete,
   Box,
   Card,
   CardActionArea,
@@ -16,7 +17,13 @@ import {
   Button,
 } from "@mui/material";
 import { Search as SearchIcon } from "@mui/icons-material";
-import React, { useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Link as RouterLink, useLocation, useNavigate } from "react-router-dom";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { auctionApi } from "@/apis/auctionApi";
@@ -30,12 +37,12 @@ import { ImageWithFallback } from "@/shared/components/common/ImageWithFallback"
 import { getErrorMessage } from "@/shared/utils/getErrorMessage";
 
 const SearchPage: React.FC = () => {
-  const formatDateTime = (value?: string) => {
+  const formatDateTime = useCallback((value?: string) => {
     if (!value) return "-";
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return value;
     return d.toLocaleString();
-  };
+  }, []);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -76,6 +83,16 @@ const SearchPage: React.FC = () => {
     useState(initialMaxStartPrice);
   const [pendingStartFrom, setPendingStartFrom] = useState(initialStartFrom);
   const [pendingStartTo, setPendingStartTo] = useState(initialStartTo);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [autoCompleteOpen, setAutoCompleteOpen] = useState(false);
+  const [autoCompleteLoading, setAutoCompleteLoading] = useState(false);
+  const autoCompleteRequestRef = useRef(0);
+  const autoCompleteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+  const autoCompleteCacheRef = useRef<Map<string, string[]>>(new Map());
+  const ignoreNextAutocompleteRef = useRef(false);
+  const autoCompleteDelayMs = 400;
 
   // 실제 검색에 사용되는 적용 상태
   const [keyword, setKeyword] = useState(initialKeyword);
@@ -237,10 +254,69 @@ const SearchPage: React.FC = () => {
     };
   }, [isFetching]);
 
-  // 입력 핸들러들 (아직 검색 조건에는 적용하지 않음)
-  const handleInputKeywordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setInputKeyword(e.target.value);
-  };
+  const requestAutocomplete = useCallback((value: string) => {
+    if (ignoreNextAutocompleteRef.current) {
+      ignoreNextAutocompleteRef.current = false;
+      return;
+    }
+    const trimmed = value.trim();
+    if (trimmed.length < 1) {
+      setSuggestions([]);
+      setAutoCompleteOpen(false);
+      setAutoCompleteLoading(false);
+      return;
+    }
+    const cached = autoCompleteCacheRef.current.get(trimmed);
+    if (cached) {
+      setSuggestions(cached);
+      setAutoCompleteOpen(cached.length > 0);
+      setAutoCompleteLoading(false);
+      return;
+    }
+    const invoke = (nextValue: string) => {
+      autoCompleteRequestRef.current += 1;
+      const requestId = autoCompleteRequestRef.current;
+      setAutoCompleteLoading(true);
+      auctionApi
+        .searchAutocomplete(nextValue)
+        .then((res) => {
+          if (requestId !== autoCompleteRequestRef.current) return;
+          const list = res.data?.suggestions ?? [];
+          autoCompleteCacheRef.current.set(nextValue, list);
+          setSuggestions(list);
+          setAutoCompleteOpen(list.length > 0);
+        })
+        .catch(() => {
+          if (requestId !== autoCompleteRequestRef.current) return;
+          setSuggestions([]);
+          setAutoCompleteOpen(false);
+        })
+        .finally(() => {
+          if (requestId !== autoCompleteRequestRef.current) return;
+          setAutoCompleteLoading(false);
+        });
+    };
+
+    if (autoCompleteTimeoutRef.current) {
+      clearTimeout(autoCompleteTimeoutRef.current);
+    }
+    autoCompleteTimeoutRef.current = setTimeout(() => {
+      autoCompleteTimeoutRef.current = null;
+      invoke(trimmed);
+    }, autoCompleteDelayMs);
+  }, []);
+
+  useEffect(() => {
+    requestAutocomplete(inputKeyword);
+  }, [inputKeyword, requestAutocomplete]);
+
+  useEffect(() => {
+    return () => {
+      if (autoCompleteTimeoutRef.current) {
+        clearTimeout(autoCompleteTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handlePendingStatusClick = (value: string) => {
     setPendingStatus((prev) => {
@@ -290,7 +366,6 @@ const SearchPage: React.FC = () => {
   // 검색 버튼 / 폼 제출 시 실제 검색 조건을 적용
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
     const trimmed = inputKeyword.trim();
 
     if (trimmed.length === 1) {
@@ -298,6 +373,7 @@ const SearchPage: React.FC = () => {
       return;
     }
 
+    setAutoCompleteOpen(false);
     setKeyword(trimmed);
     setStatus(pendingStatus);
     setSelectedCategoryNames(pendingCategoryNames);
@@ -320,6 +396,8 @@ const SearchPage: React.FC = () => {
 
   const handleReset = () => {
     setInputKeyword("");
+    setSuggestions([]);
+    setAutoCompleteOpen(false);
     setPendingStatus("");
     setPendingCategoryNames([]);
     setPendingMinStartPrice("");
@@ -364,6 +442,310 @@ const SearchPage: React.FC = () => {
     });
   };
 
+  const resultSection = useMemo(() => {
+    if (searchErrorMessage) {
+      return <Typography color="text.secondary">{searchErrorMessage}</Typography>;
+    }
+
+    if (loading) {
+      return (
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: {
+              xs: "1fr",
+              sm: "repeat(2, 1fr)",
+              md: "repeat(3, 1fr)",
+              lg: "repeat(4, 1fr)",
+            },
+            gap: 3,
+            mb: 4,
+            opacity: isFetching ? 0.6 : 1,
+            transition: "opacity 150ms ease",
+            pointerEvents: isFetching ? "none" : "auto",
+          }}
+        >
+          {Array.from({ length: 8 }).map((_, idx) => (
+            <Card
+              key={idx}
+              sx={{
+                minHeight: 320,
+                overflow: "hidden",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <Skeleton variant="rectangular" height={200} />
+              <CardContent
+                sx={{
+                  flex: 1,
+                  display: "flex",
+                  flexDirection: "column",
+                  py: 1.5,
+                  gap: 1,
+                }}
+              >
+                <Skeleton variant="text" width="75%" />
+                <Skeleton variant="rounded" width="55%" height={28} />
+                <Skeleton variant="text" width="55%" />
+                <Skeleton variant="text" width="85%" />
+                <Box sx={{ mt: "auto", textAlign: "right" }}>
+                  <Skeleton variant="text" width="40%" sx={{ ml: "auto" }} />
+                  <Skeleton variant="text" width="60%" sx={{ ml: "auto" }} />
+                </Box>
+              </CardContent>
+            </Card>
+          ))}
+        </Box>
+      );
+    }
+
+    if (result.content.length === 0) {
+      return (
+        <Typography color="text.secondary">
+          조건에 맞는 상품/경매를 찾지 못했습니다.
+        </Typography>
+      );
+    }
+
+    return (
+      <Box sx={{ position: "relative", mb: 4 }}>
+        {showLoadingOverlay && (
+          <Box
+            sx={{
+              position: "absolute",
+              inset: 0,
+              bgcolor: "rgba(15, 23, 42, 0.18)",
+              backdropFilter: "blur(2px)",
+              zIndex: 2,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <CircularProgress color="inherit" sx={{ color: "#fff" }} />
+          </Box>
+        )}
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: {
+              xs: "1fr",
+              sm: "repeat(2, 1fr)",
+              md: "repeat(3, 1fr)",
+              lg: "repeat(4, 1fr)",
+            },
+            gap: 3,
+          }}
+        >
+          {result.content.map((doc, index) => {
+            const coverImage = doc.imageUrl || "";
+            const emptyImage = "/images/no_image.png";
+            const cardKey =
+              doc.auctionId ??
+              doc.productId ??
+              `${doc.productName ?? "auction"}-${index}`;
+
+            return (
+              <Card
+                key={cardKey}
+                sx={{
+                  minHeight: 320,
+                  overflow: "hidden",
+                  display: "flex",
+                  flexDirection: "column",
+                  borderRadius: 3,
+                  boxShadow: "0 10px 30px rgba(15, 23, 42, 0.08)",
+                }}
+              >
+                <CardActionArea
+                  component={RouterLink}
+                  to={`/products/${doc.productId}`}
+                  sx={{
+                    display: "flex",
+                    flexDirection: "column",
+                    height: "100%",
+                    alignItems: "stretch",
+                  }}
+                >
+                  <Box sx={{ position: "relative" }}>
+                    <ImageWithFallback
+                      src={coverImage}
+                      alt={doc.productName}
+                      height={200}
+                      loading={loading}
+                      emptySrc={emptyImage}
+                      sx={{ objectFit: "cover", width: "100%" }}
+                      skeletonSx={{ width: "100%" }}
+                    />
+                    <Box
+                      sx={{
+                        position: "absolute",
+                        inset: 0,
+                        background:
+                          "linear-gradient(180deg, rgba(15, 23, 42, 0) 40%, rgba(15, 23, 42, 0.45) 100%)",
+                        pointerEvents: "none",
+                      }}
+                    />
+                    <Chip
+                      label={getAuctionStatusText(doc.status)}
+                      size="small"
+                      sx={{
+                        position: "absolute",
+                        top: 12,
+                        right: 12,
+                        fontWeight: 700,
+                        border: "1px solid",
+                        borderColor: (theme) =>
+                          theme.palette.mode === "light"
+                            ? "rgba(15, 23, 42, 0.12)"
+                            : "rgba(148, 163, 184, 0.35)",
+                        bgcolor: (theme) =>
+                          theme.palette.mode === "light"
+                            ? "rgba(255, 255, 255, 0.92)"
+                            : "rgba(15, 23, 42, 0.8)",
+                        color: (theme) =>
+                          theme.palette.mode === "light"
+                            ? "text.primary"
+                            : "rgba(248, 250, 252, 0.95)",
+                        backdropFilter: "blur(6px)",
+                        boxShadow: (theme) =>
+                          theme.palette.mode === "light"
+                            ? "0 6px 16px rgba(15, 23, 42, 0.12)"
+                            : "0 6px 16px rgba(0, 0, 0, 0.35)",
+                      }}
+                    />
+                  </Box>
+                  <CardContent
+                    sx={{
+                      flex: 1,
+                      display: "flex",
+                      flexDirection: "column",
+                      py: 1.5,
+                      gap: 1,
+                      alignItems: "stretch",
+                    }}
+                  >
+                    <Typography
+                      variant="subtitle1"
+                      sx={{
+                        fontWeight: 600,
+                        display: "-webkit-box",
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: "vertical",
+                        overflow: "hidden",
+                      }}
+                    >
+                      {doc.productName}
+                    </Typography>
+
+                    <Box sx={{ minHeight: 36 }}>
+                      {(doc.categories?.length ?? 0) > 0 ? (
+                        <Stack
+                          direction="row"
+                          spacing={0.75}
+                          sx={{ mb: 0.75, flexWrap: "wrap" }}
+                        >
+                          {doc.categories!.slice(0, 2).map((c, idx) => (
+                            <Chip
+                              key={`${c}-${idx}`}
+                              label={c}
+                              size="small"
+                              variant="outlined"
+                              sx={{ mb: 0.5 }}
+                            />
+                          ))}
+                          {doc.categories!.length > 2 && (
+                            <Chip
+                              label={`+${doc.categories!.length - 2}`}
+                              size="small"
+                              variant="outlined"
+                              sx={{ mb: 0.5 }}
+                            />
+                          )}
+                        </Stack>
+                      ) : (
+                        <Chip
+                          label="카테고리 없음"
+                          size="small"
+                          variant="outlined"
+                          sx={{
+                            mb: 0.5,
+                            color: "text.secondary",
+                            borderStyle: "dashed",
+                          }}
+                        />
+                      )}
+                    </Box>
+
+                    <Stack direction="row" spacing={1}>
+                      <Box
+                        sx={{
+                          flex: 1,
+                          borderRadius: 2,
+                          bgcolor: "rgba(15, 23, 42, 0.04)",
+                          px: 1,
+                          py: 0.75,
+                        }}
+                      >
+                        <Typography variant="caption" color="text.secondary">
+                          시작가
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {doc.startPrice != null
+                            ? formatWon(doc.startPrice)
+                            : "-"}
+                        </Typography>
+                      </Box>
+                      <Box
+                        sx={{
+                          flex: 1,
+                          borderRadius: 2,
+                          bgcolor: "rgba(15, 23, 42, 0.04)",
+                          px: 1,
+                          py: 0.75,
+                        }}
+                      >
+                        <Typography variant="caption" color="text.secondary">
+                          보증금
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {doc.depositAmount != null
+                            ? formatWon(doc.depositAmount)
+                            : "-"}
+                        </Typography>
+                      </Box>
+                    </Stack>
+                    <Divider sx={{ my: 0.5 }} />
+                    <Stack
+                      direction="row"
+                      alignItems="center"
+                      justifyContent="space-between"
+                      sx={{ mt: "auto" }}
+                    >
+                      <Typography variant="caption" color="text.secondary">
+                        {doc.status === AuctionStatus.READY
+                          ? `시작 ${formatDateTime(doc.auctionStartAt)}`
+                          : `종료 ${formatDateTime(doc.auctionEndAt)}`}
+                      </Typography>
+                    </Stack>
+                  </CardContent>
+                </CardActionArea>
+              </Card>
+            );
+          })}
+        </Box>
+      </Box>
+    );
+  }, [
+    formatDateTime,
+    isFetching,
+    loading,
+    result.content,
+    searchErrorMessage,
+    showLoadingOverlay,
+  ]);
+
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Typography variant="h4" sx={{ mb: 3, fontWeight: 700 }}>
@@ -374,18 +756,57 @@ const SearchPage: React.FC = () => {
       <Box sx={{ mb: 2 }}>
         <form onSubmit={handleSubmit}>
           <Stack direction="row" spacing={1}>
-            <TextField
+            <Autocomplete
+              freeSolo
               fullWidth
-              placeholder="상품명, 설명 등으로 검색해 보세요."
-              value={inputKeyword}
-              onChange={handleInputKeywordChange}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon />
-                  </InputAdornment>
-                ),
+              options={suggestions}
+              inputValue={inputKeyword}
+              open={autoCompleteOpen}
+              loading={autoCompleteLoading}
+              filterOptions={(options) => options}
+              onInputChange={(_, value) => {
+                setInputKeyword(value);
               }}
+              onChange={(_, value, reason) => {
+                if (typeof value === "string") {
+                  ignoreNextAutocompleteRef.current = true;
+                  setInputKeyword(value);
+                }
+                setAutoCompleteOpen(false);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && autoCompleteOpen) {
+                  event.preventDefault();
+                }
+              }}
+              onOpen={() => {
+                if (suggestions.length > 0) {
+                  setAutoCompleteOpen(true);
+                }
+              }}
+              onClose={() => setAutoCompleteOpen(false)}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  placeholder="상품명, 설명 등으로 검색해 보세요."
+                  InputProps={{
+                    ...params.InputProps,
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon />
+                      </InputAdornment>
+                    ),
+                    endAdornment: (
+                      <>
+                        {autoCompleteLoading ? (
+                          <CircularProgress size={18} sx={{ mr: 1 }} />
+                        ) : null}
+                        {params.InputProps.endAdornment}
+                      </>
+                    ),
+                  }}
+                />
+              )}
             />
             <Button
               variant="contained"
@@ -572,290 +993,7 @@ const SearchPage: React.FC = () => {
       </Stack>
 
       {/* 결과 영역 */}
-      {searchErrorMessage ? (
-        <Typography color="text.secondary">{searchErrorMessage}</Typography>
-      ) : loading ? (
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: {
-              xs: "1fr",
-              sm: "repeat(2, 1fr)",
-              md: "repeat(3, 1fr)",
-              lg: "repeat(4, 1fr)",
-            },
-            gap: 3,
-            mb: 4,
-            opacity: isFetching ? 0.6 : 1,
-            transition: "opacity 150ms ease",
-            pointerEvents: isFetching ? "none" : "auto",
-          }}
-        >
-          {Array.from({ length: 8 }).map((_, idx) => (
-            <Card
-              key={idx}
-              sx={{
-                minHeight: 320,
-                overflow: "hidden",
-                display: "flex",
-                flexDirection: "column",
-              }}
-            >
-              <Skeleton variant="rectangular" height={200} />
-              <CardContent
-                sx={{
-                  flex: 1,
-                  display: "flex",
-                  flexDirection: "column",
-                  py: 1.5,
-                  gap: 1,
-                }}
-              >
-                <Skeleton variant="text" width="75%" />
-                <Skeleton variant="rounded" width="55%" height={28} />
-                <Skeleton variant="text" width="55%" />
-                <Skeleton variant="text" width="85%" />
-                <Box sx={{ mt: "auto", textAlign: "right" }}>
-                  <Skeleton variant="text" width="40%" sx={{ ml: "auto" }} />
-                  <Skeleton variant="text" width="60%" sx={{ ml: "auto" }} />
-                </Box>
-              </CardContent>
-            </Card>
-          ))}
-        </Box>
-      ) : result.content.length === 0 ? (
-        <Typography color="text.secondary">
-          조건에 맞는 상품/경매를 찾지 못했습니다.
-        </Typography>
-      ) : (
-        <Box sx={{ position: "relative", mb: 4 }}>
-          {showLoadingOverlay && (
-            <Box
-              sx={{
-                position: "absolute",
-                inset: 0,
-                bgcolor: "rgba(15, 23, 42, 0.18)",
-                backdropFilter: "blur(2px)",
-                zIndex: 2,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <CircularProgress color="inherit" sx={{ color: "#fff" }} />
-            </Box>
-          )}
-          <Box
-            sx={{
-              display: "grid",
-              gridTemplateColumns: {
-                xs: "1fr",
-                sm: "repeat(2, 1fr)",
-                md: "repeat(3, 1fr)",
-                lg: "repeat(4, 1fr)",
-              },
-              gap: 3,
-            }}
-          >
-            {result.content.map((doc, index) => {
-              const coverImage = doc.imageUrl || "";
-              const emptyImage = "/images/no_image.png";
-              const cardKey =
-                doc.auctionId ??
-                doc.productId ??
-                `${doc.productName ?? "auction"}-${index}`;
-
-              return (
-                <Card
-                  key={cardKey}
-                  sx={{
-                    minHeight: 320,
-                    overflow: "hidden",
-                    display: "flex",
-                    flexDirection: "column",
-                    borderRadius: 3,
-                    boxShadow: "0 10px 30px rgba(15, 23, 42, 0.08)",
-                  }}
-                >
-                  <CardActionArea
-                    component={RouterLink}
-                    to={`/products/${doc.productId}`}
-                    sx={{
-                      display: "flex",
-                      flexDirection: "column",
-                      height: "100%",
-                      alignItems: "stretch",
-                    }}
-                  >
-                    <Box sx={{ position: "relative" }}>
-                      <ImageWithFallback
-                        src={coverImage}
-                        alt={doc.productName}
-                        height={200}
-                        loading={loading}
-                        emptySrc={emptyImage}
-                        sx={{ objectFit: "cover", width: "100%" }}
-                        skeletonSx={{ width: "100%" }}
-                      />
-                      <Box
-                        sx={{
-                          position: "absolute",
-                          inset: 0,
-                          background:
-                            "linear-gradient(180deg, rgba(15, 23, 42, 0) 40%, rgba(15, 23, 42, 0.45) 100%)",
-                          pointerEvents: "none",
-                        }}
-                      />
-                      <Chip
-                        label={getAuctionStatusText(doc.status)}
-                        size="small"
-                        sx={{
-                          position: "absolute",
-                          top: 12,
-                          right: 12,
-                          fontWeight: 700,
-                          border: "1px solid",
-                          borderColor: (theme) =>
-                            theme.palette.mode === "light"
-                              ? "rgba(15, 23, 42, 0.12)"
-                              : "rgba(148, 163, 184, 0.35)",
-                          bgcolor: (theme) =>
-                            theme.palette.mode === "light"
-                              ? "rgba(255, 255, 255, 0.92)"
-                              : "rgba(15, 23, 42, 0.8)",
-                          color: (theme) =>
-                            theme.palette.mode === "light"
-                              ? "text.primary"
-                              : "rgba(248, 250, 252, 0.95)",
-                          backdropFilter: "blur(6px)",
-                          boxShadow: (theme) =>
-                            theme.palette.mode === "light"
-                              ? "0 6px 16px rgba(15, 23, 42, 0.12)"
-                              : "0 6px 16px rgba(0, 0, 0, 0.35)",
-                        }}
-                      />
-                    </Box>
-                    <CardContent
-                      sx={{
-                        flex: 1,
-                        display: "flex",
-                        flexDirection: "column",
-                        py: 1.5,
-                        gap: 1,
-                        alignItems: "stretch",
-                      }}
-                    >
-                      <Typography
-                        variant="subtitle1"
-                        sx={{
-                          fontWeight: 600,
-                          display: "-webkit-box",
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: "vertical",
-                          overflow: "hidden",
-                        }}
-                      >
-                        {doc.productName}
-                      </Typography>
-
-                      <Box sx={{ minHeight: 36 }}>
-                        {(doc.categories?.length ?? 0) > 0 ? (
-                          <Stack
-                            direction="row"
-                            spacing={0.75}
-                            sx={{ mb: 0.75, flexWrap: "wrap" }}
-                          >
-                            {doc.categories!.slice(0, 2).map((c, idx) => (
-                              <Chip
-                                key={`${c}-${idx}`}
-                                label={c}
-                                size="small"
-                                variant="outlined"
-                                sx={{ mb: 0.5 }}
-                              />
-                            ))}
-                            {doc.categories!.length > 2 && (
-                              <Chip
-                                label={`+${doc.categories!.length - 2}`}
-                                size="small"
-                                variant="outlined"
-                                sx={{ mb: 0.5 }}
-                              />
-                            )}
-                          </Stack>
-                        ) : (
-                          <Chip
-                            label="카테고리 없음"
-                            size="small"
-                            variant="outlined"
-                            sx={{
-                              mb: 0.5,
-                              color: "text.secondary",
-                              borderStyle: "dashed",
-                            }}
-                          />
-                        )}
-                      </Box>
-
-                      <Stack direction="row" spacing={1}>
-                        <Box
-                          sx={{
-                            flex: 1,
-                            borderRadius: 2,
-                            bgcolor: "rgba(15, 23, 42, 0.04)",
-                            px: 1,
-                            py: 0.75,
-                          }}
-                        >
-                          <Typography variant="caption" color="text.secondary">
-                            시작가
-                          </Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                            {doc.startPrice != null
-                              ? formatWon(doc.startPrice)
-                              : "-"}
-                          </Typography>
-                        </Box>
-                        <Box
-                          sx={{
-                            flex: 1,
-                            borderRadius: 2,
-                            bgcolor: "rgba(15, 23, 42, 0.04)",
-                            px: 1,
-                            py: 0.75,
-                          }}
-                        >
-                          <Typography variant="caption" color="text.secondary">
-                            보증금
-                          </Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                            {doc.depositAmount != null
-                              ? formatWon(doc.depositAmount)
-                              : "-"}
-                          </Typography>
-                        </Box>
-                      </Stack>
-                      <Divider sx={{ my: 0.5 }} />
-                      <Stack
-                        direction="row"
-                        alignItems="center"
-                        justifyContent="space-between"
-                        sx={{ mt: "auto" }}
-                      >
-                        <Typography variant="caption" color="text.secondary">
-                          {doc.status === AuctionStatus.READY
-                            ? `시작 ${formatDateTime(doc.auctionStartAt)}`
-                            : `종료 ${formatDateTime(doc.auctionEndAt)}`}
-                        </Typography>
-                      </Stack>
-                    </CardContent>
-                  </CardActionArea>
-                </Card>
-              );
-            })}
-          </Box>
-        </Box>
-      )}
+      {resultSection}
 
       <Pagination
         count={Math.max(result.totalPages, 1)}

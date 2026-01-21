@@ -35,6 +35,8 @@ export interface DepositOrderInfo {
   id: string;
   userId: String;
   amount: number;
+  deposit?: number;
+  paidAmount?: number;
   status: DepositOrderStatus;
   createdAt: string;
 }
@@ -96,6 +98,7 @@ export interface PaymentSuccessReqeuest {
   paymentKey: string;
   orderId: string;
   amount: number;
+  winningOrderId?: string;
 }
 
 export interface PaymentFailReqeuest {
@@ -103,5 +106,4 @@ export interface PaymentFailReqeuest {
   message?: string;
   orderId?: string;
   userId?: string;
-  depositPaymentId?: string;
 }

@@ -8,6 +8,7 @@ import {
   Box,
   Button,
   Chip,
+  CircularProgress,
   Divider,
   MenuItem,
   Pagination,
@@ -33,8 +34,10 @@ import AuctionInfoDialog from "../dialog/AuctionInfoDialog";
 import ProductDeleteDialog from "../dialog/ProductDeleteDialog";
 import ProductCreateDialog from "../dialog/ProductCreateDialog";
 import ProductEditDialog from "../dialog/ProductEditDialog";
+import ProductAiGenerateDialog from "../dialog/ProductAiGenerateDialog";
 import ProductInfoDialog from "@/features/auctions/dialog/ProductInfoDialog";
 import { PAGE_SIZE } from "@/shared/constant/const";
+import { useAiProductGenerate } from "@/shared/contexts/AiProductGenerateContext";
 
 const deletedOptions = [
   { value: "all", label: "삭제 여부 전체" },
@@ -49,13 +52,16 @@ const AdminProducts = () => {
   const [deletedFilter, setDeletedFilter] = useState("all");
   const [filters, setFilters] = useState<ProductAdminSearchFilter>({});
   const [draftFilters, setDraftFilters] = useState<ProductAdminSearchFilter>(
-    {}
+    {},
   );
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
 
   const [auctionListOpen, setAuctionListOpen] = useState<string | null>(null);
   const [openCreateDialog, setOpenCreateDialog] = useState<boolean>(false);
+  const [openAiGenerateDialog, setOpenAiGenerateDialog] =
+    useState<boolean>(false);
   const [editProductId, setEditProductId] = useState<string | null>(null);
+  const { pending: aiGeneratePending, startGenerate } = useAiProductGenerate();
   const [productDetail, setProductDetail] = useState<{
     id?: string;
     name?: string;
@@ -93,10 +99,10 @@ const AdminProducts = () => {
             content: oldData.content.map((product: Product) =>
               product.id === productId
                 ? { ...product, deletedYn: "Y" as const }
-                : product
+                : product,
             ),
           };
-        }
+        },
       );
       setDeleteTarget(null);
     },
@@ -118,6 +124,10 @@ const AdminProducts = () => {
   };
   const handleCreateOpen = () => {
     setOpenCreateDialog(true);
+  };
+  const handleAiGenerateOpen = () => {
+    if (aiGeneratePending) return;
+    setOpenAiGenerateDialog(true);
   };
   const handleEditOpen = (productId: string) => {
     setEditProductId(productId);
@@ -149,9 +159,22 @@ const AdminProducts = () => {
           </Typography>
         </Box>
         <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+          <Button
+            variant="outlined"
+            onClick={handleAiGenerateOpen}
+            disabled={aiGeneratePending}
+            startIcon={
+              aiGeneratePending ? (
+                <CircularProgress size={16} color="inherit" />
+              ) : undefined
+            }
+          >
+            {aiGeneratePending ? "생성 중" : "AI 상품 생성"}
+          </Button>
           <Button variant="contained" onClick={handleCreateOpen}>
             상품 등록
           </Button>
+
           <Select
             size="small"
             value={deletedFilter}
@@ -357,6 +380,12 @@ const AdminProducts = () => {
       <ProductCreateDialog
         openCreateDialog={openCreateDialog}
         setOpenCreateDialog={setOpenCreateDialog}
+      />
+      <ProductAiGenerateDialog
+        open={openAiGenerateDialog}
+        onClose={() => setOpenAiGenerateDialog(false)}
+        onSubmit={startGenerate}
+        pending={aiGeneratePending}
       />
       <ProductDeleteDialog
         deleteTarget={deleteTarget}

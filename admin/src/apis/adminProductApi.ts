@@ -28,6 +28,13 @@ export type ProductAdminRequest = {
   categoryIds: string[];
 };
 
+export type AiProductGenerateRequest = {
+  categories: Array<{
+    categoryId: string;
+    count: number;
+  }>;
+};
+
 const extractData = <T>(payload: ApiResponseDto<T> | T): T => {
   if (payload && typeof payload === "object" && "data" in payload) {
     return (payload as ApiResponseDto<T>).data;
@@ -68,6 +75,12 @@ export const adminProductApi = {
   },
   deleteProduct: async (productId: string): Promise<ApiResponseDto<null>> => {
     const response = await client.delete(`/products/${productId}`);
+    return response.data;
+  },
+  generateAiProducts: async (
+    payload: AiProductGenerateRequest
+  ): Promise<ApiResponseDto<Product[]>> => {
+    const response = await client.post("/products/ai/generate", payload);
     return response.data;
   },
 };

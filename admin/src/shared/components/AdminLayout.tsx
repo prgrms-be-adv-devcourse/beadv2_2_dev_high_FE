@@ -23,6 +23,7 @@ import React, { useMemo, useState } from "react";
 import { Link as RouterLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@moreauction/auth";
 import AdminHeader from "./AdminHeader";
+import { AiProductGenerateProvider } from "@/shared/contexts/AiProductGenerateContext";
 
 const drawerWidth = 240;
 
@@ -93,66 +94,68 @@ const AdminLayout: React.FC = () => {
   );
 
   return (
-    <Box
-      sx={{
-        display: "flex",
-        minHeight: "100vh",
-        bgcolor: "background.default",
-      }}
-    >
-      <AdminHeader
-        userEmail={user?.email ?? ""}
-        showMenuButton
-        onMenuClick={() => setMobileOpen(true)}
-      />
-
-      <Drawer
-        variant="temporary"
-        open={mobileOpen}
-        onClose={() => setMobileOpen(false)}
-        ModalProps={{ keepMounted: true }}
-        sx={{
-          width: drawerWidth,
-          flexShrink: 0,
-          display: { xs: "block", md: "none" },
-          "& .MuiDrawer-paper": {
-            width: drawerWidth,
-            bgcolor: "background.paper",
-            boxSizing: "border-box",
-          },
-        }}
-      >
-        {drawerContent}
-      </Drawer>
-      <Drawer
-        variant="permanent"
-        sx={{
-          width: drawerWidth,
-          flexShrink: 0,
-          display: { xs: "none", md: "block" },
-          "& .MuiDrawer-paper": {
-            width: drawerWidth,
-            bgcolor: "background.paper",
-            boxSizing: "border-box",
-          },
-        }}
-        open
-      >
-        {drawerContent}
-      </Drawer>
-
+    <AiProductGenerateProvider>
       <Box
-        component="main"
         sx={{
-          flexGrow: 1,
-          px: { xs: 2, md: 4 },
-          pt: 10,
-          pb: 4,
+          display: "flex",
+          minHeight: "100vh",
+          bgcolor: "background.default",
         }}
       >
-        <Outlet />
+        <AdminHeader
+          userEmail={user?.email ?? ""}
+          showMenuButton
+          onMenuClick={() => setMobileOpen(true)}
+        />
+
+        <Drawer
+          variant="temporary"
+          open={mobileOpen}
+          onClose={() => setMobileOpen(false)}
+          ModalProps={{ keepMounted: true }}
+          sx={{
+            width: drawerWidth,
+            flexShrink: 0,
+            display: { xs: "block", md: "none" },
+            "& .MuiDrawer-paper": {
+              width: drawerWidth,
+              bgcolor: "background.paper",
+              boxSizing: "border-box",
+            },
+          }}
+        >
+          {drawerContent}
+        </Drawer>
+        <Drawer
+          variant="permanent"
+          sx={{
+            width: drawerWidth,
+            flexShrink: 0,
+            display: { xs: "none", md: "block" },
+            "& .MuiDrawer-paper": {
+              width: drawerWidth,
+              bgcolor: "background.paper",
+              boxSizing: "border-box",
+            },
+          }}
+          open
+        >
+          {drawerContent}
+        </Drawer>
+
+        <Box
+          component="main"
+          sx={{
+            flexGrow: 1,
+            px: { xs: 2, md: 4 },
+            pt: 10,
+            pb: 4,
+          }}
+        >
+          <Outlet />
+        </Box>
       </Box>
-    </Box>
+    </AiProductGenerateProvider>
   );
 };
 

@@ -360,14 +360,26 @@ const OrderDetail: React.FC = () => {
         return;
       }
       setActionLoading(true);
-      const depositOrder = await depositApi.createDepositOrder({
-        amount: pgAmount,
-        depositUsage,
+      const depositOrder = await depositApi.createOrderPayment({
+        amount: payableAmount,
+        deposit: depositUsage,
       });
       if (depositOrder?.data?.id) {
+        sessionStorage.setItem(
+          "paymentOrderContext",
+          JSON.stringify({
+            orderId: depositOrder.data.id,
+            type: "order-payment",
+            deposit: depositUsage,
+            winningOrderId: order.id,
+            createdAt: Date.now(),
+          })
+        );
+        const paidAmount =
+          depositOrder.data.paidAmount ?? depositOrder.data.amount;
         requestTossPayment(
           depositOrder.data.id,
-          depositOrder.data.amount,
+          paidAmount,
           "주문 결제"
         );
         setPaymentDialogOpen(false);

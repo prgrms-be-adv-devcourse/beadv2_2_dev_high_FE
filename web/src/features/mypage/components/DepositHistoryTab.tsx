@@ -59,7 +59,12 @@ export const DepositHistoryTab: React.FC = () => {
   const [chargeError, setChargeError] = useState<string | null>(null);
   const [filter, setFilter] = useState<HistoryFilter>(() => {
     const stored = sessionStorage.getItem("depositHistoryFilter");
-    return (stored as HistoryFilter) ?? "ALL";
+    const allowed = new Set<string>([
+      "ALL",
+      DepositType.CHARGE,
+      DepositType.USAGE,
+    ]);
+    return stored && allowed.has(stored) ? (stored as HistoryFilter) : "ALL";
   });
 
   const depositInfoQuery = useQuery({
@@ -158,10 +163,22 @@ export const DepositHistoryTab: React.FC = () => {
     setChargeError(null);
 
     try {
-      const depositOrder = await depositApi.createDepositOrder({ amount });
+      const depositOrder = await depositApi.createDepositChargeOrder({
+        amount,
+      });
 
       if (depositOrder?.data?.id) {
-        requestTossPayment(depositOrder.data.id, depositOrder.data.amount);
+        sessionStorage.setItem(
+          "paymentOrderContext",
+          JSON.stringify({
+            orderId: depositOrder.data.id,
+            type: "deposit-charge",
+            createdAt: Date.now(),
+          })
+        );
+        const paidAmount =
+          depositOrder.data.paidAmount ?? depositOrder.data.amount;
+        requestTossPayment(depositOrder.data.id, paidAmount);
         handleCloseChargeDialog();
       } else {
         setChargeError("주문 생성에 실패했습니다.");
@@ -271,10 +288,8 @@ export const DepositHistoryTab: React.FC = () => {
           sx={{ mb: 2 }}
         >
           <ToggleButton value="ALL">전체</ToggleButton>
-          <ToggleButton value={DepositType.CHARGE}>충전</ToggleButton>
-          <ToggleButton value={DepositType.USAGE}>사용</ToggleButton>
-          <ToggleButton value={DepositType.DEPOSIT}>보증금</ToggleButton>
-          <ToggleButton value={DepositType.REFUND}>환불</ToggleButton>
+          <ToggleButton value={DepositType.CHARGE}>충전/환불</ToggleButton>
+          <ToggleButton value={DepositType.USAGE}>사용(결제/보증금)</ToggleButton>
         </ToggleButtonGroup>
 
         {showSkeleton ? (

@@ -1476,7 +1476,13 @@ const ProductRegistration: React.FC = () => {
                 },
               }}
               label="상품명"
-              {...register("name", { required: "상품명은 필수입니다." })}
+              {...register("name", {
+                required: "상품명은 필수입니다.",
+                minLength: {
+                  value: 2,
+                  message: "상품명은 2글자 이상 입력해 주세요.",
+                },
+              })}
               error={!!errors.name}
               helperText={errors.name?.message}
             />

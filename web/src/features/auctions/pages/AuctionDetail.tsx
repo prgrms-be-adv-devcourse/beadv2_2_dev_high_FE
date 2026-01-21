@@ -1135,19 +1135,25 @@ const AuctionDetail: React.FC = () => {
           setChargeLoading(true);
           setChargeError(null);
           try {
-            const depositOrder = await depositApi.createDepositOrder({
+            const depositOrder = await depositApi.createDepositChargeOrder({
               amount,
             });
             if (depositOrder?.data?.id && auctionId) {
+              sessionStorage.setItem(
+                "paymentOrderContext",
+                JSON.stringify({
+                  orderId: depositOrder.data.id,
+                  type: "deposit-charge",
+                  createdAt: Date.now(),
+                })
+              );
               const depositAmount = Number(auctionDetail?.depositAmount ?? 0);
-              const bidPrice = Number(newBidAmount);
               if (autoPayAfterCharge) {
                 sessionStorage.setItem(
                   "autoAuctionDepositAfterCharge",
                   JSON.stringify({
                     auctionId,
                     depositAmount,
-                    bidPrice: Number.isFinite(bidPrice) ? bidPrice : undefined,
                     createdAt: Date.now(),
                   })
                 );
@@ -1156,7 +1162,7 @@ const AuctionDetail: React.FC = () => {
               }
               requestTossPayment(
                 depositOrder.data.id,
-                depositOrder.data.amount
+                depositOrder.data.paidAmount ?? depositOrder.data.amount
               );
               setChargeOpen(false);
             } else {
