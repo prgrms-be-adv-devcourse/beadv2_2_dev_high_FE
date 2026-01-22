@@ -61,6 +61,7 @@ const AuctionDialogs: React.FC<AuctionDialogsProps> = ({
       {/* 보증금 프롬프트 */}
       <Dialog
         open={openDepositPrompt}
+        disableEscapeKeyDown={isDepositLoading}
         onClose={() => {
           if (!isDepositLoading) {
             setOpenDepositPrompt(false);
@@ -104,6 +105,7 @@ const AuctionDialogs: React.FC<AuctionDialogsProps> = ({
       {/* 경매 포기 확인 */}
       <Dialog
         open={openWithdrawnPopup}
+        disableEscapeKeyDown={isWithdrawLoading}
         onClose={() => {
           if (!isWithdrawLoading) {
             setOpenWithdrawnPopup(false);

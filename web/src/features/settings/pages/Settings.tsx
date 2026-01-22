@@ -88,6 +88,7 @@ const Settings: React.FC = () => {
         updateUser(response.data);
       }
       setProfileError(null);
+      setProfileDialogOpen(false);
       alert("프로필이 변경되었습니다.");
     },
     onError: () => {
@@ -317,6 +318,7 @@ const Settings: React.FC = () => {
       <Dialog
         open={profileDialogOpen}
         onClose={handleCloseProfileDialog}
+        disableEscapeKeyDown={profileMutation.isPending}
         fullWidth
         maxWidth="sm"
       >
@@ -378,7 +380,6 @@ const Settings: React.FC = () => {
             disabled={!canSubmitProfile || profileMutation.isPending}
             onClick={() => {
               profileMutation.mutate(profileValues);
-              handleCloseProfileDialog();
             }}
           >
             {profileMutation.isPending ? "저장 중..." : "저장하기"}

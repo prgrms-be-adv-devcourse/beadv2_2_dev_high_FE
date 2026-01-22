@@ -52,9 +52,19 @@ const PaymentDialog: React.FC<PaymentDialogProps> = ({
   pgAmount,
 }) => {
   const maxDepositUsage = Math.max(Math.min(depositBalance, payableAmount), 0);
+  const handleDialogClose = () => {
+    if (actionLoading) return;
+    onClose();
+  };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog
+      open={open}
+      onClose={handleDialogClose}
+      disableEscapeKeyDown={actionLoading}
+      maxWidth="sm"
+      fullWidth
+    >
       <DialogTitle>결제하기</DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2}>
@@ -167,7 +177,9 @@ const PaymentDialog: React.FC<PaymentDialogProps> = ({
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>닫기</Button>
+        <Button onClick={handleDialogClose} disabled={actionLoading}>
+          닫기
+        </Button>
         <Button
           variant="contained"
           onClick={onConfirm}

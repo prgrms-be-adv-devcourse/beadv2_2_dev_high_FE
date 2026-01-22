@@ -73,6 +73,10 @@ export const AiProductGenerateProvider = ({
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
+      const requestPayload = {
+        ...payload,
+        generateImage: payload.generateImage ?? true,
+      };
 
       const run = async () => {
         let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
@@ -91,7 +95,7 @@ export const AiProductGenerateProvider = ({
                 Authorization: `Bearer ${token}`,
               },
               credentials: "include",
-              body: JSON.stringify(payload),
+              body: JSON.stringify(requestPayload),
               signal: controller.signal,
             },
           );

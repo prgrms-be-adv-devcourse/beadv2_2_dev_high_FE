@@ -33,6 +33,7 @@ export type AiProductGenerateRequest = {
     categoryId: string;
     count: number;
   }>;
+  generateImage?: boolean;
 };
 
 const extractData = <T>(payload: ApiResponseDto<T> | T): T => {

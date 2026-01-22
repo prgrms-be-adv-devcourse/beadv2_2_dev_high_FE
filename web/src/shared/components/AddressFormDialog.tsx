@@ -54,6 +54,10 @@ const AddressFormDialog: React.FC<AddressFormDialogProps> = ({
   );
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [postcodeOpen, setPostcodeOpen] = React.useState(false);
+  const handleDialogClose = () => {
+    if (loading) return;
+    onClose();
+  };
 
   React.useEffect(() => {
     if (!open) return;
@@ -109,7 +113,13 @@ const AddressFormDialog: React.FC<AddressFormDialogProps> = ({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog
+      open={open}
+      onClose={handleDialogClose}
+      disableEscapeKeyDown={loading}
+      maxWidth="sm"
+      fullWidth
+    >
       <DialogTitle>{title}</DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2}>
@@ -172,7 +182,7 @@ const AddressFormDialog: React.FC<AddressFormDialogProps> = ({
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} disabled={loading}>
+        <Button onClick={handleDialogClose} disabled={loading}>
           닫기
         </Button>
         <Button variant="contained" onClick={handleSubmit} disabled={loading}>
