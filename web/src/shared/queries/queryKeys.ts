@@ -125,6 +125,8 @@ export const queryKeys = {
     history: (type?: string | null) =>
       [...queryKeys.deposit.all, "history", type ?? "all"] as const,
     payments: () => [...queryKeys.deposit.all, "payments"] as const,
+    paymentOrder: (orderId?: string | null) =>
+      [...queryKeys.deposit.all, "paymentOrder", orderId ?? "unknown"] as const,
     paymentFailures: () =>
       [...queryKeys.deposit.all, "paymentFailures"] as const,
     paymentFailuresByOrder: (orderId?: string | null) =>

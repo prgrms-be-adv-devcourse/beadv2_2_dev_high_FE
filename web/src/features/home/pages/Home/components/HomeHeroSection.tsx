@@ -7,7 +7,7 @@ import {
   Typography,
   useTheme,
 } from "@mui/material";
-import { Gavel as GavelIcon } from "@mui/icons-material";
+import { ArrowForward as ArrowForwardIcon, Gavel as GavelIcon } from "@mui/icons-material";
 import { Link as RouterLink } from "react-router-dom";
 import TopAuctionsCarousel from "@/features/home/components/TopAuctionsCarousel";
 
@@ -82,6 +82,40 @@ const HomeHeroSection: React.FC<HomeHeroSectionProps> = ({
                 {secondaryLabel}
               </Button>
             </Stack>
+            <Button
+              component={RouterLink}
+              to="/guide"
+              variant="text"
+              endIcon={<ArrowForwardIcon fontSize="small" />}
+              sx={{
+                mt: 1.5,
+                px: 1.5,
+                py: 0.6,
+                borderRadius: 999,
+                textTransform: "none",
+                color: "text.primary",
+                fontWeight: 700,
+                alignSelf: "flex-start",
+                border: "1px solid",
+                borderColor:
+                  theme.palette.mode === "light"
+                    ? "rgba(15, 23, 42, 0.12)"
+                    : "rgba(148, 163, 184, 0.4)",
+                backgroundColor:
+                  theme.palette.mode === "light"
+                    ? "rgba(255, 255, 255, 0.7)"
+                    : "rgba(15, 23, 42, 0.6)",
+                backdropFilter: "blur(6px)",
+                "&:hover": {
+                  backgroundColor:
+                    theme.palette.mode === "light"
+                      ? "rgba(255, 255, 255, 0.9)"
+                      : "rgba(15, 23, 42, 0.8)",
+                },
+              }}
+            >
+              이용 가이드 보기
+            </Button>
           </Box>
           <Box flex={1}>
             <TopAuctionsCarousel />

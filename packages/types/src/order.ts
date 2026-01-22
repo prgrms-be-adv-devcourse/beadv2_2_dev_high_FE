@@ -25,6 +25,7 @@ export function getOrderStatusLabel(status: string) {
 // 주문/낙찰 내역 응답
 export interface OrderResponse {
   id: string;
+  purchaseOrderId?: string | null;
   sellerId: string;
   buyerId: string;
   auctionId: string;

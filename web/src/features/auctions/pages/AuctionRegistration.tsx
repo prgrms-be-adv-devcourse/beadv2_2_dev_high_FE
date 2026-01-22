@@ -57,6 +57,11 @@ const formatCount = (value?: number | null) => {
   return amountFormatter.format(value);
 };
 
+const estimateDepositAmount = (value?: number | null) => {
+  if (value == null || !Number.isFinite(value) || value <= 0) return 0;
+  return Math.ceil((value * 0.05) / 10) * 10;
+};
+
 const AuctionRegistration: React.FC = () => {
   const { auctionId, productId } = useParams<{
     auctionId?: string;
@@ -82,6 +87,8 @@ const AuctionRegistration: React.FC = () => {
   const [registrationBlockedMessage, setRegistrationBlockedMessage] = useState<
     string | null
   >(null);
+  const startBidValue = watch("startBid");
+  const depositEstimate = estimateDepositAmount(Number(startBidValue));
 
   const auctionDetailQuery = useQuery({
     queryKey: queryKeys.auctions.detail(auctionId),
@@ -776,6 +783,12 @@ const AuctionRegistration: React.FC = () => {
                     />
                   )}
                 />
+                <Typography variant="caption" color="text.secondary" sx={{ mt: -1 }}>
+                  보증금은 시작 입찰가의 5%로 자동 책정됩니다.
+                  {depositEstimate > 0
+                    ? ` (예상 ${formatAmount(depositEstimate)})`
+                    : ""}
+                </Typography>
                 <TextField
                   margin="normal"
                   required

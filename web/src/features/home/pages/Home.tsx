@@ -4,7 +4,6 @@ import { useAuth } from "@moreauction/auth";
 import HomeHeroSection from "@/features/home/pages/Home/components/HomeHeroSection";
 import HomeRecommendationsSection from "@/features/home/pages/Home/components/HomeRecommendationsSection";
 import HomeAuctionStatusSection from "@/features/home/pages/Home/components/HomeAuctionStatusSection";
-import HomeHowItWorksSection from "@/features/home/pages/Home/components/HomeHowItWorksSection";
 
 // 홈: 상단 히어로 섹션 + 상품 목록
 const Home: React.FC = () => {
@@ -49,7 +48,6 @@ const Home: React.FC = () => {
         emptyTitle="곧 시작하는 경매가 없습니다"
         emptyDescription="원하는 상품을 검색하거나 찜을 등록해두면 시작 알림을 받아볼 수 있습니다."
       />
-      <HomeHowItWorksSection />
     </>
   );
 };

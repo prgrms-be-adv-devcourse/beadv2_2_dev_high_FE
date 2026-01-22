@@ -142,8 +142,15 @@ const AdminOrders = () => {
   });
 
   const updateStatusMutation = useMutation({
-    mutationFn: (params: { orderId: string; status: OrderStatus }) =>
-      adminOrderApi.updateOrder(params.orderId, { status: params.status }),
+    mutationFn: (params: {
+      orderId: string;
+      status: OrderStatus;
+      purchaseOrderId?: string | null;
+    }) =>
+      adminOrderApi.updateOrder(params.orderId, {
+        status: params.status,
+        purchaseOrderId: params.purchaseOrderId,
+      }),
     onSuccess: (data) => {
       const updated = data?.data;
       if (!updated) return;
@@ -261,7 +268,11 @@ const AdminOrders = () => {
       alert("구매 완료 이후 상태에서는 구매 대기로 변경할 수 없습니다.");
       return;
     }
-    updateStatusMutation.mutate({ orderId: order.id, status: next });
+    updateStatusMutation.mutate({
+      orderId: order.id,
+      status: next,
+      purchaseOrderId: order.purchaseOrderId ?? null,
+    });
   };
 
   const handlePayLimitChange = (orderId: string, value: string) => {

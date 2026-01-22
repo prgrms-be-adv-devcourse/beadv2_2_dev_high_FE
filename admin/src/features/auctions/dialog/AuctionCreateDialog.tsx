@@ -5,6 +5,7 @@ import type {
   AuctionFormData,
   Product,
 } from "@moreauction/types";
+import { AuctionStatus } from "@moreauction/types";
 import { toISOString } from "@moreauction/utils";
 import {
   Button,
@@ -19,6 +20,7 @@ import {
   TableRow,
   TextField,
   Typography,
+  Pagination,
 } from "@mui/material";
 import DialogTable from "@/shared/components/DialogTable";
 import {
@@ -27,7 +29,12 @@ import {
   dialogTitleSx,
 } from "@/shared/components/dialogStyles";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { addDays, addHours, format, setMinutes, setSeconds } from "date-fns";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -36,6 +43,7 @@ const AuctionCreateDialog = ({
   createAuctionOpen,
   setCreateAuctionOpen,
 }: any) => {
+  const PRODUCT_PAGE_SIZE = 10;
   const queryClient = useQueryClient();
   const now = new Date();
 
@@ -63,27 +71,79 @@ const AuctionCreateDialog = ({
     "select-product" | "enter-details"
   >("select-product");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [productPage, setProductPage] = useState(1);
 
   const productsWithoutAuctionQuery = useQuery({
-    queryKey: ["admin", "products", "without-auction"],
-    queryFn: () => adminProductApi.getProducts({}),
+    queryKey: ["admin", "products", "without-auction", productPage],
+    queryFn: () =>
+      adminProductApi.getProducts({
+        page: productPage - 1,
+        size: PRODUCT_PAGE_SIZE,
+        sort: "createdAt,desc",
+      }),
     enabled: createAuctionOpen && createAuctionStep === "select-product",
     staleTime: 20_000,
+    placeholderData: keepPreviousData,
+  });
+  const productSelectMutation = useMutation({
+    mutationFn: (product: Product) =>
+      adminAuctionApi.getAuctionsByProductId(product.id),
+    onSuccess: (response, product) => {
+      const auctions = response.data ? response.data : [];
+      const hasBlockedAuction = auctions.some((auction) => {
+        const isDeleted =
+          auction.deletedYn === true || auction.deletedYn === "Y";
+        if (isDeleted) return false;
+        return (
+          auction.status === AuctionStatus.IN_PROGRESS ||
+          auction.status === AuctionStatus.COMPLETED ||
+          auction.status === AuctionStatus.FAILED ||
+          auction.status === AuctionStatus.CANCELLED
+        );
+      });
+      if (hasBlockedAuction) {
+        alert(
+          "이미 진행 중이거나 종료된 경매가 존재합니다. 새 경매를 등록할 수 없습니다."
+        );
+        return;
+      }
+      setSelectedProduct(product);
+      setCreateAuctionStep("enter-details");
+    },
+    onError: () => {
+      alert("상품 상태를 확인할 수 없습니다. 잠시 후 다시 시도해주세요.");
+    },
   });
   const createAuctionMutation = useMutation({
     mutationFn: (data: AuctionCreationRequest) =>
       adminAuctionApi.createAuction(data),
     onSuccess: () => {
       setCreateAuctionOpen(false);
-      setCreateAuctionStep("select-product");
-      setSelectedProduct(null);
-      reset();
       queryClient.invalidateQueries({ queryKey: ["admin", "auctions"] });
       queryClient.invalidateQueries({
         queryKey: ["admin", "products", "without-auction"],
       });
     },
   });
+  const handleSelectProduct = (product: Product) => {
+    productSelectMutation.mutate(product);
+  };
+  const productsContent = productsWithoutAuctionQuery.data?.content ?? [];
+  const totalElements = productsWithoutAuctionQuery.data?.totalElements ?? 0;
+  const totalPagesFromElements =
+    totalElements > 0 ? Math.ceil(totalElements / PRODUCT_PAGE_SIZE) : 0;
+  const isClientPaged = productsContent.length > PRODUCT_PAGE_SIZE;
+  const pagedProducts = isClientPaged
+    ? productsContent.slice(
+        (productPage - 1) * PRODUCT_PAGE_SIZE,
+        productPage * PRODUCT_PAGE_SIZE
+      )
+    : productsContent;
+  const productTotalPages = isClientPaged
+    ? Math.ceil(productsContent.length / PRODUCT_PAGE_SIZE)
+    : totalPagesFromElements ||
+      productsWithoutAuctionQuery.data?.totalPages ||
+      1;
   return (
     <Dialog
       open={createAuctionOpen}
@@ -95,6 +155,7 @@ const AuctionCreateDialog = ({
         onExited: () => {
           setCreateAuctionStep("select-product");
           setSelectedProduct(null);
+          setProductPage(1);
           reset();
         },
       }}
@@ -117,18 +178,18 @@ const AuctionCreateDialog = ({
                 상품을 불러오는데 실패했습니다.
               </Typography>
             ) : productsWithoutAuctionQuery.data?.content?.length ? (
-              <DialogTable>
-                <TableHead>
-                  <TableRow>
-                    <TableCell align="center">ID</TableCell>
-                    <TableCell align="center">상품명</TableCell>
-                    <TableCell align="center">판매자</TableCell>
-                    <TableCell align="center">선택</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {productsWithoutAuctionQuery.data.content.map(
-                    (product: Product) => (
+              <>
+                <DialogTable>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell align="center">ID</TableCell>
+                      <TableCell align="center">상품명</TableCell>
+                      <TableCell align="center">판매자</TableCell>
+                      <TableCell align="center">선택</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {pagedProducts.map((product: Product) => (
                       <TableRow key={product.id}>
                         <TableCell align="center">{product.id}</TableCell>
                         <TableCell align="center">{product.name}</TableCell>
@@ -139,19 +200,25 @@ const AuctionCreateDialog = ({
                           <Button
                             size="small"
                             variant="outlined"
-                            onClick={() => {
-                              setSelectedProduct(product);
-                              setCreateAuctionStep("enter-details");
-                            }}
+                            onClick={() => handleSelectProduct(product)}
+                            disabled={productSelectMutation.isPending}
                           >
                             선택
                           </Button>
                         </TableCell>
                       </TableRow>
-                    )
-                  )}
-                </TableBody>
-              </DialogTable>
+                    ))}
+                  </TableBody>
+                </DialogTable>
+                <Pagination
+                  count={Math.max(productTotalPages, 1)}
+                  page={productPage}
+                  onChange={(_, value) => setProductPage(value)}
+                  disabled={productTotalPages === 0}
+                  size="small"
+                  sx={{ display: "flex", justifyContent: "center" }}
+                />
+              </>
             ) : (
               <Typography>경매를 등록할 수 있는 상품이 없습니다.</Typography>
             )}
@@ -179,6 +246,9 @@ const AuctionCreateDialog = ({
                 fullWidth
                 required
               />
+              <Typography variant="caption" color="text.secondary">
+                보증금은 시작 가격의 5%로 자동 책정됩니다.
+              </Typography>
               <TextField
                 label="시작 시간"
                 type="datetime-local"
@@ -228,6 +298,7 @@ const AuctionCreateDialog = ({
             if (createAuctionStep === "enter-details") {
               setCreateAuctionStep("select-product");
               setSelectedProduct(null);
+              setProductPage(1);
             } else {
               setCreateAuctionOpen(false);
             }

@@ -3,6 +3,7 @@ import App from "@/app/App";
 import AuctionDetail from "@/features/auctions/pages/AuctionDetail";
 import AuctionRegistration from "@/features/auctions/pages/AuctionRegistration";
 import Home from "@/features/home/pages/Home";
+import Guide from "@/features/guide/pages/Guide";
 import Login from "@/features/auth/pages/Login";
 import MyPage from "@/features/mypage/pages/MyPage";
 import Notifications from "@/features/notifications/pages/Notifications";
@@ -43,6 +44,10 @@ export const router = createBrowserRouter([
       {
         path: "search",
         element: <SearchPage />,
+      },
+      {
+        path: "guide",
+        element: <Guide />,
       },
       {
         path: "login",

@@ -21,7 +21,6 @@ import AddressFormDialog from "@/shared/components/AddressFormDialog";
 import { requestTossPayment } from "@/shared/utils/requestTossPayment";
 import { useAuth } from "@moreauction/auth";
 import {
-  DepositType,
   getOrderStatusLabel,
   OrderStatus,
   type OrderResponse,
@@ -106,11 +105,18 @@ const OrderDetail: React.FC = () => {
     const limitTime = new Date(orderDisplay.payLimitDate).getTime();
     return Number.isFinite(limitTime) && Date.now() > limitTime;
   }, [orderDisplay?.payLimitDate]);
+  const purchaseOrderId = orderDisplay?.purchaseOrderId ?? null;
   const payableAmount =
     orderDisplay && typeof orderDisplay.depositAmount === "number"
       ? Math.max(orderDisplay.winningAmount - orderDisplay.depositAmount, 0)
       : orderDisplay?.winningAmount ?? 0;
   const depositBalance = depositAccountQuery.data?.data?.balance ?? 0;
+  const purchaseOrderQuery = useQuery({
+    queryKey: queryKeys.deposit.paymentOrder(purchaseOrderId),
+    queryFn: () => depositApi.getPurchaseOrder(purchaseOrderId ?? ""),
+    enabled: Boolean(purchaseOrderId),
+    staleTime: 30_000,
+  });
   const addresses = addressQuery.data ?? [];
   const maxAddressCount = 10;
   const isAddressLimitReached = addresses.length >= maxAddressCount;
@@ -153,7 +159,7 @@ const OrderDetail: React.FC = () => {
       if (pendingPaymentOpen) {
         setPendingPaymentOpen(false);
         setPaymentDialogOpen(true);
-        setUseDepositEnabled(depositBalance > 0);
+        setUseDepositEnabled(true);
         setUseDepositAll(true);
         setUseDepositAmount("");
         setPaymentError(null);
@@ -166,11 +172,11 @@ const OrderDetail: React.FC = () => {
 
   const openPaymentDialog = React.useCallback(() => {
     setPaymentDialogOpen(true);
-    setUseDepositEnabled(depositBalance > 0);
+    setUseDepositEnabled(true);
     setUseDepositAll(true);
     setUseDepositAmount("");
     setPaymentError(null);
-  }, [depositBalance]);
+  }, []);
 
   const ensureDefaultAddress = React.useCallback(async () => {
     if (defaultAddress) return true;
@@ -231,11 +237,6 @@ const OrderDetail: React.FC = () => {
     openPaymentDialog,
   ]);
 
-  const setDepositBalanceCache = (next: number) => {
-    queryClient.setQueryData(queryKeys.deposit.balance(), next);
-    localStorage.setItem("depositBalance", String(next));
-  };
-
   const decrementDepositBalance = (amount: number) => {
     queryClient.setQueryData(
       queryKeys.deposit.balance(),
@@ -256,17 +257,18 @@ const OrderDetail: React.FC = () => {
     }
     try {
       setActionLoading(true);
-      const info = await depositApi.createDeposit({
-        depositOrderId: order.id,
+      const depositOrder = await depositApi.createOrderPayment({
         amount: payableAmount,
-        type: DepositType.PAYMENT,
-        userId: user?.userId,
+        deposit: payableAmount,
       });
-      if (typeof info?.data?.balance === "number") {
-        setDepositBalanceCache(info.data.balance);
-      } else {
-        decrementDepositBalance(payableAmount);
+      if (!depositOrder?.data?.id) {
+        throw new Error("주문 생성에 실패했습니다.");
       }
+      await depositApi.payOrderByDeposit({
+        id: depositOrder.data.id,
+        ...(order.id ? { winningOrderId: order.id } : {}),
+      });
+      decrementDepositBalance(payableAmount);
       setPaidOverrideUntil(Date.now() + 60_000);
       queryClient.setQueryData(
         queryKeys.orders.detail(order.id),
@@ -318,6 +320,19 @@ const OrderDetail: React.FC = () => {
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const handleCancelPurchase = async () => {
+    if (!order?.id || !purchaseOrderId || actionLoading) return;
+    const confirmed = window.confirm(
+      "구매를 취소하시겠습니까? 보증금 납부금은 제외하고 지급됩니다."
+    );
+    if (!confirmed) return;
+    alert("구매 취소 요청은 준비 중입니다.");
+  };
+
+  const handleRequestRefund = () => {
+    alert("환불 요청 기능은 준비 중입니다.");
   };
 
   const getDepositUsageAmount = () => {
@@ -452,6 +467,14 @@ const OrderDetail: React.FC = () => {
 
   const depositUsageAmount = getDepositUsageAmount();
   const pgAmount = Math.max(payableAmount - depositUsageAmount, 0);
+  const isPaid = orderDisplay?.status === OrderStatus.PAID;
+  const canCancelPurchase = Boolean(purchaseOrderId) && isPaid;
+  const canRequestRefund = Boolean(purchaseOrderId)
+    ? orderDisplay?.status === OrderStatus.SHIP_STARTED ||
+      orderDisplay?.status === OrderStatus.SHIP_COMPLETED ||
+      orderDisplay?.status === OrderStatus.CONFIRM_BUY
+    : false;
+  const purchaseOrder = purchaseOrderQuery.data?.data ?? null;
 
   return (
     <Container maxWidth="md" sx={{ my: 4 }}>
@@ -520,11 +543,16 @@ const OrderDetail: React.FC = () => {
                 <OrderInfoCard order={orderDisplay} />
                 <PaymentSummaryCard
                   order={orderDisplay}
+                  purchaseOrder={purchaseOrder}
                   payableAmount={payableAmount}
                   isPayExpired={isPayExpired}
                   isUnpaid={isUnpaid}
                   actionLoading={actionLoading}
                   onOpenPaymentDialog={handleOpenPaymentDialog}
+                  canCancelPurchase={canCancelPurchase}
+                  canRequestRefund={canRequestRefund}
+                  onCancelPurchase={handleCancelPurchase}
+                  onRequestRefund={handleRequestRefund}
                 />
               </Box>
               <ShippingInfoCard

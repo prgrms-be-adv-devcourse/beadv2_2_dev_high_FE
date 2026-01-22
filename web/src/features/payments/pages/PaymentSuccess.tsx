@@ -119,7 +119,10 @@ export default function PaymentSuccess() {
       try {
         if (isOrderPayment && depositUsage > 0) {
           try {
-            await depositApi.payOrderByDeposit({ id: orderId });
+            await depositApi.payOrderByDeposit({
+              id: orderId,
+              ...(winningOrderId ? { winningOrderId } : {}),
+            });
             await Promise.all([
               queryClient.invalidateQueries({
                 queryKey: queryKeys.deposit.account(),
@@ -159,7 +162,6 @@ export default function PaymentSuccess() {
           paymentKey,
           orderId,
           amount,
-          ...(winningOrderId ? { winningOrderId } : {}),
         });
         if (!isOrderPayment) {
           incrementDepositBalance(amount);

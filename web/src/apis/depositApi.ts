@@ -67,8 +67,16 @@ export const depositApi = {
 
     return res.data;
   },
+  getPurchaseOrder: async (
+    purchaseOrderId: string
+  ): Promise<ApiResponseDto<DepositOrderInfo>> => {
+    const res = await client.get(`/payments/orders/${purchaseOrderId}`);
+
+    return res.data;
+  },
   payOrderByDeposit: async (params: {
     id: string;
+    winningOrderId?: string;
   }): Promise<ApiResponseDto<DepositOrderInfo>> => {
     const res = await client.post(`/payments/orders/pay-by-deposit`, params);
 

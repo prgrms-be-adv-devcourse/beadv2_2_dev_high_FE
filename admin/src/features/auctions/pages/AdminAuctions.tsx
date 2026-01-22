@@ -135,6 +135,9 @@ const AdminAuctions = () => {
   });
 
   const [createAuctionOpen, setCreateAuctionOpen] = useState(false);
+  const [startNowPendingId, setStartNowPendingId] = useState<string | null>(
+    null
+  );
 
   const updateAuctionStatus = (auctionId: string, status: AuctionStatus) => {
     queryClient.setQueriesData<PagedApiResponse<AuctionDetailResponse>>(
@@ -151,12 +154,30 @@ const AdminAuctions = () => {
 
   const startNowMutation = useMutation({
     mutationFn: (auctionId: string) => adminAuctionApi.startNow(auctionId),
+    onMutate: async (auctionId) => {
+      setStartNowPendingId(auctionId);
+      await queryClient.cancelQueries({ queryKey: ["admin", "auctions"] });
+      const previousQueries = queryClient.getQueriesData<
+        PagedApiResponse<AuctionDetailResponse>
+      >({ queryKey: ["admin", "auctions"] });
+      updateAuctionStatus(auctionId, AuctionStatus.IN_PROGRESS);
+      return { previousQueries };
+    },
     onSuccess: (_response, auctionId) => {
       updateAuctionStatus(auctionId, AuctionStatus.IN_PROGRESS);
       queryClient.invalidateQueries({
         queryKey: ["admin", "auctions"],
         refetchType: "none",
       });
+    },
+    onError: (_error, _auctionId, context) => {
+      if (!context?.previousQueries) return;
+      context.previousQueries.forEach(([queryKey, data]) => {
+        queryClient.setQueryData(queryKey, data);
+      });
+    },
+    onSettled: () => {
+      setStartNowPendingId(null);
     },
   });
 
@@ -222,7 +243,8 @@ const AdminAuctions = () => {
   const canStartNow = (auction: AuctionDetailResponse) =>
     auction.status === AuctionStatus.READY &&
     isNotDeleted(auction) &&
-    !isMutating;
+    !isMutating &&
+    startNowPendingId !== auction.id;
 
   // 즉시 종료: IN_PROGRESS && 삭제 아님 && 뮤테이션 중 아님
   const canEndNow = (auction: AuctionDetailResponse) =>

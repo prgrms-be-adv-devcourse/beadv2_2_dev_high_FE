@@ -24,6 +24,7 @@ type OrderListParams = {
 type OrderUpdateRequest = {
   id?: string;
   status?: OrderStatus;
+  purchaseOrderId?: string | null;
 };
 
 type PayLimitUpdateRequest = {
