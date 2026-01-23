@@ -14,6 +14,7 @@ import { useMutation } from "@tanstack/react-query";
 import { userApi } from "@/apis/userApi";
 import { FormContainer } from "@moreauction/ui";
 import type { SignupParams } from "@moreauction/types";
+import { validatePassword } from "@/shared/utils/passwordValidation";
 
 // 회원가입 폼에 필요한 모든 필드 타입을 정의
 interface SignUpFormValues extends SignupParams {
@@ -335,40 +336,8 @@ const SignUp: React.FC = () => {
                 message: "비밀번호는 8자 이상이어야 합니다.",
               },
               validate: (value) => {
-                if (!value) return true; // required로 이미 체크됨
-
-                // 영문, 숫자, 특수문자 조합 검증
-                const hasLetter = /[a-zA-Z]/.test(value);
-                const hasNumber = /\d/.test(value);
-                const hasSpecial = /[^a-zA-Z0-9]/.test(value);
-
-                if (!hasLetter || !hasNumber || !hasSpecial) {
-                  return "비밀번호는 영문, 숫자, 특수문자를 모두 포함해야 합니다.";
-                }
-
-                // 연속된 문자 검증 (3자 이상)
-                for (let i = 0; i < value.length - 2; i++) {
-                  const char1 = value.charCodeAt(i);
-                  const char2 = value.charCodeAt(i + 1);
-                  const char3 = value.charCodeAt(i + 2);
-
-                  // 연속된 숫자 (123, 456 등)
-                  if (char2 === char1 + 1 && char3 === char2 + 1) {
-                    return "비밀번호에 연속된 숫자(3자 이상)를 사용할 수 없습니다.";
-                  }
-
-                  // 연속된 알파벳 (abc, xyz 등)
-                  if (
-                    char2 === char1 + 1 &&
-                    char3 === char2 + 1 &&
-                    ((char1 >= 65 && char1 <= 90) ||
-                      (char1 >= 97 && char1 <= 122))
-                  ) {
-                    return "비밀번호에 연속된 알파벳(3자 이상)를 사용할 수 없습니다.";
-                  }
-                }
-
-                return true;
+                if (!value) return true;
+                return validatePassword(value) ?? true;
               },
             }}
             render={({ field }) => (

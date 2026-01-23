@@ -19,6 +19,7 @@ import {
   Stack,
   Typography,
 } from "@mui/material";
+import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import FavoriteIcon from "@mui/icons-material/Favorite";
 import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
 import type { IMessage } from "@stomp/stompjs";
@@ -735,6 +736,44 @@ const AuctionDetail: React.FC = () => {
     }
   };
 
+  const canRenderDetail = !!auctionDetail;
+  const showSocketWarning = shouldConnect && connectionState === "failed";
+
+  const isAuctionInProgress =
+    auctionDetail?.status === AuctionStatus.IN_PROGRESS;
+  const isAuctionInReday = auctionDetail?.status === AuctionStatus.READY;
+  const canEdit =
+    auctionDetail?.status === AuctionStatus.READY &&
+    user &&
+    user?.userId === auctionDetail.sellerId;
+  const canReregister =
+    isSeller &&
+    !!auctionDetail?.productId &&
+    (auctionDetail.status === AuctionStatus.FAILED ||
+      auctionDetail.status === AuctionStatus.CANCELLED);
+
+  const hoverCloseTimeoutRef = useRef<number | null>(null);
+
+  const clearHoverCloseTimeout = useCallback(() => {
+    if (hoverCloseTimeoutRef.current) {
+      window.clearTimeout(hoverCloseTimeoutRef.current);
+      hoverCloseTimeoutRef.current = null;
+    }
+  }, []);
+
+  const openProductDrawer = useCallback(() => {
+    clearHoverCloseTimeout();
+    if (!canRenderDetail) return;
+    setProductDrawerOpen(true);
+  }, [canRenderDetail, clearHoverCloseTimeout]);
+
+  const scheduleCloseProductDrawer = useCallback(() => {
+    clearHoverCloseTimeout();
+    hoverCloseTimeoutRef.current = window.setTimeout(() => {
+      setProductDrawerOpen(false);
+    }, 180);
+  }, [clearHoverCloseTimeout]);
+
   if (auctionDetailQuery.isLoading)
     return (
       <Container
@@ -793,24 +832,69 @@ const AuctionDetail: React.FC = () => {
         </Grid>
       </Container>
     );
-  const canRenderDetail = !!auctionDetail;
-  const showSocketWarning = shouldConnect && connectionState === "failed";
-
-  const isAuctionInProgress =
-    auctionDetail?.status === AuctionStatus.IN_PROGRESS;
-  const isAuctionInReday = auctionDetail?.status === AuctionStatus.READY;
-  const canEdit =
-    auctionDetail?.status === AuctionStatus.READY &&
-    user &&
-    user?.userId === auctionDetail.sellerId;
-  const canReregister =
-    isSeller &&
-    !!auctionDetail?.productId &&
-    (auctionDetail.status === AuctionStatus.FAILED ||
-      auctionDetail.status === AuctionStatus.CANCELLED);
 
   return (
     <>
+      <Box
+        onMouseEnter={openProductDrawer}
+        onMouseLeave={scheduleCloseProductDrawer}
+        sx={{
+          position: "fixed",
+          top: 0,
+          left: { xs: 8, md: 20 },
+          zIndex: 1200,
+          display: { xs: "none", md: "flex" },
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 0.75,
+          width: { xs: 64, md: 96 },
+          height: "100vh",
+          pl: { xs: 1, md: 2 },
+        }}
+      >
+        <IconButton
+          size="large"
+          onClick={openProductDrawer}
+          disabled={!canRenderDetail}
+          sx={{
+            width: 84,
+            height: 84,
+            borderRadius: "50%",
+            bgcolor: "transparent",
+            color: (theme) =>
+              theme.palette.mode === "dark"
+                ? "rgba(248, 250, 252, 0.95)"
+                : "rgba(15, 23, 42, 0.9)",
+            "&:hover": {
+              bgcolor: "transparent",
+              transform: "translateX(2px)",
+            },
+            "&.Mui-disabled": {
+              bgcolor: "transparent",
+              color: (theme) =>
+                theme.palette.mode === "dark"
+                  ? "rgba(148, 163, 184, 0.5)"
+                  : "rgba(148, 163, 184, 0.7)",
+            },
+          }}
+        >
+          <ArrowBackRoundedIcon sx={{ fontSize: 56 }} />
+        </IconButton>
+        <Typography
+          variant="caption"
+          sx={{
+            fontWeight: 700,
+            color: (theme) =>
+              theme.palette.mode === "dark"
+                ? "rgba(226, 232, 240, 0.9)"
+                : "text.secondary",
+            letterSpacing: "0.02em",
+          }}
+        >
+          상품 상세보기
+        </Typography>
+      </Box>
       <Container
         maxWidth={false}
         sx={{
@@ -917,19 +1001,7 @@ const AuctionDetail: React.FC = () => {
 
           {/* --- 실시간 입찰 --- */}
           <Card sx={{ flex: 0.3, height: "100%" }}>
-            <CardHeader
-              title="실시간 현황"
-              action={
-                <Button
-                  size="small"
-                  variant="outlined"
-                  onClick={() => setProductDrawerOpen(true)}
-                  disabled={!canRenderDetail}
-                >
-                  상품 정보
-                </Button>
-              }
-            />
+            <CardHeader title="실시간 현황" />
             <CardContent>
               <Stack spacing={2}>
                 {shouldBlockDetail ? (
@@ -1181,7 +1253,7 @@ const AuctionDetail: React.FC = () => {
       />
 
       <Drawer
-        anchor="right"
+        anchor="left"
         open={productDrawerOpen}
         onClose={() => setProductDrawerOpen(false)}
         PaperProps={{
@@ -1192,16 +1264,12 @@ const AuctionDetail: React.FC = () => {
             flexDirection: "column",
             height: "100%",
           },
+          onMouseEnter: clearHoverCloseTimeout,
+          onMouseLeave: scheduleCloseProductDrawer,
         }}
       >
         <Stack spacing={2} sx={{ flex: 1, minHeight: 0 }}>
-          <Stack direction="row" justifyContent="space-between">
-            <Button
-              variant="outlined"
-              onClick={() => setProductDrawerOpen(false)}
-            >
-              닫기
-            </Button>
+          <Stack direction="row" justifyContent="flex-end">
             <Button
               variant="contained"
               onClick={() =>

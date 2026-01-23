@@ -10,6 +10,7 @@ import type {
   PaymentFailReqeuest,
   PaymentSuccessReqeuest,
   DepositType,
+  CancelPaymentRequest,
 } from "@moreauction/types";
 import { client } from "@/apis/client";
 
@@ -28,7 +29,7 @@ export const depositApi = {
    * @param userId - user ID
    */
   createAccount: async (
-    userId?: string
+    userId?: string,
   ): Promise<ApiResponseDto<DepositInfo>> => {
     console.log(`예치금 계좌 생성 API 호출 (ID: ${userId})`);
     const response = await client.post(`/deposit`, { userId });
@@ -41,7 +42,7 @@ export const depositApi = {
    * @returns
    */
   createDeposit: async (
-    params: DepositHstRequest
+    params: DepositHstRequest,
   ): Promise<ApiResponseDto<DepositInfo>> => {
     const response = await client.post(`/deposit/usages`, params);
     return response.data;
@@ -68,7 +69,7 @@ export const depositApi = {
     return res.data;
   },
   getPurchaseOrder: async (
-    purchaseOrderId: string
+    purchaseOrderId: string,
   ): Promise<ApiResponseDto<DepositOrderInfo>> => {
     const res = await client.get(`/payments/orders/${purchaseOrderId}`);
 
@@ -83,7 +84,7 @@ export const depositApi = {
     return res.data;
   },
   paymentSuccess: async (
-    params: PaymentSuccessReqeuest
+    params: PaymentSuccessReqeuest,
   ): Promise<ApiResponseDto<unknown>> => {
     const res = await client.post(`/payments/confirm`, params);
 
@@ -91,7 +92,7 @@ export const depositApi = {
   },
 
   paymentFail: async (
-    params: PaymentFailReqeuest
+    params: PaymentFailReqeuest,
   ): Promise<ApiResponseDto<unknown>> => {
     const res = await client.post(`/payments/fail`, params);
 
@@ -128,12 +129,12 @@ export const depositApi = {
    */
   getDepositPaymentFailuresByUser: async (
     request: DepositPaymentFailureHistorySearchRequest,
-    params?: { page?: number; size?: number; sort?: string }
+    params?: { page?: number; size?: number; sort?: string },
   ): Promise<ApiResponseDto<PagedDepositPaymentFailureHistoryResponse>> => {
     const res = await client.post(
       "/payments/fail/search/user/userId",
       request,
-      { params }
+      { params },
     );
     return res.data;
   },
@@ -143,11 +144,18 @@ export const depositApi = {
    */
   getDepositPaymentFailuresByOrderId: async (
     request: DepositPaymentFailureHistorySearchRequest,
-    params?: { page?: number; size?: number; sort?: string }
+    params?: { page?: number; size?: number; sort?: string },
   ): Promise<ApiResponseDto<PagedDepositPaymentFailureHistoryResponse>> => {
     const res = await client.post("/payments/fail/paymentId", request, {
       params,
     });
+    return res.data;
+  },
+
+  canclePaymentOrders: async (
+    params: CancelPaymentRequest,
+  ): Promise<ApiResponseDto<unknown>> => {
+    const res = await client.post(`/payments/orders/cancel`, params);
     return res.data;
   },
 };

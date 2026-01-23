@@ -22,9 +22,11 @@ import { ProfileTab } from "@/features/mypage/components/ProfileTab";
 import AddressManager from "@/features/profile/components/AddressManager";
 import { useAuth } from "@moreauction/auth";
 import { queryKeys } from "@/shared/queries/queryKeys";
+import { validatePassword } from "@/shared/utils/passwordValidation";
 
 const Settings: React.FC = () => {
-  const { user, updateUser } = useAuth();
+  const auth = useAuth();
+  const { user, updateUser } = auth;
   const queryClient = useQueryClient();
   const location = useLocation();
   const navigate = useNavigate();
@@ -38,11 +40,17 @@ const Settings: React.FC = () => {
     phone_number: "",
   });
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [reauthValues, setReauthValues] = useState({
+    email: "",
+    password: "",
+  });
+  const [reauthError, setReauthError] = useState<string | null>(null);
+  const [reauthenticated, setReauthenticated] = useState(false);
   const [passwordValues, setPasswordValues] = useState({
-    currentPassword: "",
     nextPassword: "",
     confirmPassword: "",
   });
+  const [passwordError, setPasswordError] = useState<string | null>(null);
 
   const profileQuery = useQuery({
     queryKey: queryKeys.user.me(),
@@ -70,6 +78,10 @@ const Settings: React.FC = () => {
       nickname: userInfo.nickname ?? "",
       phone_number: userInfo.phone_number ?? "",
     });
+    setReauthValues((prev) => ({
+      ...prev,
+      email: userInfo.email ?? prev.email,
+    }));
   }, [userInfo]);
 
   useEffect(() => {
@@ -93,6 +105,47 @@ const Settings: React.FC = () => {
     },
     onError: () => {
       setProfileError("프로필 변경에 실패했습니다.");
+    },
+  });
+
+  const reauthMutation = useMutation({
+    mutationFn: (payload: { email: string; password: string }) =>
+      userApi.login(payload),
+    onSuccess: (response) => {
+      auth.login(response.data);
+      setReauthError(null);
+      setReauthenticated(true);
+      setReauthValues((prev) => ({ ...prev, password: "" }));
+    },
+    onError: () => {
+      setReauthError("이메일 또는 비밀번호가 올바르지 않습니다.");
+    },
+  });
+
+  const changePasswordMutation = useMutation({
+    mutationFn: (payload: { password: string }) =>
+      userApi.updatePassword(payload),
+    onSuccess: () => {
+      setPasswordError(null);
+      setPasswordValues({ nextPassword: "", confirmPassword: "" });
+      alert("비밀번호가 변경되었습니다. 다시 로그인해 주세요.");
+      auth.logout();
+      navigate("/login");
+    },
+    onError: () => {
+      setPasswordError("비밀번호 변경에 실패했습니다.");
+    },
+  });
+
+  const withdrawMutation = useMutation({
+    mutationFn: () => userApi.withdrawUser(),
+    onSuccess: () => {
+      alert("탈퇴가 완료되었습니다.");
+      auth.logout();
+      navigate("/");
+    },
+    onError: () => {
+      alert("탈퇴 처리 중 오류가 발생했습니다.");
     },
   });
 
@@ -150,6 +203,26 @@ const Settings: React.FC = () => {
     navigate(`${location.pathname}?${newParams.toString()}`, { replace: true });
   };
 
+  const passwordValidationError = useMemo(() => {
+    const value = passwordValues.nextPassword;
+    if (!value) return "새 비밀번호를 입력해주세요.";
+    const passwordError = validatePassword(value);
+    if (passwordError) return passwordError;
+    if (value !== passwordValues.confirmPassword) {
+      return "비밀번호 확인이 일치하지 않습니다.";
+    }
+    return null;
+  }, [passwordValues.confirmPassword, passwordValues.nextPassword]);
+
+  const canReauth =
+    reauthValues.email.trim().length > 0 &&
+    reauthValues.password.trim().length > 0 &&
+    !reauthMutation.isPending;
+  const canChangePassword =
+    reauthenticated &&
+    !passwordValidationError &&
+    !changePasswordMutation.isPending;
+
   return (
     <Container maxWidth="md">
       <Typography variant="h4" sx={{ my: 4 }}>
@@ -184,6 +257,30 @@ const Settings: React.FC = () => {
               </Button>
             </Box>
             <ProfileTab userInfo={userInfo} roles={user?.roles} />
+            <Box sx={{ mt: 4 }}>
+              <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 600 }}>
+                계정 탈퇴
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                탈퇴 시 계정 정보와 이용 내역이 삭제됩니다. 신중하게 결정해
+                주세요.
+              </Typography>
+              <Button
+                variant="outlined"
+                color="error"
+                sx={{ mt: 2 }}
+                disabled={withdrawMutation.isPending}
+                onClick={() => {
+                  const confirmed = window.confirm(
+                    "정말 탈퇴하시겠습니까? 탈퇴 후 복구할 수 없습니다."
+                  );
+                  if (!confirmed) return;
+                  withdrawMutation.mutate();
+                }}
+              >
+                {withdrawMutation.isPending ? "처리 중..." : "탈퇴하기"}
+              </Button>
+            </Box>
           </Box>
         )}
         {safeTabValue === 1 && (
@@ -192,66 +289,130 @@ const Settings: React.FC = () => {
               비밀번호 변경
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              안전한 비밀번호로 변경하세요.
-            </Typography>
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{ mt: 0.5, display: "block" }}
-            >
-              소셜 로그인 계정은 비밀번호가 없을 수 있습니다. (미개발)
+              이메일/비밀번호로 다시 로그인한 뒤 새 비밀번호를 설정합니다.
             </Typography>
             <Stack spacing={2} sx={{ mt: 2, maxWidth: 360 }}>
-              <TextField
-                label="현재 비밀번호"
-                type="password"
-                value={passwordValues.currentPassword}
-                onChange={(event) =>
-                  setPasswordValues((prev) => ({
-                    ...prev,
-                    currentPassword: event.target.value,
-                  }))
-                }
-              />
-              <TextField
-                label="새 비밀번호"
-                type="password"
-                value={passwordValues.nextPassword}
-                onChange={(event) =>
-                  setPasswordValues((prev) => ({
-                    ...prev,
-                    nextPassword: event.target.value,
-                  }))
-                }
-              />
-              <TextField
-                label="새 비밀번호 확인"
-                type="password"
-                value={passwordValues.confirmPassword}
-                onChange={(event) =>
-                  setPasswordValues((prev) => ({
-                    ...prev,
-                    confirmPassword: event.target.value,
-                  }))
-                }
-              />
-              <Button variant="contained" disabled>
-                변경하기
-              </Button>
-              <Typography variant="caption" color="text.secondary">
-                비밀번호 변경 기능은 준비 중입니다.
-              </Typography>
+              {!reauthenticated ? (
+                <>
+                  <TextField
+                    label="이메일"
+                    type="email"
+                    value={reauthValues.email}
+                    onChange={(event) =>
+                      setReauthValues((prev) => ({
+                        ...prev,
+                        email: event.target.value,
+                      }))
+                    }
+                  />
+                  <TextField
+                    label="비밀번호"
+                    type="password"
+                    value={reauthValues.password}
+                    onChange={(event) =>
+                      setReauthValues((prev) => ({
+                        ...prev,
+                        password: event.target.value,
+                      }))
+                    }
+                  />
+                  {reauthError && (
+                    <Typography variant="caption" color="error">
+                      {reauthError}
+                    </Typography>
+                  )}
+                  <Button
+                    variant="contained"
+                    disabled={!canReauth}
+                    onClick={() => {
+                      setReauthError(null);
+                      reauthMutation.mutate({
+                        email: reauthValues.email.trim(),
+                        password: reauthValues.password,
+                      });
+                    }}
+                  >
+                    {reauthMutation.isPending ? "확인 중..." : "로그인 확인"}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <TextField
+                    label="새 비밀번호"
+                    type="password"
+                    value={passwordValues.nextPassword}
+                    onChange={(event) =>
+                      setPasswordValues((prev) => ({
+                        ...prev,
+                        nextPassword: event.target.value,
+                      }))
+                    }
+                  />
+                  <TextField
+                    label="새 비밀번호 확인"
+                    type="password"
+                    value={passwordValues.confirmPassword}
+                    onChange={(event) =>
+                      setPasswordValues((prev) => ({
+                        ...prev,
+                        confirmPassword: event.target.value,
+                      }))
+                    }
+                  />
+                  {(passwordValidationError || passwordError) && (
+                    <Typography variant="caption" color="error">
+                      {passwordError ?? passwordValidationError}
+                    </Typography>
+                  )}
+                  <Button
+                    variant="contained"
+                    disabled={!canChangePassword}
+                    onClick={() => {
+                      setPasswordError(null);
+                      changePasswordMutation.mutate({
+                        password: passwordValues.nextPassword,
+                      });
+                    }}
+                  >
+                    {changePasswordMutation.isPending
+                      ? "변경 중..."
+                      : "변경하기"}
+                  </Button>
+                </>
+              )}
             </Stack>
           </Box>
         )}
         {safeTabValue === 2 && (
           <Box>
-            <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 600 }}>
-              주소지 관리
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              배송지 정보를 등록하고 기본 주소지를 설정하세요.
-            </Typography>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 2,
+                mb: 1,
+              }}
+            >
+              <Box>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                  주소지 관리
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  배송지 정보를 등록하고 기본 주소지로 설정하세요.
+                </Typography>
+              </Box>
+              <Button
+                variant="contained"
+                onClick={() => {
+                  window.dispatchEvent(
+                    new CustomEvent("address:add-requested")
+                  );
+                }}
+              >
+                주소지 등록
+              </Button>
+            </Box>
             <Box sx={{ mt: 2 }}>
               <AddressManager />
             </Box>

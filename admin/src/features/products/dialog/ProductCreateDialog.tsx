@@ -30,6 +30,11 @@ type ProductCreateFormValues = {
   categoryIds: string[];
 };
 
+const truncateFileName = (name: string, maxLength = 24) => {
+  if (name.length <= maxLength) return name;
+  return `${name.slice(0, Math.max(0, maxLength - 3))}...`;
+};
+
 const ProductCreateDialog = ({
   openCreateDialog,
   setOpenCreateDialog,
@@ -228,8 +233,15 @@ const ProductCreateDialog = ({
               </Stack>
             </Stack>
             {selectedFiles.length > 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                선택된 파일: {selectedFiles.map((file) => file.name).join(", ")}
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                title={selectedFiles.map((file) => file.name).join(", ")}
+              >
+                선택된 파일:{" "}
+                {selectedFiles
+                  .map((file) => truncateFileName(file.name))
+                  .join(", ")}
               </Typography>
             ) : (
               <Typography variant="body2" color="text.secondary">

@@ -31,8 +31,8 @@ const mergeUpdatedAddress = (
   });
   if (hasItem) return next;
   return updated.isDefault
-    ? [...next.map((item) => ({ ...item, isDefault: false })), updated]
-    : [...next, updated];
+    ? [updated, ...next.map((item) => ({ ...item, isDefault: false }))]
+    : [updated, ...next];
 };
 
 const AddressManager: React.FC = () => {
@@ -95,13 +95,18 @@ const AddressManager: React.FC = () => {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (addressId: string) => userApi.deleteAddress(addressId),
-    onSuccess: (_, addressId) => {
+    mutationFn: (address: UserAddress) => userApi.deleteAddress(address.id),
+    onSuccess: (_, address) => {
       queryClient.setQueryData(
         queryKeys.user.addresses(),
         (prev: UserAddress[] | undefined) =>
-          (prev ?? []).filter((item) => item.id !== addressId)
+          (prev ?? []).filter((item) => item.id !== address.id)
       );
+      if (address.isDefault) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.user.addresses(),
+        });
+      }
     },
   });
 
@@ -138,7 +143,7 @@ const AddressManager: React.FC = () => {
   const handleDelete = (address: UserAddress) => {
     if (deleteMutation.isPending) return;
     if (!window.confirm("주소지를 삭제하시겠습니까?")) return;
-    deleteMutation.mutate(address.id);
+    deleteMutation.mutate(address);
   };
 
   const handleSetDefault = (address: UserAddress) => {
@@ -155,6 +160,16 @@ const AddressManager: React.FC = () => {
     });
   };
 
+  React.useEffect(() => {
+    const handleAddRequested = () => {
+      openCreateDialog();
+    };
+    window.addEventListener("address:add-requested", handleAddRequested);
+    return () => {
+      window.removeEventListener("address:add-requested", handleAddRequested);
+    };
+  }, []);
+
   const listErrorMessage = React.useMemo(() => {
     if (!addressQuery.isError) return null;
     return getErrorMessage(
@@ -165,15 +180,7 @@ const AddressManager: React.FC = () => {
 
   return (
     <Box>
-      <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 2 }}>
-        <Button
-          variant="contained"
-          onClick={openCreateDialog}
-          disabled={isAddressLimitReached}
-        >
-          주소지 등록
-        </Button>
-      </Box>
+      <Box sx={{ mb: 2 }} />
       {isAddressLimitReached && (
         <Alert severity="info" sx={{ mb: 2 }}>
           배송지는 최대 10개까지 등록할 수 있습니다.
