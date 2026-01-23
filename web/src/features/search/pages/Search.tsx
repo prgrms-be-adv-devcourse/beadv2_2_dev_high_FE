@@ -188,13 +188,26 @@ const SearchPage: React.FC = () => {
       page
     ),
     queryFn: async () => {
-      const normalizeDateTimeLocal = (value: string) => {
+      const toOffsetDateTime = (value: string) => {
         const trimmed = value.trim();
         if (!trimmed) return undefined;
-        if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(trimmed)) {
-          return `${trimmed}:00`;
+        if (/([zZ]|[+-]\d{2}:\d{2})$/.test(trimmed)) {
+          return trimmed;
         }
-        return trimmed;
+        const date = new Date(trimmed);
+        if (Number.isNaN(date.getTime())) return trimmed;
+        const pad = (num: number) => String(num).padStart(2, "0");
+        const offsetMinutes = -date.getTimezoneOffset();
+        const sign = offsetMinutes >= 0 ? "+" : "-";
+        const absOffset = Math.abs(offsetMinutes);
+        const offset = `${sign}${pad(Math.floor(absOffset / 60))}:${pad(
+          absOffset % 60
+        )}`;
+        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+          date.getDate()
+        )}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(
+          date.getSeconds()
+        )}${offset}`;
       };
 
       const parseOptionalNumber = (value: string) => {
@@ -211,8 +224,8 @@ const SearchPage: React.FC = () => {
           selectedCategoryNames.length > 0 ? selectedCategoryNames : undefined,
         minStartPrice: parseOptionalNumber(minStartPrice),
         maxStartPrice: parseOptionalNumber(maxStartPrice),
-        startFrom: normalizeDateTimeLocal(startFrom),
-        startTo: normalizeDateTimeLocal(startTo),
+        startFrom: toOffsetDateTime(startFrom),
+        startTo: toOffsetDateTime(startTo),
         page,
         size: 20,
       });

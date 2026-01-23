@@ -11,6 +11,7 @@ import {
   Menu as MenuIcon,
 } from "@mui/icons-material";
 import React from "react";
+import { Link as RouterLink } from "react-router-dom";
 import { useThemeContext } from "@moreauction/ui";
 
 interface AdminHeaderProps {
@@ -59,7 +60,16 @@ const AdminHeader: React.FC<AdminHeaderProps> = ({
             <MenuIcon />
           </IconButton>
         )}
-        <Typography variant="h6" sx={{ fontWeight: 700 }}>
+        <Typography
+          variant="h6"
+          component={RouterLink}
+          to="/"
+          sx={{
+            fontWeight: 700,
+            color: "inherit",
+            textDecoration: "none",
+          }}
+        >
           {title}
         </Typography>
         <Box sx={{ flexGrow: 1 }} />

@@ -33,7 +33,7 @@ export const getCommonStatusText = (
 export const getAuctionStatusText = (
   status: string | null | undefined
 ): string => {
-  if (status == null) return "준비중";
+  if (status == null) return "경매 미등록";
   switch (status) {
     case AuctionStatus.READY:
       return "경매대기";
@@ -46,6 +46,6 @@ export const getAuctionStatusText = (
     case AuctionStatus.CANCELLED:
       return "경매취소";
     default:
-      return "경매 상태 알 수 없음";
+      return "경매 미등록";
   }
 };

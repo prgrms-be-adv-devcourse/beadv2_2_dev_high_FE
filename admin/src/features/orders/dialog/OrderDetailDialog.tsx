@@ -117,7 +117,7 @@ const OrderDetailDialog = ({
               }
             />
             <InfoRow
-              label="구매확정일"
+              label="낙찰확정일"
               value={
                 displayOrder.confirmDate
                   ? formatDate(displayOrder.confirmDate)

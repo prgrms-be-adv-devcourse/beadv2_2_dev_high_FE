@@ -101,6 +101,13 @@ export const useWishlistToggle = ({
     [productDetail, productId, queryClient, user?.userId]
   );
 
+  const invalidateWishlistList = useCallback(() => {
+    if (!user?.userId) return;
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.wishlist.list(user.userId),
+    });
+  }, [queryClient, user?.userId]);
+
   useEffect(() => {
     if (!productId) return;
     if (!user) {
@@ -150,6 +157,7 @@ export const useWishlistToggle = ({
         wishServerRef.current = target;
         updateWishlistCaches(target);
       }
+      invalidateWishlistList();
     } catch (err: any) {
       console.error("찜 토글 실패:", err);
       if (wishActionSeqRef.current === seqAtClick) {
@@ -166,7 +174,13 @@ export const useWishlistToggle = ({
         setWishLoading(false);
       }
     }
-  }, [onRequireLogin, productId, updateWishlistCaches, user]);
+  }, [
+    invalidateWishlistList,
+    onRequireLogin,
+    productId,
+    updateWishlistCaches,
+    user,
+  ]);
 
   return {
     isWish,

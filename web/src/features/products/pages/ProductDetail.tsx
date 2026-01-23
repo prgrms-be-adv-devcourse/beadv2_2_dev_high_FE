@@ -527,6 +527,13 @@ const ProductDetail: React.FC = () => {
     [product, queryClient, user?.userId]
   );
 
+  const invalidateWishlistList = useCallback(() => {
+    if (!user?.userId) return;
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.wishlist.list(user.userId),
+    });
+  }, [queryClient, user?.userId]);
+
   useEffect(() => {
     if (!productId) return;
     if (!user) {
@@ -800,6 +807,7 @@ const ProductDetail: React.FC = () => {
                             wishServerRef.current = target;
                             updateWishlistCaches(target);
                           }
+                          invalidateWishlistList();
                         } catch (err: any) {
                           console.error("찜 토글 실패:", err);
                           if (wishActionSeqRef.current === seqAtClick) {

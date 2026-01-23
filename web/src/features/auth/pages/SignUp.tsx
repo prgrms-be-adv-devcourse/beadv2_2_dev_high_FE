@@ -340,9 +340,7 @@ const SignUp: React.FC = () => {
                 // 영문, 숫자, 특수문자 조합 검증
                 const hasLetter = /[a-zA-Z]/.test(value);
                 const hasNumber = /\d/.test(value);
-                const hasSpecial = /[!@#$%^&*()_+=\\[\\]{};':"|,.<>\/?-]/.test(
-                  value
-                );
+                const hasSpecial = /[^a-zA-Z0-9]/.test(value);
 
                 if (!hasLetter || !hasNumber || !hasSpecial) {
                   return "비밀번호는 영문, 숫자, 특수문자를 모두 포함해야 합니다.";

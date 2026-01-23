@@ -4,11 +4,13 @@ import {
   Alert,
   Button,
   CircularProgress,
+  Checkbox,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   FormControl,
+  FormControlLabel,
   FormHelperText,
   InputLabel,
   MenuItem,
@@ -45,6 +47,7 @@ const ProductAiGenerateDialog = ({
   const [rows, setRows] = useState<CategoryRow[]>([
     { key: 0, categoryId: "", count: 1 },
   ]);
+  const [generateImage, setGenerateImage] = useState(true);
 
   const categoriesQuery = useQuery({
     queryKey: ["admin", "categories"],
@@ -80,6 +83,7 @@ const ProductAiGenerateDialog = ({
   }, [rows]);
 
   const handleClose = () => {
+    if (pending) return;
     onClose();
   };
 
@@ -131,12 +135,14 @@ const ProductAiGenerateDialog = ({
     <Dialog
       open={open}
         onClose={handleClose}
+        disableEscapeKeyDown={pending}
         maxWidth="md"
         fullWidth
         TransitionProps={{
           onExited: () => {
             setRows([{ key: 0, categoryId: "", count: 1 }]);
             nextKeyRef.current = 1;
+            setGenerateImage(true);
           },
         }}
       >
@@ -254,11 +260,23 @@ const ProductAiGenerateDialog = ({
               중복된 카테고리가 있습니다. 카테고리를 정리해 주세요.
             </Alert>
           )}
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={generateImage}
+                onChange={(event) => setGenerateImage(event.target.checked)}
+                disabled={pending}
+              />
+            }
+            label="이미지 생성 포함"
+          />
           {categoryError && <Alert severity="warning">{categoryError}</Alert>}
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={handleClose}>취소</Button>
+        <Button onClick={handleClose} disabled={pending}>
+          취소
+        </Button>
         <Button
           variant="contained"
           onClick={() => {
@@ -268,6 +286,7 @@ const ProductAiGenerateDialog = ({
                 categoryId: row.categoryId,
                 count: row.count,
               })),
+              generateImage,
             });
             handleClose();
           }}

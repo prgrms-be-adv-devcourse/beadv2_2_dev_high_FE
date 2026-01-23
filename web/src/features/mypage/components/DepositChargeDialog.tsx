@@ -44,8 +44,19 @@ export const DepositChargeDialog: React.FC<DepositChargeDialogProps> = ({
   autoPayOptionLabel = "충전 후 보증금을 바로 납부",
   autoPayOptionHelper = "충전 완료 시 보증금 결제를 이어서 진행합니다.",
 }) => {
+  const handleDialogClose = () => {
+    if (loading) return;
+    onClose();
+  };
+
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
+    <Dialog
+      open={open}
+      onClose={handleDialogClose}
+      disableEscapeKeyDown={loading}
+      fullWidth
+      maxWidth="xs"
+    >
       <DialogTitle sx={{ pb: 0 }}>예치금 충전</DialogTitle>
       <DialogContent sx={{ pt: 1.5 }}>
         <Stack spacing={2}>
@@ -111,7 +122,7 @@ export const DepositChargeDialog: React.FC<DepositChargeDialogProps> = ({
         </Stack>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={onClose} disabled={loading}>
+        <Button onClick={handleDialogClose} disabled={loading}>
           닫기
         </Button>
         <Button
