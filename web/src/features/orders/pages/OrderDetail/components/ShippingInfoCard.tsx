@@ -17,6 +17,9 @@ interface ShippingInfoCardProps {
   displayAddress: UserAddress | null;
   isDefaultAddress: boolean;
   orderAddressId: string | null;
+  canConfirmPurchase: boolean;
+  onConfirmPurchase: () => void;
+  actionLoading: boolean;
 }
 
 const ShippingInfoCard: React.FC<ShippingInfoCardProps> = ({
@@ -26,6 +29,9 @@ const ShippingInfoCard: React.FC<ShippingInfoCardProps> = ({
   displayAddress,
   isDefaultAddress,
   orderAddressId,
+  canConfirmPurchase,
+  onConfirmPurchase,
+  actionLoading,
 }) => (
   <Paper
     variant="outlined"
@@ -74,6 +80,19 @@ const ShippingInfoCard: React.FC<ShippingInfoCardProps> = ({
       <Alert severity="info">
         {orderAddressId ? "배송지 정보를 찾을 수 없습니다." : "배송지 정보 없음"}
       </Alert>
+    )}
+    {canConfirmPurchase && (
+      <>
+        <Divider sx={{ my: 1.5 }} />
+        <Button
+          variant="contained"
+          fullWidth
+          onClick={onConfirmPurchase}
+          disabled={actionLoading}
+        >
+          구매확정
+        </Button>
+      </>
     )}
   </Paper>
 );

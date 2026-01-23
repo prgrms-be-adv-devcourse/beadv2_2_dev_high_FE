@@ -6,7 +6,7 @@ export const orderApi = {
   getOrderByStatus: async (
     type: "sold" | "bought",
     status?: OrderStatus,
-    params?: { page?: number; size?: number; sort?: string | string[] }
+    params?: { page?: number; size?: number; sort?: string | string[] },
   ): Promise<ApiResponseDto<PagedApiResponse<OrderResponse>>> => {
     const res = await client.get("/orders", {
       params: {
@@ -21,14 +21,14 @@ export const orderApi = {
   },
 
   getOrderDetail: async (
-    orderId: string
+    orderId: string,
   ): Promise<ApiResponseDto<OrderResponse>> => {
     const res = await client.get(`/orders/${orderId}`);
     return res.data;
   },
 
   getStatusCount: async (
-    status: OrderStatus
+    status: OrderStatus,
   ): Promise<ApiResponseDto<number>> => {
     const res = await client.get("/orders/count", { params: { status } });
 
@@ -36,11 +36,18 @@ export const orderApi = {
   },
   updateAddress: async (
     orderId: string,
-    addressId: string
+    addressId: string,
   ): Promise<ApiResponseDto<OrderResponse>> => {
     const res = await client.patch(`/orders/${orderId}/address`, {
       addressId,
     });
+    return res.data;
+  },
+  updateOrderStatus: async (
+    id: string,
+    status: OrderStatus,
+  ): Promise<ApiResponseDto<OrderResponse>> => {
+    const res = await client.put(`/orders`, { id, status });
     return res.data;
   },
 };

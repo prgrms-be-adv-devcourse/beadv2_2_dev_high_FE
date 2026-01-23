@@ -1,4 +1,11 @@
-import { Alert, Button, Divider, Paper, Stack, Typography } from "@mui/material";
+import {
+  Alert,
+  Button,
+  Divider,
+  Paper,
+  Stack,
+  Typography,
+} from "@mui/material";
 import type { DepositOrderInfo, OrderResponse } from "@moreauction/types";
 import { formatWon } from "@moreauction/utils";
 
@@ -14,6 +21,7 @@ interface PaymentSummaryCardProps {
   canRequestRefund: boolean;
   onCancelPurchase: () => void;
   onRequestRefund: () => void;
+  isRequestRefundDisabled: boolean;
 }
 
 const PaymentSummaryCard: React.FC<PaymentSummaryCardProps> = ({
@@ -28,6 +36,7 @@ const PaymentSummaryCard: React.FC<PaymentSummaryCardProps> = ({
   canRequestRefund,
   onCancelPurchase,
   onRequestRefund,
+  isRequestRefundDisabled,
 }) => {
   const renderRow = (label: string, value?: React.ReactNode) => (
     <Stack direction="row" justifyContent="space-between" spacing={2}>
@@ -85,21 +94,20 @@ const PaymentSummaryCard: React.FC<PaymentSummaryCardProps> = ({
           "예치금 사용",
           typeof purchaseOrder?.deposit === "number"
             ? formatWon(purchaseOrder.deposit)
-            : "-"
+            : "-",
         )}
         {renderRow(
           "실결제 금액",
           typeof purchaseOrder?.paidAmount === "number"
             ? formatWon(purchaseOrder.paidAmount)
-            : "-"
+            : "-",
         )}
-        {renderRow(
-          "결제 기한",
-          formatDateTime(order.payLimitDate)
-        )}
+        {renderRow("결제 기한", formatDateTime(order.payLimitDate))}
         {renderRow(
           "구매 완료일",
-          order.payCompleteDate ? formatDateTime(order.payCompleteDate) : "구매 대기"
+          order.payCompleteDate
+            ? formatDateTime(order.payCompleteDate)
+            : "구매 대기",
         )}
       </Stack>
       {purchaseOrder && (
@@ -112,24 +120,21 @@ const PaymentSummaryCard: React.FC<PaymentSummaryCardProps> = ({
               "총 결제금액",
               typeof purchaseOrder.amount === "number"
                 ? formatWon(purchaseOrder.amount)
-                : "-"
+                : "-",
             )}
             {renderRow(
               "예치금 사용",
               typeof purchaseOrder.deposit === "number"
                 ? formatWon(purchaseOrder.deposit)
-                : "-"
+                : "-",
             )}
             {renderRow(
               "실결제 금액",
               typeof purchaseOrder.paidAmount === "number"
                 ? formatWon(purchaseOrder.paidAmount)
-                : "-"
+                : "-",
             )}
-            {renderRow(
-              "결제 생성일",
-              formatDateTime(purchaseOrder.createdAt)
-            )}
+            {renderRow("결제 생성일", formatDateTime(purchaseOrder.createdAt))}
           </Stack>
         </>
       )}
@@ -171,7 +176,7 @@ const PaymentSummaryCard: React.FC<PaymentSummaryCardProps> = ({
               fullWidth
               sx={{ mt: 1.5 }}
               onClick={onRequestRefund}
-              disabled={actionLoading}
+              disabled={actionLoading || isRequestRefundDisabled}
             >
               환불요청
             </Button>

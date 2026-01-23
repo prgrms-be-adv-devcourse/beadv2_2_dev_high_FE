@@ -4,9 +4,13 @@ import { formatWon } from "@moreauction/utils";
 
 interface OrderInfoCardProps {
   order: OrderResponse;
+  showBuyerId?: boolean;
 }
 
-const OrderInfoCard: React.FC<OrderInfoCardProps> = ({ order }) => {
+const OrderInfoCard: React.FC<OrderInfoCardProps> = ({
+  order,
+  showBuyerId = false,
+}) => {
   const renderRow = (
     label: string,
     value?: React.ReactNode,
@@ -48,6 +52,7 @@ const OrderInfoCard: React.FC<OrderInfoCardProps> = ({ order }) => {
       <Divider sx={{ my: 1.5 }} />
       <Stack>
         {renderRow("주문 번호", order.id)}
+        {showBuyerId && renderRow("구매자 ID", order.buyerId)}
         {renderRow("상품명", order.productName ?? "주문")}
         {renderRow("총 낙찰가", formatWon(order.winningAmount))}
         {renderRow(

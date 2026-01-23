@@ -107,6 +107,12 @@ const OrderDetail: React.FC = () => {
     };
   }, [order, paidOverrideUntil]);
   const isUnpaid = orderDisplay?.status === OrderStatus.UNPAID;
+  const isBuyer = Boolean(
+    user?.userId && orderDisplay?.buyerId === user?.userId
+  );
+  const isSeller = Boolean(
+    user?.userId && orderDisplay?.sellerId === user?.userId
+  );
   const isPayExpired = React.useMemo(() => {
     if (!orderDisplay?.payLimitDate) return false;
     const limitTime = new Date(orderDisplay.payLimitDate).getTime();
@@ -219,6 +225,7 @@ const OrderDetail: React.FC = () => {
   React.useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get("pay") !== "1") return;
+    if (!isBuyer) return;
     if (autoPayHandledRef.current) return;
     autoPayHandledRef.current = true;
     params.delete("pay");
@@ -330,6 +337,7 @@ const OrderDetail: React.FC = () => {
   };
 
   const handleCancelPurchase = () => {
+    if (!isBuyer) return;
     if (!order?.id || !purchaseOrderId || actionLoading) return;
     setCancelReason("");
     setCancelCustomReason("");
@@ -343,6 +351,7 @@ const OrderDetail: React.FC = () => {
   };
 
   const handleConfirmCancelPurchase = async () => {
+    if (!isBuyer) return;
     if (!order?.id || !purchaseOrderId || actionLoading) return;
     const trimmedCustomReason = cancelCustomReason.trim();
     if (!cancelReason) {
@@ -405,6 +414,71 @@ const OrderDetail: React.FC = () => {
 
   const handleRequestRefund = () => {
     alert("환불 요청 기능은 준비 중입니다.");
+  };
+
+  const handleConfirmPurchase = () => {
+    if (!isBuyer) return;
+    if (orderDisplay?.status !== OrderStatus.SHIP_COMPLETED) return;
+    const confirmed = window.confirm("구매를 확정하시겠습니까?");
+    if (!confirmed) return;
+    setActionLoading(true);
+    const orderIdToUpdate = orderDisplay.id;
+    orderApi
+      .updateOrderStatus(orderIdToUpdate, OrderStatus.CONFIRM_BUY)
+      .then((response) => {
+        const nowIso = new Date().toISOString();
+        const nextOrder =
+          response?.data ??
+          ({
+            ...orderDisplay,
+            status: OrderStatus.CONFIRM_BUY,
+            confirmDate: orderDisplay.confirmDate ?? nowIso,
+            updatedAt: nowIso,
+          } as OrderResponse);
+        queryClient.setQueryData(
+          queryKeys.orders.detail(orderIdToUpdate),
+          nextOrder
+        );
+        if (user?.userId) {
+          queryClient.setQueryData(
+            queryKeys.orders.history("bought", user.userId),
+            (prev?: OrderResponse[]) => {
+              if (!prev) return prev;
+              return prev.map((order) =>
+                order.id === orderIdToUpdate
+                  ? {
+                      ...order,
+                      status: OrderStatus.CONFIRM_BUY,
+                      confirmDate:
+                        nextOrder.confirmDate ?? new Date().toISOString(),
+                      updatedAt:
+                        nextOrder.updatedAt ?? new Date().toISOString(),
+                    }
+                  : order
+              );
+            }
+          );
+        }
+        return Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.orders.histories(),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.orders.detail(orderIdToUpdate),
+            refetchType: "none",
+          }),
+        ]);
+      })
+      .then(() => {
+        alert("구매확정이 완료되었습니다.");
+      })
+      .catch((err: any) => {
+        console.error("구매확정 실패:", err);
+        alert(err?.data?.message ?? "구매확정 처리 중 오류가 발생했습니다.");
+      })
+      .finally(() => {
+        setActionLoading(false);
+      });
   };
 
   const getDepositUsageAmount = () => {
@@ -486,6 +560,7 @@ const OrderDetail: React.FC = () => {
   };
 
   const handleOpenPaymentDialog = async () => {
+    if (!isBuyer) return;
     const canProceed = await ensureDefaultAddress();
     if (!canProceed) return;
     if (!orderAddressId) {
@@ -512,6 +587,7 @@ const OrderDetail: React.FC = () => {
   };
 
   const handleOpenAddressManage = () => {
+    if (!isBuyer) return;
     if (!isUnpaid) return;
     setSelectedOrderAddressId(orderAddressId ?? defaultAddress?.id ?? null);
     setAddressManageOpen(true);
@@ -522,6 +598,7 @@ const OrderDetail: React.FC = () => {
   };
 
   const handleOpenAddressCreate = () => {
+    if (!isBuyer) return;
     if (!isUnpaid) return;
     if (isAddressLimitReached) return;
     setAddressManageOpen(false);
@@ -529,6 +606,7 @@ const OrderDetail: React.FC = () => {
   };
 
   const handleSelectOrderAddress = (address: UserAddress) => {
+    if (!isBuyer) return;
     setOrderAddressUpdating(true);
     setSelectedOrderAddressId(address.id);
     updateOrderAddress(address.id)
@@ -543,12 +621,24 @@ const OrderDetail: React.FC = () => {
   const depositUsageAmount = getDepositUsageAmount();
   const pgAmount = Math.max(payableAmount - depositUsageAmount, 0);
   const isPaid = orderDisplay?.status === OrderStatus.PAID;
-  const canCancelPurchase = Boolean(purchaseOrderId) && isPaid;
-  const canRequestRefund = Boolean(purchaseOrderId)
-    ? orderDisplay?.status === OrderStatus.SHIP_STARTED ||
+  const canCancelPurchase = Boolean(purchaseOrderId) && isPaid && isBuyer;
+  const canRequestRefund =
+    isBuyer &&
+    (orderDisplay?.status === OrderStatus.SHIP_STARTED ||
       orderDisplay?.status === OrderStatus.SHIP_COMPLETED ||
-      orderDisplay?.status === OrderStatus.CONFIRM_BUY
-    : false;
+      orderDisplay?.status === OrderStatus.CONFIRM_BUY);
+  const confirmTime = orderDisplay?.updatedAt
+    ? new Date(orderDisplay.updatedAt).getTime()
+    : null;
+  const isConfirmExpired =
+    orderDisplay?.status === OrderStatus.CONFIRM_BUY &&
+    confirmTime !== null &&
+    Number.isFinite(confirmTime) &&
+    Date.now() - confirmTime > 24 * 60 * 60 * 1000;
+  const isRequestRefundDisabled =
+    orderDisplay?.status === OrderStatus.CONFIRM_BUY && isConfirmExpired;
+  const canConfirmPurchase =
+    isBuyer && orderDisplay?.status === OrderStatus.SHIP_COMPLETED;
   const purchaseOrder = purchaseOrderQuery.data?.data ?? null;
 
   return (
@@ -615,23 +705,24 @@ const OrderDetail: React.FC = () => {
                   gap: 2,
                 }}
               >
-                <OrderInfoCard order={orderDisplay} />
+                <OrderInfoCard order={orderDisplay} showBuyerId />
                 <PaymentSummaryCard
                   order={orderDisplay}
                   purchaseOrder={purchaseOrder}
                   payableAmount={payableAmount}
                   isPayExpired={isPayExpired}
-                  isUnpaid={isUnpaid}
+                  isUnpaid={isBuyer && isUnpaid}
                   actionLoading={actionLoading}
                   onOpenPaymentDialog={handleOpenPaymentDialog}
                   canCancelPurchase={canCancelPurchase}
                   canRequestRefund={canRequestRefund}
                   onCancelPurchase={handleCancelPurchase}
                   onRequestRefund={handleRequestRefund}
+                  isRequestRefundDisabled={isRequestRefundDisabled}
                 />
               </Box>
               <ShippingInfoCard
-                isUnpaid={isUnpaid}
+                isUnpaid={isBuyer && isUnpaid}
                 onOpenAddressManage={handleOpenAddressManage}
                 addressLoading={addressQuery.isLoading}
                 displayAddress={displayAddress}
@@ -640,6 +731,9 @@ const OrderDetail: React.FC = () => {
                   displayAddress?.id === defaultAddress?.id
                 }
                 orderAddressId={orderAddressId}
+                canConfirmPurchase={canConfirmPurchase}
+                onConfirmPurchase={handleConfirmPurchase}
+                actionLoading={actionLoading}
               />
             </Stack>
           </>

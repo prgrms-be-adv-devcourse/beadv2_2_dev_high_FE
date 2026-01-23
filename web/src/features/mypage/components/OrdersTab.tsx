@@ -11,7 +11,11 @@ import {
   Typography,
 } from "@mui/material";
 import React, { useMemo } from "react";
-import { getOrderStatusLabel, type OrderResponse } from "@moreauction/types";
+import {
+  getOrderStatusLabel,
+  OrderStatus,
+  type OrderResponse,
+} from "@moreauction/types";
 import { Link as RouterLink } from "react-router-dom";
 import { formatWon } from "@moreauction/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -105,6 +109,9 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
             const payCompleteDateLabel = order.payCompleteDate
               ? new Date(order.payCompleteDate).toLocaleString()
               : null;
+            const needsConfirm =
+              status === "bought" &&
+              order.status === OrderStatus.SHIP_COMPLETED;
 
             return (
               <React.Fragment key={order.id}>
@@ -148,12 +155,21 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                     }
                     secondaryTypographyProps={{ component: "div" }}
                   />
-                  <Chip
-                    label={getOrderStatusLabel(order.status)}
-                    size="small"
-                    color="default"
-                    sx={{ ml: 2 }}
-                  />
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    {needsConfirm && (
+                      <Chip
+                        label="구매확정 필요"
+                        size="small"
+                        color="warning"
+                        variant="outlined"
+                      />
+                    )}
+                    <Chip
+                      label={getOrderStatusLabel(order.status)}
+                      size="small"
+                      color="default"
+                    />
+                  </Stack>
                 </ListItem>
                 <Divider />
               </React.Fragment>
