@@ -4,6 +4,7 @@ export const OrderStatus = {
   SHIP_STARTED: "SHIP_STARTED", // 배송중
   SHIP_COMPLETED: "SHIP_COMPLETED", // 배송완료
   UNPAID_CANCEL: "UNPAID_CANCEL", // 구매기한 만료로 취소
+  PAID_CANCEL: "PAID_CANCEL", // 구매완료 후 취소
   CONFIRM_BUY: "CONFIRM_BUY", // 구매확정
 } as const;
 
@@ -15,6 +16,7 @@ export const ORDER_STATUS_LABELS: Record<string, string> = {
   [OrderStatus.SHIP_STARTED]: "배송중",
   [OrderStatus.SHIP_COMPLETED]: "배송완료",
   [OrderStatus.UNPAID_CANCEL]: "구매기한 만료",
+  [OrderStatus.PAID_CANCEL]: "구매 취소",
   [OrderStatus.CONFIRM_BUY]: "구매확정",
 };
 

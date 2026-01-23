@@ -94,6 +94,8 @@ export default function PaymentSuccess() {
       const paymentKey = params.get("paymentKey");
       const orderId = params.get("orderId");
       const amountParam = params.get("amount");
+      const winningOrderIdFromQuery =
+        params.get("winningOrderId") ?? undefined;
       const amount = amountParam ? Number(amountParam) : NaN;
       const contextMatches = paymentContext?.orderId === orderId;
       const isOrderPayment =
@@ -105,7 +107,7 @@ export default function PaymentSuccess() {
       const winningOrderId =
         contextMatches && paymentContext?.winningOrderId
           ? paymentContext.winningOrderId
-          : undefined;
+          : winningOrderIdFromQuery;
 
       if (!paymentKey || !orderId || Number.isNaN(amount)) {
         setStatus("error");
@@ -162,6 +164,7 @@ export default function PaymentSuccess() {
           paymentKey,
           orderId,
           amount,
+          ...(winningOrderId ? { winningOrderId } : {}),
         });
         if (!isOrderPayment) {
           incrementDepositBalance(amount);

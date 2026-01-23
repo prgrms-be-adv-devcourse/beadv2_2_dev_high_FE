@@ -6,6 +6,7 @@ import {
   CardActionArea,
   CardContent,
   CardMedia,
+  Chip,
   CircularProgress,
   Container,
   LinearProgress,
@@ -18,9 +19,11 @@ import { alpha } from "@mui/material/styles";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import React, { useMemo, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
+import { auctionApi } from "@/apis/auctionApi";
 import { productApi } from "@/apis/productApi";
 import { queryKeys } from "@/shared/queries/queryKeys";
 import { getErrorMessage } from "@/shared/utils/getErrorMessage";
+import { getAuctionStatusText } from "@moreauction/utils";
 
 // 경매 목록 API 응답 타입 정의 (페이징 포함)
 const Products: React.FC = () => {
@@ -68,6 +71,29 @@ const Products: React.FC = () => {
         ((page - 1) % PAGES_PER_FETCH) * UI_PAGE_SIZE + UI_PAGE_SIZE
       )
       ?.filter((product): product is Product => !!product) ?? [];
+
+  const latestAuctionIds = useMemo(
+    () =>
+      productsForDisplay
+        .map((product) => product.latestAuctionId)
+        .filter((id): id is string => Boolean(id)),
+    [productsForDisplay]
+  );
+
+  const latestAuctionsQuery = useQuery({
+    queryKey: queryKeys.auctions.many(latestAuctionIds),
+    queryFn: async () => {
+      const response = await auctionApi.getAuctionsByIds(latestAuctionIds);
+      return response.data;
+    },
+    enabled: latestAuctionIds.length > 0,
+    staleTime: 30_000,
+  });
+
+  const auctionMap = useMemo(() => {
+    const entries = latestAuctionsQuery.data ?? [];
+    return new Map(entries.map((auction) => [auction.id, auction]));
+  }, [latestAuctionsQuery.data]);
 
   const totalUiPages = Math.ceil(
     (productData?.totalElements ?? 0) / UI_PAGE_SIZE
@@ -195,28 +221,61 @@ const Products: React.FC = () => {
                         transform: "translateY(-4px)",
                       },
                     }}
-                  >
-                    <CardActionArea
-                      component={RouterLink}
-                      to={`/products/${product.id}`}
-                      sx={{
-                        display: "flex",
-                        flexDirection: "column",
-                        height: "100%",
-                        alignItems: "stretch",
-                        textAlign: "left",
-                      }}
                     >
-                      <CardMedia
-                        component="img"
-                        height="200"
-                        image="/images/no_image.png"
-                        alt={product.name}
+                      <CardActionArea
+                        component={RouterLink}
+                        to={`/products/${product.id}`}
                         sx={{
-                          objectFit: "cover",
-                          width: "100%",
+                          display: "flex",
+                          flexDirection: "column",
+                          height: "100%",
+                          alignItems: "stretch",
+                          textAlign: "left",
                         }}
-                      />
+                      >
+                      <Box sx={{ position: "relative" }}>
+                        <CardMedia
+                          component="img"
+                          height="200"
+                          image="/images/no_image.png"
+                          alt={product.name}
+                          sx={{
+                            objectFit: "cover",
+                            width: "100%",
+                          }}
+                        />
+                        <Chip
+                          size="small"
+                          label={getAuctionStatusText(
+                            auctionMap.get(product.latestAuctionId ?? "")
+                              ?.status
+                          )}
+                          sx={{
+                            position: "absolute",
+                            top: 12,
+                            right: 12,
+                            fontWeight: 700,
+                            border: "1px solid",
+                            borderColor: (theme) =>
+                              theme.palette.mode === "light"
+                                ? "rgba(15, 23, 42, 0.12)"
+                                : "rgba(148, 163, 184, 0.35)",
+                            bgcolor: (theme) =>
+                              theme.palette.mode === "light"
+                                ? "rgba(255, 255, 255, 0.92)"
+                                : "rgba(15, 23, 42, 0.8)",
+                            color: (theme) =>
+                              theme.palette.mode === "light"
+                                ? "text.primary"
+                                : "rgba(248, 250, 252, 0.95)",
+                            backdropFilter: "blur(6px)",
+                            boxShadow: (theme) =>
+                              theme.palette.mode === "light"
+                                ? "0 6px 16px rgba(15, 23, 42, 0.12)"
+                                : "0 6px 16px rgba(0, 0, 0, 0.35)",
+                          }}
+                        />
+                      </Box>
                       <CardContent
                         sx={{
                           flex: 1,

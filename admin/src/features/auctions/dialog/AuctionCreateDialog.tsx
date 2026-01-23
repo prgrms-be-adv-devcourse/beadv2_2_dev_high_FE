@@ -90,17 +90,17 @@ const AuctionCreateDialog = ({
       adminAuctionApi.getAuctionsByProductId(product.id),
     onSuccess: (response, product) => {
       const auctions = response.data ? response.data : [];
-      const hasBlockedAuction = auctions.some((auction) => {
+      const activeAuctions = auctions.filter((auction) => {
         const isDeleted =
           auction.deletedYn === true || auction.deletedYn === "Y";
-        if (isDeleted) return false;
-        return (
-          auction.status === AuctionStatus.IN_PROGRESS ||
-          auction.status === AuctionStatus.COMPLETED ||
-          auction.status === AuctionStatus.FAILED ||
-          auction.status === AuctionStatus.CANCELLED
-        );
+        return !isDeleted;
       });
+      const hasBlockedAuction = activeAuctions.some(
+        (auction) =>
+          auction.status === AuctionStatus.READY ||
+          auction.status === AuctionStatus.IN_PROGRESS ||
+          auction.status === AuctionStatus.COMPLETED
+      );
       if (hasBlockedAuction) {
         alert(
           "이미 진행 중이거나 종료된 경매가 존재합니다. 새 경매를 등록할 수 없습니다."

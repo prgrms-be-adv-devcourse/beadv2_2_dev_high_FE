@@ -29,13 +29,13 @@ export interface AddressFormDialogProps {
 
 const buildInitialValues = (
   values?: Partial<UserAddressCreateRequest>,
-  forceDefault?: boolean
+  forceDefault?: boolean,
 ): UserAddressCreateRequest => ({
   city: values?.city ?? "",
   state: values?.state ?? "",
   zipcode: values?.zipcode ?? "",
   detail: values?.detail ?? "",
-  isDefault: forceDefault ? true : values?.isDefault ?? false,
+  isDefault: forceDefault ? true : (values?.isDefault ?? false),
 });
 
 const AddressFormDialog: React.FC<AddressFormDialogProps> = ({
@@ -50,7 +50,7 @@ const AddressFormDialog: React.FC<AddressFormDialogProps> = ({
   onSubmit,
 }) => {
   const [values, setValues] = React.useState<UserAddressCreateRequest>(
-    buildInitialValues(initialValues, forceDefault)
+    buildInitialValues(initialValues, forceDefault),
   );
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [postcodeOpen, setPostcodeOpen] = React.useState(false);
@@ -195,7 +195,7 @@ const AddressFormDialog: React.FC<AddressFormDialogProps> = ({
         maxWidth="md"
         fullWidth
       >
-        <DialogTitle>주소 검색</DialogTitle>
+        <DialogTitle>우편번호 검색</DialogTitle>
         <DialogContent dividers sx={{ p: 0 }}>
           <DaumPostcode
             onComplete={handlePostcodeComplete}

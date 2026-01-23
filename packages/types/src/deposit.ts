@@ -107,3 +107,8 @@ export interface PaymentFailReqeuest {
   orderId?: string;
   userId?: string;
 }
+
+export interface CancelPaymentRequest {
+  id: string;
+  cancelReason?: string;
+}

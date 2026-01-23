@@ -103,7 +103,11 @@ const AddressManageDialog: React.FC<AddressManageDialogProps> = ({
                         {address.state} {address.city}
                       </Typography>
                       {address.isDefault && (
-                        <Chip label="기본 배송지" color="primary" size="small" />
+                        <Chip
+                          label="기본 배송지"
+                          color="primary"
+                          size="small"
+                        />
                       )}
                       {address.id === selectedAddressId && (
                         <Chip label="선택됨" size="small" />

@@ -24,7 +24,7 @@ export const userApi = {
    * @param params - { email, password }
    */
   login: async (
-    params: LoginParams
+    params: LoginParams,
   ): Promise<ApiResponseDto<LoginResponse>> => {
     console.log("로그인 시도:", params);
     const response = await client.post("/auth/login", params);
@@ -36,7 +36,7 @@ export const userApi = {
    * 소셜 로그인 (구글/네이버)
    */
   socialLogin: async (
-    params: SocialLoginRequest
+    params: SocialLoginRequest,
   ): Promise<ApiResponseDto<LoginResponse>> => {
     const response = await client.post("/auth/social/login", params);
     return response.data;
@@ -52,12 +52,16 @@ export const userApi = {
     return response.data;
   },
 
+  widrawUser: async (): Promise<ApiResponseDto<void>> => {
+    const response = await client.delete("/users/me");
+    return response.data;
+  },
   /**
    * 판매자 등록을 요청합니다.
    * @param params - 판매자 등록 폼 데이터
    */
   registerSeller: async (
-    params: RegisterSellerParams
+    params: RegisterSellerParams,
   ): Promise<ApiResponseDto<any>> => {
     console.log("판매자 등록 시도:", params);
     const response = await client.post("/sellers", params);
@@ -83,6 +87,16 @@ export const userApi = {
     const response = await client.put("/users/profile", params);
     return response.data;
   },
+  updatePassword: async (params: {
+    password: string;
+  }): Promise<ApiResponseDto<void>> => {
+    const response = await client.patch("/users/password", params);
+    return response.data;
+  },
+  withdrawUser: async (): Promise<ApiResponseDto<void>> => {
+    const response = await client.delete("/users");
+    return response.data;
+  },
   /**
    * 사용자 ID 목록으로 사용자 정보를 조회합니다. (임시 엔드포인트)
    * TODO: 백엔드 엔드포인트에 맞게 경로/파라미터를 조정하세요.
@@ -100,7 +114,7 @@ export const userApi = {
    * @param email - 인증 코드를 받을 이메일 주소
    */
   sendVerificationEmail: async (
-    email: string
+    email: string,
   ): Promise<ApiResponseDto<any>> => {
     console.log(`이메일 인증 코드 전송 시도: ${email}`);
     const response = await client.post("/auth/send/email", { email });
@@ -114,7 +128,7 @@ export const userApi = {
    */
   verifyEmailCode: async (
     email: string,
-    code: string
+    code: string,
   ): Promise<ApiResponseDto<any>> => {
     console.log(`이메일 인증 코드 확인 시도: ${email}, 코드: ${code}`);
     const response = await client.post("/auth/verify/email", { email, code });
@@ -135,7 +149,7 @@ export const userApi = {
   },
 
   createAddress: async (
-    params: UserAddressCreateRequest
+    params: UserAddressCreateRequest,
   ): Promise<ApiResponseDto<UserAddress>> => {
     const response = await client.post("/users/address", params);
     return response.data;
@@ -143,7 +157,7 @@ export const userApi = {
 
   modifyAddress: async (
     addressId: string,
-    params: UserAddressCreateRequest
+    params: UserAddressCreateRequest,
   ): Promise<ApiResponseDto<UserAddress>> => {
     const response = await client.put(`/users/address/${addressId}`, params);
     return response.data;

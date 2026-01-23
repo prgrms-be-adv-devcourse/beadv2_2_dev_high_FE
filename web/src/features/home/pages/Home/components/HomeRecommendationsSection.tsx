@@ -8,6 +8,7 @@ import {
   Card,
   CardActionArea,
   CardContent,
+  Chip,
   Container,
   Paper,
   Skeleton,
@@ -37,12 +38,11 @@ const HomeRecommendationsSection: React.FC<HomeRecommendationsSectionProps> = ({
     activityRecommendationsQuery.data?.items ??
     ([] as ProductRecommendationResponse[]);
 
-  const formatAuctionDate = (value?: string | null) => {
-    if (!value) return null;
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value;
-    return date.toLocaleDateString();
-  };
+  const hasAuctionInfo = (item: ProductRecommendationResponse) =>
+    Boolean(item.auctionStartAt || item.auctionEndAt || item.status);
+
+  const getAuctionLabel = (status?: AuctionStatus | null) =>
+    getAuctionStatusText(status ?? null);
 
   return (
     <Box sx={{ py: 6 }}>
@@ -121,9 +121,7 @@ const HomeRecommendationsSection: React.FC<HomeRecommendationsSectionProps> = ({
                 }}
               >
                 {activityRecommendations.slice(0, 4).map((item) => {
-                  const startAt = formatAuctionDate(item.auctionStartAt);
-                  const endAt = formatAuctionDate(item.auctionEndAt);
-                  const hasAuctionInfo = Boolean(startAt || endAt);
+                  const hasInfo = hasAuctionInfo(item);
                   return (
                     <Card
                       key={item.productId}
@@ -148,6 +146,7 @@ const HomeRecommendationsSection: React.FC<HomeRecommendationsSectionProps> = ({
                           height: "100%",
                           display: "flex",
                           flexDirection: "column",
+                          position: "relative",
                         }}
                       >
                         <ImageWithFallback
@@ -155,6 +154,38 @@ const HomeRecommendationsSection: React.FC<HomeRecommendationsSectionProps> = ({
                           alt={item.productName}
                           height={220}
                           sx={{ objectFit: "cover" }}
+                        />
+                        <Chip
+                          size="small"
+                          label={
+                            hasInfo
+                              ? getAuctionLabel(item.status as AuctionStatus)
+                              : "경매 미등록"
+                          }
+                          sx={{
+                            position: "absolute",
+                            top: 12,
+                            right: 12,
+                            fontWeight: 700,
+                            border: "1px solid",
+                            borderColor: (theme) =>
+                              theme.palette.mode === "light"
+                                ? "rgba(15, 23, 42, 0.12)"
+                                : "rgba(148, 163, 184, 0.35)",
+                            bgcolor: (theme) =>
+                              theme.palette.mode === "light"
+                                ? "rgba(255, 255, 255, 0.92)"
+                                : "rgba(15, 23, 42, 0.8)",
+                            color: (theme) =>
+                              theme.palette.mode === "light"
+                                ? "text.primary"
+                                : "rgba(248, 250, 252, 0.95)",
+                            backdropFilter: "blur(6px)",
+                            boxShadow: (theme) =>
+                              theme.palette.mode === "light"
+                                ? "0 6px 16px rgba(15, 23, 42, 0.12)"
+                                : "0 6px 16px rgba(0, 0, 0, 0.35)",
+                          }}
                         />
                         <CardContent
                           sx={{
@@ -181,24 +212,7 @@ const HomeRecommendationsSection: React.FC<HomeRecommendationsSectionProps> = ({
                               .slice(0, 2)
                               .join(" · ") || "카테고리 없음"}
                           </Typography>
-                          {hasAuctionInfo ? (
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                            >
-                              {startAt ?? "?"} ~ {endAt ?? "?"} ·{" "}
-                              {getAuctionStatusText(
-                                item.status as AuctionStatus
-                              )}
-                            </Typography>
-                          ) : (
-                            <Typography
-                              variant="caption"
-                              color="text.disabled"
-                            >
-                              경매정보 없음
-                            </Typography>
-                          )}
+                          {hasInfo ? null : null}
                         </CardContent>
                       </CardActionArea>
                     </Card>
