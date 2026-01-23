@@ -4,7 +4,7 @@ import {
   type AuctionDetailResponse,
   type PagedApiResponse,
 } from "@moreauction/types";
-import { formatDate, formatWon } from "@moreauction/utils";
+import { formatDate, formatWon, getAuctionStatusText } from "@moreauction/utils";
 import {
   Alert,
   Box,
@@ -22,6 +22,7 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import {
@@ -42,7 +43,7 @@ const statusOptions = [
   { value: "all", label: "전체" },
   ...Object.values(AuctionStatus).map((status) => ({
     value: status,
-    label: status,
+    label: getAuctionStatusText(status),
   })),
 ];
 
@@ -232,6 +233,8 @@ const AdminAuctions = () => {
 
   const isNotDeleted = (auction: AuctionDetailResponse) =>
     !auction.deletedYn || auction.deletedYn === "N";
+  const isDeleted = (auction: AuctionDetailResponse) =>
+    auction.deletedYn === true || auction.deletedYn === "Y";
 
   const isMutating =
     startNowMutation.isPending ||
@@ -540,7 +543,18 @@ const AdminAuctions = () => {
                   </Button>
                 </TableCell>
                 <TableCell align="center">
-                  <Chip size="small" label={auction.status} />
+                  <Tooltip title={`상태 코드: ${auction.status ?? "-"}`}>
+                    <Chip
+                      size="small"
+                      label={
+                        isDeleted(auction)
+                          ? "삭제됨"
+                          : getAuctionStatusText(auction.status)
+                      }
+                      color={isDeleted(auction) ? "default" : "primary"}
+                      variant={isDeleted(auction) ? "outlined" : "filled"}
+                    />
+                  </Tooltip>
                 </TableCell>
                 <TableCell align="center">
                   {formatWon(getDisplayBid(auction))}

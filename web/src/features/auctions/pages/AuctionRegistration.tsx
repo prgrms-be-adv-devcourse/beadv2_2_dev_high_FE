@@ -125,15 +125,24 @@ const AuctionRegistration: React.FC = () => {
 
   const initTimes = useMemo(
     () => () => {
-      const nextHour = setMilliseconds(
-        setSeconds(setMinutes(addHours(new Date(), 1), 0), 0),
-        0
-      );
+      const now = new Date();
+      const nextSlotBase = addHours(now, 1);
+      const roundedMinutes = Math.ceil(nextSlotBase.getMinutes() / 10) * 10;
+      const nextSlot =
+        roundedMinutes === 60
+          ? addHours(
+              setMilliseconds(setSeconds(setMinutes(nextSlotBase, 0), 0), 0),
+              1
+            )
+          : setMilliseconds(
+              setSeconds(setMinutes(nextSlotBase, roundedMinutes), 0),
+              0
+            );
 
       reset({
-        auctionStartAt: format(nextHour, "yyyy-MM-dd HH:mm"),
+        auctionStartAt: format(nextSlot, "yyyy-MM-dd HH:mm"),
         auctionEndAt: format(
-          nextHour.setDate(nextHour.getDate() + 1),
+          nextSlot.setDate(nextSlot.getDate() + 1),
           "yyyy-MM-dd HH:mm"
         ),
       });
@@ -804,14 +813,14 @@ const AuctionRegistration: React.FC = () => {
                         return "올바른 날짜를 입력해주세요";
                       if (date < new Date() && !isEditMode)
                         return "현재 이후 시간만 선택 가능합니다";
-                      if (date.getMinutes() !== 0)
-                        return "정각 단위로 입력해주세요";
+                      if (date.getMinutes() % 10 !== 0)
+                        return "10분 단위로 입력해주세요";
                       return true;
                     },
                   })}
                   error={!!errors.auctionStartAt}
                   helperText={
-                    errors.auctionStartAt?.message || "예: 연-월-일 12:00"
+                    errors.auctionStartAt?.message || "예: 연-월-일 12:10"
                   }
                   slotProps={{
                     inputLabel: { shrink: true },
@@ -833,14 +842,14 @@ const AuctionRegistration: React.FC = () => {
                         return "올바른 날짜를 입력해주세요";
                       if (end <= start)
                         return "종료 시간은 시작 시간 이후여야 합니다";
-                      if (end.getMinutes() !== 0)
-                        return "정각 단위로 입력해주세요";
+                      if (end.getMinutes() % 10 !== 0)
+                        return "10분 단위로 입력해주세요";
                       return true;
                     },
                   })}
                   error={!!errors.auctionEndAt}
                   helperText={
-                    errors.auctionEndAt?.message || "예: 연-월-일 12:00"
+                    errors.auctionEndAt?.message || "예: 연-월-일 12:10"
                   }
                   slotProps={{
                     inputLabel: { shrink: true },
