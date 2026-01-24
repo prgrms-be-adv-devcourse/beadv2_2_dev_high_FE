@@ -3,6 +3,7 @@ import type {
   AuctionBidMessage,
   AuctionCreationRequest,
   AuctionDetailResponse,
+  AuctionBidBanStatusResponse,
   AuctionParticipationResponse,
   AuctionResponse,
   PagedAuctionParticipationResponse,
@@ -77,6 +78,13 @@ export const auctionApi = {
   ): Promise<ApiResponseDto<AuctionDetailResponse>> => {
     console.log(`경매 상세 정보 조회 API 호출: ${auctionId}`);
     const response = await client.get(`/auctions/${auctionId}`);
+    return response.data;
+  },
+  getBidBanStatus: async (
+    auctionId: string
+  ): Promise<ApiResponseDto<AuctionBidBanStatusResponse>> => {
+    console.log(`경매 입찰 제한 상태 조회 API 호출: ${auctionId}`);
+    const response = await client.get(`/auctions/${auctionId}/bid-ban`);
     return response.data;
   },
 

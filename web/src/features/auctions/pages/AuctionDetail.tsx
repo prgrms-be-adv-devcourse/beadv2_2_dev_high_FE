@@ -59,6 +59,7 @@ import { useWishlistToggle } from "@/features/auctions/hooks/useWishlistToggle";
 import { formatWon } from "@moreauction/utils";
 import {
   type AuctionBidMessage,
+  type AuctionBidBanStatusResponse,
   type AuctionDetailResponse,
   type AuctionParticipationResponse,
   type PagedBidHistoryResponse,
@@ -69,6 +70,14 @@ import { DepositType } from "@moreauction/types";
 import { queryKeys } from "@/shared/queries/queryKeys";
 import { getErrorMessage } from "@/shared/utils/getErrorMessage";
 import { activityStorage } from "@/shared/utils/activityStorage";
+import { format } from "date-fns";
+
+const defaultBidBanStatus: AuctionBidBanStatusResponse = {
+  banned: false,
+  bannedUntil: null,
+  remainingSeconds: 0,
+  reason: null,
+};
 
 const AuctionDetail: React.FC = () => {
   const { id: auctionId } = useParams<{ id: string }>();
@@ -93,6 +102,14 @@ const AuctionDetail: React.FC = () => {
   const [withdrawLoading, setWithdrawLoading] = useState(false);
   const [depositLoading, setDepositLoading] = useState(false);
   const [socketWindowActive, setSocketWindowActive] = useState(false);
+  const [bidBanOverride, setBidBanOverride] = useState<{
+    message: string;
+    updatedAt: number;
+  } | null>(null);
+  const [bidBanCountdown, setBidBanCountdown] = useState<number | null>(null);
+  const [bidBanJustEnded, setBidBanJustEnded] = useState(false);
+  const bidBanCountdownClearedRef = useRef(false);
+  const bidBanJustEndedTimerRef = useRef<number | null>(null);
   const queryClient = useQueryClient();
   const [insufficientDepositOpen, setInsufficientDepositOpen] = useState(false);
   const [insufficientDepositInfo, setInsufficientDepositInfo] = useState<{
@@ -243,6 +260,139 @@ const AuctionDetail: React.FC = () => {
       lastPage.last ? undefined : (lastPage.number ?? 0) + 1,
     staleTime: 30_000,
   });
+
+  const bidBanQuery = useQuery<AuctionBidBanStatusResponse>({
+    queryKey: queryKeys.auctions.bidBan(auctionId, user?.userId),
+    queryFn: async () => {
+      const response = await auctionApi.getBidBanStatus(auctionId as string);
+      return response.data;
+    },
+    enabled: !!auctionId && isAuthenticated,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: "always",
+  });
+
+  const formatBidBanDateTime = (value?: string | null) => {
+    if (!value) return null;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return format(parsed, "yyyy-MM-dd HH:mm");
+  };
+
+  const formatBidBanMessage = (message: string) => {
+    const match = message.match(/\d{4}-\d{2}-\d{2}T[0-9:.+-]+/);
+    if (!match) return message;
+    const formatted = formatBidBanDateTime(match[0]);
+    if (!formatted) return message;
+    return message.replace(match[0], formatted);
+  };
+
+  const extractBanUntilFromMessage = (message: string) => {
+    const match = message.match(/\d{4}-\d{2}-\d{2}T[0-9:.+-]+/);
+    return match ? match[0] : null;
+  };
+
+  const buildBidBanMessage = (
+    status?: AuctionBidBanStatusResponse | null
+  ): string | null => {
+    if (!status?.banned) return null;
+    const bannedUntil = formatBidBanDateTime(status.bannedUntil) ?? "-";
+    const base = status.bannedUntil
+      ? `부정 입찰 의심으로 ${bannedUntil}까지 입찰이 제한됩니다.`
+      : "부정 입찰 의심으로 입찰이 제한됩니다.";
+    return status.reason ? `${base} (${status.reason})` : base;
+  };
+
+  useEffect(() => {
+    if (!bidBanQuery.data) return;
+    if (!bidBanQuery.data.banned) {
+      if (
+        bidBanOverride &&
+        bidBanOverride.updatedAt > bidBanQuery.dataUpdatedAt
+      ) {
+        return;
+      }
+      setBidBanOverride(null);
+    }
+  }, [bidBanQuery.data, bidBanQuery.dataUpdatedAt, bidBanOverride]);
+
+  const bidBanStatus = bidBanQuery.data ?? defaultBidBanStatus;
+  const bidBanMessage =
+    bidBanOverride?.message ?? buildBidBanMessage(bidBanStatus);
+  const isBidBanned = !!bidBanMessage || !!bidBanStatus?.banned;
+
+  useEffect(() => {
+    if (!isBidBanned) {
+      setBidBanCountdown(null);
+      bidBanCountdownClearedRef.current = false;
+      return;
+    }
+    const remaining = Math.max(0, bidBanStatus.remainingSeconds ?? 0);
+    setBidBanCountdown(remaining);
+    bidBanCountdownClearedRef.current = false;
+    let timerId: number | undefined;
+    const tick = () => {
+      setBidBanCountdown((prev) => {
+        if (prev == null) return prev;
+        const next = Math.max(0, prev - 1);
+        return next;
+      });
+      timerId = window.setTimeout(tick, 1000);
+    };
+    timerId = window.setTimeout(tick, 1000);
+    return () => {
+      if (timerId) {
+        window.clearTimeout(timerId);
+      }
+    };
+  }, [bidBanStatus.remainingSeconds, isBidBanned]);
+
+  useEffect(() => {
+    if (!isBidBanned || bidBanCountdown == null) {
+      bidBanCountdownClearedRef.current = false;
+      setBidBanJustEnded(false);
+      if (bidBanJustEndedTimerRef.current) {
+        window.clearTimeout(bidBanJustEndedTimerRef.current);
+        bidBanJustEndedTimerRef.current = null;
+      }
+      return;
+    }
+    if (bidBanCountdown > 0) {
+      bidBanCountdownClearedRef.current = false;
+      setBidBanJustEnded(false);
+      if (bidBanJustEndedTimerRef.current) {
+        window.clearTimeout(bidBanJustEndedTimerRef.current);
+        bidBanJustEndedTimerRef.current = null;
+      }
+      return;
+    }
+    if (bidBanCountdownClearedRef.current) return;
+    bidBanCountdownClearedRef.current = true;
+    setBidBanOverride(null);
+    queryClient.setQueryData<AuctionBidBanStatusResponse>(
+      queryKeys.auctions.bidBan(auctionId, user?.userId),
+      defaultBidBanStatus
+    );
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.auctions.bidBan(auctionId, user?.userId),
+    });
+    setBidBanJustEnded(true);
+    if (bidBanJustEndedTimerRef.current) {
+      window.clearTimeout(bidBanJustEndedTimerRef.current);
+    }
+    bidBanJustEndedTimerRef.current = window.setTimeout(() => {
+      setBidBanJustEnded(false);
+      bidBanJustEndedTimerRef.current = null;
+    }, 2000);
+  }, [
+    auctionId,
+    bidBanCountdown,
+    isBidBanned,
+    queryClient,
+    user?.userId,
+  ]);
 
   const bidHistory = useMemo(() => {
     const pages = bidHistoryQuery.data?.pages ?? [];
@@ -561,6 +711,10 @@ const AuctionDetail: React.FC = () => {
       alert("보증금이 환급되어 입찰할 수 없습니다.");
       return;
     }
+    if (isBidBanned) {
+      alert(bidBanMessage ?? "입찰이 제한되어 있습니다.");
+      return;
+    }
     if (!participationStatus.isParticipated) {
       setOpenDepositPrompt(true);
       return;
@@ -625,7 +779,76 @@ const AuctionDetail: React.FC = () => {
       }
       alert("입찰이 성공적으로 접수되었습니다.");
     } catch (err: any) {
-      alert(`입찰 실패: ${err.response?.data?.message || err.message}`);
+      const extractedMessage = getErrorMessage(err, "");
+      const serverMessage =
+        typeof err?.response?.data === "string"
+          ? err.response.data
+          : extractedMessage;
+      const status =
+        err?.response?.status ??
+        err?.status ??
+        err?.response?.data?.status ??
+        err?.response?.data?.code;
+      const isBidBan =
+        String(status) === "429" ||
+        (typeof serverMessage === "string" &&
+          (serverMessage.includes("입찰이 제한") ||
+            serverMessage.includes("입찰 제한")));
+      if (isBidBan) {
+        if (serverMessage) {
+          const bannedUntil = extractBanUntilFromMessage(serverMessage);
+          let remainingSeconds = 0;
+          if (bannedUntil) {
+            const bannedAt = new Date(bannedUntil);
+            if (!Number.isNaN(bannedAt.getTime())) {
+              remainingSeconds = Math.max(
+                0,
+                Math.floor((bannedAt.getTime() - Date.now()) / 1000)
+              );
+            }
+          }
+          queryClient.setQueryData<AuctionBidBanStatusResponse>(
+            queryKeys.auctions.bidBan(auctionId, user?.userId),
+            {
+              banned: true,
+              bannedUntil,
+              remainingSeconds,
+              reason: null,
+            }
+          );
+          setBidBanOverride({
+            message: formatBidBanMessage(serverMessage),
+            updatedAt: Date.now(),
+          });
+        }
+        let refreshedMessage: string | null = null;
+        try {
+          const refreshed = await queryClient.fetchQuery<AuctionBidBanStatusResponse>({
+            queryKey: queryKeys.auctions.bidBan(auctionId, user?.userId),
+            queryFn: async () => {
+              const response = await auctionApi.getBidBanStatus(
+                auctionId as string
+              );
+              return response.data;
+            },
+          });
+          refreshedMessage = buildBidBanMessage(refreshed);
+        } catch (refreshError) {
+          console.error("입찰 제한 상태 재조회 실패:", refreshError);
+        }
+        alert(
+          serverMessage ??
+            refreshedMessage ??
+            "입찰이 제한되었습니다. 제한 상태를 확인해주세요."
+        );
+        return;
+      }
+      alert(
+        serverMessage ||
+          err.message ||
+          extractedMessage ||
+          "입찰에 실패했습니다."
+      );
     } finally {
       setBidLoading(false);
     }
@@ -1066,6 +1289,11 @@ const AuctionDetail: React.FC = () => {
                     isAuthenticated={isAuthenticated}
                     isParticipationUnavailable={isParticipationUnavailable}
                     isSeller={isSeller}
+                    isBidBanned={isBidBanned}
+                    bidBanMessage={bidBanMessage}
+                    bidBanCountdown={bidBanCountdown}
+                    bidBanJustEnded={bidBanJustEnded}
+                    isParticipated={participationStatus.isParticipated}
                   />
                 ) : (
                   <Alert severity="info">
