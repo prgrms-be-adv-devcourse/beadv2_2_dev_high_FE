@@ -22,6 +22,8 @@ import {
   dialogPaperSx,
   dialogTitleSx,
 } from "@/shared/components/dialogStyles";
+import { adminDepositApi } from "@/apis/adminDepositApi";
+import { useMutation } from "@tanstack/react-query";
 
 type UserDetailDialogProps = {
   open: boolean;
@@ -55,6 +57,16 @@ const UserDetailDialog = ({
   const [snapshot, setSnapshot] = useState<AdminUser | null>(null);
   const displayUser = snapshot ?? user;
   const deletedFlag = displayUser?.deletedYn === "Y";
+  const depositCreateMutation = useMutation({
+    mutationFn: (userId: string) =>
+      adminDepositApi.createDepositAccount(userId),
+    onSuccess: () => {
+      alert("예치금 계좌가 생성되었습니다.");
+    },
+    onError: () => {
+      alert("이미 예치금 계좌가 존재합니다.");
+    },
+  });
 
   const getSellerStatusLabel = (status?: SellerStatus | null) => {
     if (!status) return "-";
@@ -163,6 +175,16 @@ const UserDetailDialog = ({
         )}
       </DialogContent>
       <DialogActions>
+        <Button
+          variant="contained"
+          onClick={() => {
+            if (!displayUser?.id) return;
+            depositCreateMutation.mutate(displayUser.id);
+          }}
+          disabled={!displayUser?.id || depositCreateMutation.isPending}
+        >
+          예치금 계좌 생성
+        </Button>
         <Button onClick={onClose}>닫기</Button>
       </DialogActions>
     </Dialog>

@@ -9,6 +9,7 @@ import AdminProducts from "@/features/products/pages/AdminProducts";
 import AdminPlaceholder from "@/shared/components/AdminPlaceholder";
 import ProtectedRoute from "./ProtectedRoute";
 import AdminUsers from "@/features/users/pages/AdminUsers";
+import AdminPayments from "@/features/payments/pages/AdminPayments";
 
 /**
  * React Router v6.4+의 createBrowserRouter를 사용한 라우터 설정입니다.
@@ -50,12 +51,7 @@ export const router = createBrowserRouter([
           },
           {
             path: "payments",
-            element: (
-              <AdminPlaceholder
-                title="결제 관리"
-                description="결제 관리 페이지를 준비 중입니다."
-              />
-            ),
+            element: <AdminPayments />,
           },
           {
             path: "settings",
