@@ -40,6 +40,13 @@ export const queryKeys = {
         "participation",
         auctionId ?? "unknown",
       ] as const,
+    bidBan: (auctionId?: string | null, userId?: string | null) =>
+      [
+        ...queryKeys.auctions.all,
+        "bidBan",
+        auctionId ?? "unknown",
+        userId ?? "anonymous",
+      ] as const,
     participationHistory: (userId?: string | null, pageSize?: number | null) =>
       [
         ...queryKeys.auctions.all,

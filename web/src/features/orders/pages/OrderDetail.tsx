@@ -412,8 +412,46 @@ const OrderDetail: React.FC = () => {
     }
   };
 
-  const handleRequestRefund = () => {
-    alert("환불 요청 기능은 준비 중입니다.");
+  const handleRequestRefund = async () => {
+    if (!isBuyer) return;
+    if (!purchaseOrderId || actionLoading) return;
+    try {
+      setActionLoading(true);
+      const response = await depositApi.cancelPendingOrder({
+        id: purchaseOrderId,
+      });
+      const updatedOrder = response.data ?? {
+        ...purchaseOrderQuery.data?.data,
+        id: purchaseOrderId,
+        status: "CANCEL_PENDING",
+      };
+      queryClient.setQueryData(
+        queryKeys.deposit.paymentOrder(purchaseOrderId),
+        response?.data ? response : { data: updatedOrder }
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.orders.detail(orderDisplay?.id),
+          refetchType: "none",
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.deposit.payments(),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.deposit.paymentOrder(purchaseOrderId),
+        }),
+      ]);
+      alert("환불 요청이 접수되었습니다.");
+    } catch (err: any) {
+      console.error("환불 요청 실패:", err);
+      alert(
+        err?.response?.data?.message ??
+          err?.data?.message ??
+          "환불 요청 처리 중 오류가 발생했습니다."
+      );
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleConfirmPurchase = () => {
@@ -635,11 +673,12 @@ const OrderDetail: React.FC = () => {
     confirmTime !== null &&
     Number.isFinite(confirmTime) &&
     Date.now() - confirmTime > 24 * 60 * 60 * 1000;
+  const purchaseOrder = purchaseOrderQuery.data?.data ?? null;
   const isRequestRefundDisabled =
-    orderDisplay?.status === OrderStatus.CONFIRM_BUY && isConfirmExpired;
+    (orderDisplay?.status === OrderStatus.CONFIRM_BUY && isConfirmExpired) ||
+    purchaseOrder?.status === "CANCEL_PENDING";
   const canConfirmPurchase =
     isBuyer && orderDisplay?.status === OrderStatus.SHIP_COMPLETED;
-  const purchaseOrder = purchaseOrderQuery.data?.data ?? null;
 
   return (
     <Container maxWidth="md" sx={{ my: 4 }}>

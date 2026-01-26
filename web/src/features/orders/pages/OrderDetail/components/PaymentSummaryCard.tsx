@@ -61,19 +61,26 @@ const PaymentSummaryCard: React.FC<PaymentSummaryCardProps> = ({
   };
   const purchaseStatusLabel = (status?: string | null) => {
     if (!status) return "-";
-    switch (status) {
+    const normalized = String(status).trim().toUpperCase();
+    switch (normalized) {
       case "PENDING":
         return "대기";
       case "COMPLETED":
         return "완료";
       case "FAILED":
         return "실패";
+      case "CANCEL_PENDING":
+        return "환불 대기중";
       case "CANCELLED":
         return "취소";
       default:
         return status;
     }
   };
+  const isRefundPending =
+    String(purchaseOrder?.status ?? "")
+      .trim()
+      .toUpperCase() === "CANCEL_PENDING";
 
   return (
     <Paper
@@ -178,7 +185,7 @@ const PaymentSummaryCard: React.FC<PaymentSummaryCardProps> = ({
               onClick={onRequestRefund}
               disabled={actionLoading || isRequestRefundDisabled}
             >
-              환불요청
+              {isRefundPending ? "환불 대기중" : "환불요청"}
             </Button>
           )}
         </>

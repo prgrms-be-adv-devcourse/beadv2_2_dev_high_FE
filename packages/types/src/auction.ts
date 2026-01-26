@@ -72,6 +72,13 @@ export interface AuctionLiveStateResponse {
   updatedAt: string; // LocalDateTime
 }
 
+export interface AuctionBidBanStatusResponse {
+  banned: boolean;
+  bannedUntil: string | null;
+  remainingSeconds: number;
+  reason: string | null;
+}
+
 /**
  * 백엔드 AuctionDetailResponse record에 대응하는 인터페이스
  */

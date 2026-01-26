@@ -27,7 +27,13 @@ import {
   Typography,
 } from "@mui/material";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import { auctionApi } from "@/apis/auctionApi";
 import { fileApi } from "@/apis/fileApi";
@@ -60,7 +66,7 @@ const ProductDetail: React.FC = () => {
   const wishServerRef = useRef(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deletingAuctionId, setDeletingAuctionId] = useState<string | null>(
-    null
+    null,
   );
   const [fileGroup, setFileGroup] = useState<FileGroup | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
@@ -105,7 +111,7 @@ const ProductDetail: React.FC = () => {
     queryKey: queryKeys.auctions.detail(latestAuctionId),
     queryFn: async () => {
       const response = await auctionApi.getAuctionDetail(
-        latestAuctionId as string
+        latestAuctionId as string,
       );
       return response.data;
     },
@@ -136,7 +142,7 @@ const ProductDetail: React.FC = () => {
     }
     if (productQuery.isError) {
       setError(
-        getErrorMessage(productQuery.error, "상품 정보를 불러오지 못했습니다.")
+        getErrorMessage(productQuery.error, "상품 정보를 불러오지 못했습니다."),
       );
     } else {
       setError(null);
@@ -227,7 +233,7 @@ const ProductDetail: React.FC = () => {
       latestAuction ??
       (auctions.find((a) => a.status === AuctionStatus.IN_PROGRESS) ||
         auctions.find((a) => a.status === AuctionStatus.READY)),
-    [auctions, latestAuction]
+    [auctions, latestAuction],
   );
 
   // 이전 경매 이력(종료/유찰/취소 등)만 별도로 보여줌
@@ -241,9 +247,9 @@ const ProductDetail: React.FC = () => {
         (a) =>
           getAuctionKey(a) !== activeAuctionKey &&
           a.status !== AuctionStatus.IN_PROGRESS &&
-          a.status !== AuctionStatus.READY
+          a.status !== AuctionStatus.READY,
       ),
-    [auctions, activeAuctionKey]
+    [auctions, activeAuctionKey],
   );
 
   const isOwner =
@@ -260,7 +266,7 @@ const ProductDetail: React.FC = () => {
     auctions.some(
       (auction) =>
         auction.status === AuctionStatus.IN_PROGRESS ||
-        auction.status === AuctionStatus.READY
+        auction.status === AuctionStatus.READY,
     ) ||
     activeAuction?.status === AuctionStatus.IN_PROGRESS ||
     activeAuction?.status === AuctionStatus.READY;
@@ -318,7 +324,7 @@ const ProductDetail: React.FC = () => {
     }
     if (
       !window.confirm(
-        "상품을 삭제하시겠습니까? 해당 작업은 되돌릴 수 없습니다."
+        "상품을 삭제하시겠습니까? 해당 작업은 되돌릴 수 없습니다.",
       )
     ) {
       return;
@@ -343,7 +349,7 @@ const ProductDetail: React.FC = () => {
         queryClient.setQueryData(
           queryKeys.products.mine(user.userId),
           (prev?: Product[]) =>
-            prev ? prev.filter((item) => item.id !== product.id) : prev
+            prev ? prev.filter((item) => item.id !== product.id) : prev,
         );
       }
       await Promise.all([
@@ -382,7 +388,7 @@ const ProductDetail: React.FC = () => {
     }
     if (
       !window.confirm(
-        "경매를 삭제하시겠습니까? 삭제된 경매는 복구할 수 없습니다."
+        "경매를 삭제하시겠습니까? 삭제된 경매는 복구할 수 없습니다.",
       )
     ) {
       return;
@@ -390,19 +396,19 @@ const ProductDetail: React.FC = () => {
     try {
       setDeletingAuctionId(auctionKey);
       setAuctions((prev) =>
-        prev.filter((item) => getAuctionKey(item) !== auctionKey)
+        prev.filter((item) => getAuctionKey(item) !== auctionKey),
       );
       queryClient.setQueryData(
         queryKeys.auctions.byProduct(productId),
         (
-          prev?: { data?: AuctionDetailResponse[] } | AuctionDetailResponse[]
+          prev?: { data?: AuctionDetailResponse[] } | AuctionDetailResponse[],
         ) => {
-          const list = Array.isArray(prev) ? prev : prev?.data ?? [];
+          const list = Array.isArray(prev) ? prev : (prev?.data ?? []);
           const next = list.filter(
-            (item) => getAuctionKey(item) !== auctionKey
+            (item) => getAuctionKey(item) !== auctionKey,
           );
           return Array.isArray(prev) ? next : { ...prev, data: next };
-        }
+        },
       );
       await auctionApi.removeAuction(auctionKey);
       if (product?.id) {
@@ -417,7 +423,7 @@ const ProductDetail: React.FC = () => {
           (prev?: Product | null) => {
             if (!prev) return prev;
             return { ...prev, latestAuctionId: null };
-          }
+          },
         );
       }
       await queryClient.invalidateQueries({
@@ -460,7 +466,7 @@ const ProductDetail: React.FC = () => {
       const productId = product.id;
       const now = new Date().toISOString();
       const buildEntry = (
-        overrides?: Partial<WishlistEntry>
+        overrides?: Partial<WishlistEntry>,
       ): WishlistEntry => ({
         id: overrides?.id ?? `optimistic-${userId}-${productId}`,
         userId,
@@ -485,7 +491,7 @@ const ProductDetail: React.FC = () => {
             updatedAt: now,
             updatedBy: userId,
           };
-        }
+        },
       );
 
       queryClient.setQueryData(
@@ -496,18 +502,18 @@ const ProductDetail: React.FC = () => {
                 entries: WishlistEntry[];
                 products: Product[];
               }
-            | undefined
+            | undefined,
         ) => {
           if (!prev) return prev;
           if (nextDesired) {
             const exists = prev.entries.some(
-              (entry) => entry.productId === productId
+              (entry) => entry.productId === productId,
             );
             const nextEntries = exists
               ? prev.entries
               : [buildEntry(), ...prev.entries];
             const nextProducts = prev.products.some(
-              (existing) => existing.id === productId
+              (existing) => existing.id === productId,
             )
               ? prev.products
               : [product, ...prev.products];
@@ -515,16 +521,16 @@ const ProductDetail: React.FC = () => {
           }
           return {
             entries: prev.entries.filter(
-              (entry) => entry.productId !== productId
+              (entry) => entry.productId !== productId,
             ),
             products: prev.products.filter(
-              (existing) => existing.id !== productId
+              (existing) => existing.id !== productId,
             ),
           };
-        }
+        },
       );
     },
-    [product, queryClient, user?.userId]
+    [product, queryClient, user?.userId],
   );
 
   const invalidateWishlistList = useCallback(() => {
@@ -817,7 +823,7 @@ const ProductDetail: React.FC = () => {
                           }
                           alert(
                             err?.response?.data?.message ??
-                              "찜하기 처리 중 오류가 발생했습니다."
+                              "찜하기 처리 중 오류가 발생했습니다.",
                           );
                         } finally {
                           wishInFlightRef.current = false;
@@ -1014,8 +1020,8 @@ const ProductDetail: React.FC = () => {
                           {activeAuction.status === AuctionStatus.IN_PROGRESS
                             ? "경매 참여하기"
                             : activeAuction.status === AuctionStatus.READY
-                            ? "경매 상세보기"
-                            : "경매 결과 보기"}
+                              ? "경매 상세보기"
+                              : "경매 결과 보기"}
                         </Button>
                         {canReregisterFromActiveAuction && (
                           <Button
@@ -1056,7 +1062,7 @@ const ProductDetail: React.FC = () => {
 
               <Box>
                 <Typography variant="subtitle1" sx={{ mb: 1 }}>
-                  다른 경매 이력
+                  이전 경매 이력
                 </Typography>
                 {auctionErrorMessage ? (
                   <Alert severity="error">{auctionErrorMessage}</Alert>
@@ -1098,7 +1104,7 @@ const ProductDetail: React.FC = () => {
                           >
                             <Chip
                               label={getAuctionStatusText(
-                                auction.status as AuctionStatus
+                                auction.status as AuctionStatus,
                               )}
                               size="small"
                               color={
@@ -1119,8 +1125,8 @@ const ProductDetail: React.FC = () => {
                                 {formatWon(
                                   Math.max(
                                     auction.currentBid ?? 0,
-                                    auction.startBid
-                                  )
+                                    auction.startBid,
+                                  ),
                                 )}
                               </Typography>
                               <Typography

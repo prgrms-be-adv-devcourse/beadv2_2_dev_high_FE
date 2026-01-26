@@ -14,7 +14,16 @@ export const DepositOrderStatus = {
   PENDING: "PENDING",
   COMPLETED: "COMPLETED",
   FAILED: "FAILED",
+  CANCEL_PENDING: "CANCEL_PENDING",
   CANCELLED: "CANCELLED",
+} as const;
+
+export type DepositOrderType =
+  (typeof DepositOrderTypes)[keyof typeof DepositOrderTypes];
+
+export const DepositOrderTypes = {
+  DEPOSIT_CHARGE: "DEPOSIT_CHARGE",
+  ORDER_PAYMENT: "ORDER_PAYMENT",
 } as const;
 
 export type DepositOrderStatus =
@@ -39,6 +48,8 @@ export interface DepositOrderInfo {
   paidAmount?: number;
   status: DepositOrderStatus;
   createdAt: string;
+  updatedAt: string;
+  type?: DepositOrderType;
 }
 
 export type DepositPaymentStatus =
@@ -46,9 +57,20 @@ export type DepositPaymentStatus =
   | "IN_PROGRESS"
   | "CONFIRMED"
   | "CANCELED"
-  | "FAILED";
+  | "FAILED"
+  | "CONFIRMED_FAILED";
+
+export const DepositPaymentStatuses: Record<string, string> = {
+  READY: "결제 준비",
+  IN_PROGRESS: "결제 진행 중",
+  CONFIRMED: "승인 완료",
+  CANCELED: "결제 취소",
+  FAILED: "결제 실패",
+  CONFIRMED_FAILED: "결제 승인 실패",
+};
 
 export interface DepositPaymentDetail {
+  id: string;
   orderId: string;
   userId: string;
   paymentKey: string;
@@ -58,6 +80,7 @@ export interface DepositPaymentDetail {
   status: DepositPaymentStatus;
   approvalNum?: string | null;
   approvedAt?: string | null;
+  canceledAt?: string | null;
   createdAt?: string | null;
 }
 

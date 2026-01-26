@@ -78,21 +78,9 @@ const BidHistory: React.FC<BidHistoryProps> = ({
 
   if (!isAuthenticated) {
     return (
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          height: "100%",
-        }}
-      >
-        <Alert severity="info" sx={{ m: "auto" }}>
-          입찰 내역은 로그인 후 확인 가능합니다.
-          <Button onClick={() => navigate("/login")} sx={{ ml: 1 }}>
-            로그인
-          </Button>
-        </Alert>
-      </Box>
+      <Alert severity="info" sx={{ my: "auto" }}>
+        입찰 내역은 로그인 후 확인 가능합니다.
+      </Alert>
     );
   }
 
@@ -131,8 +119,8 @@ const BidHistory: React.FC<BidHistoryProps> = ({
                 highlightBidSrno === bid.bidSrno
                   ? { animation: `${revealAnimation} 280ms ease-out` }
                   : pushPulse
-                  ? { animation: `${pushDownAnimation} 240ms ease-out` }
-                  : undefined
+                    ? { animation: `${pushDownAnimation} 240ms ease-out` }
+                    : undefined
               }
             >
               <ListItemText
@@ -149,9 +137,9 @@ const BidHistory: React.FC<BidHistoryProps> = ({
                         const label = getBidderLabel
                           ? getBidderLabel(
                               bid.highestUserId,
-                              bid.highestUsername
+                              bid.highestUsername,
                             )
-                          : bid.highestUsername ?? null;
+                          : (bid.highestUsername ?? null);
                         if (label) return label;
                         if (isBidderLoading) {
                           return (

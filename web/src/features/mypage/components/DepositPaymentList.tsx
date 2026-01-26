@@ -12,14 +12,22 @@ import {
   ListItem,
   ListItemText,
   Skeleton,
+  Stack,
+  TextField,
   Typography,
 } from "@mui/material";
 import React, { useMemo, useState } from "react";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type {
-  DepositPaymentDetail,
+  DepositOrderInfo,
+  DepositOrderStatus,
   DepositPaymentFailureHistoryDetail,
-  PagedDepositPaymentResponse,
+  PagedApiResponse,
 } from "@moreauction/types";
 import { formatNumber } from "@moreauction/utils";
 import { depositApi } from "@/apis/depositApi";
@@ -28,23 +36,26 @@ import { queryKeys } from "@/shared/queries/queryKeys";
 import { getErrorMessage } from "@/shared/utils/getErrorMessage";
 
 const statusMap: Record<string, string> = {
-  READY: "준비",
-  IN_PROGRESS: "진행",
-  CONFIRMED: "승인",
-  CANCELED: "취소",
-  FAILED: "실패",
+  PENDING: "결제 대기",
+  COMPLETED: "결제 완료",
+  FAILED: "결제 실패",
+  CANCEL_PENDING: "환불 대기중",
+  CANCELLED: "취소",
 };
 
 const statusColorMap: Record<
   string,
   "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning"
 > = {
-  READY: "default",
-  IN_PROGRESS: "info",
-  CONFIRMED: "success",
-  CANCELED: "warning",
+  PENDING: "default",
+  COMPLETED: "success",
   FAILED: "error",
+  CANCEL_PENDING: "warning",
+  CANCELLED: "warning",
 };
+
+const normalizeStatus = (status?: DepositOrderStatus | null) =>
+  status ? String(status).trim().toUpperCase() : "";
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return "-";
@@ -71,32 +82,43 @@ const renderSkeletonList = () => (
 
 export const DepositPaymentList: React.FC = () => {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [failureOrderId, setFailureOrderId] = useState<string | null>(null);
-  const paymentQuery = useInfiniteQuery<PagedDepositPaymentResponse, Error>({
-    queryKey: queryKeys.deposit.payments(),
-    queryFn: async ({ pageParam = 0 }) => {
-      const response = await depositApi.getDepositPayments({
-        page: pageParam as number,
-        size: 20,
-        sort: "updatedAt,DESC",
-      });
-      return response.data;
-    },
-    initialPageParam: 0,
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
-    staleTime: 30_000,
-    getNextPageParam: (lastPage) =>
-      lastPage.last ? undefined : (lastPage.number ?? 0) + 1,
-  });
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelTargetId, setCancelTargetId] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [refundDialogOpen, setRefundDialogOpen] = useState(false);
+  const [refundTargetId, setRefundTargetId] = useState<string | null>(null);
+  const [refundReason, setRefundReason] = useState("");
+  const [refundError, setRefundError] = useState<string | null>(null);
+  const paymentQuery = useInfiniteQuery<PagedApiResponse<DepositOrderInfo>, Error>(
+    {
+      queryKey: queryKeys.deposit.payments(),
+      queryFn: async ({ pageParam = 0 }) => {
+        const response = await depositApi.getDepositPayments({
+          page: pageParam as number,
+          size: 20,
+          sort: "createdAt,DESC",
+        });
+        return response.data;
+      },
+      initialPageParam: 0,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+      staleTime: 30_000,
+      getNextPageParam: (lastPage) =>
+        lastPage.last ? undefined : (lastPage.number ?? 0) + 1,
+    }
+  );
 
-  const payments: DepositPaymentDetail[] =
+  const payments: DepositOrderInfo[] =
     paymentQuery.data?.pages.flatMap((page) => page.content ?? []) ?? [];
   const errorMessage = useMemo(() => {
     if (!paymentQuery.isError) return null;
     return getErrorMessage(
       paymentQuery.error,
-      "결제 내역을 불러오지 못했습니다."
+      "결제 내역을 불러오지 못했습니다.",
     );
   }, [paymentQuery.error, paymentQuery.isError]);
 
@@ -105,7 +127,7 @@ export const DepositPaymentList: React.FC = () => {
     queryFn: async () => {
       const response = await depositApi.getDepositPaymentFailuresByOrderId(
         { orderId: failureOrderId ?? undefined, userId: user?.userId },
-        { page: 0, size: 20, sort: "updatedAt,DESC" }
+        { page: 0, size: 20, sort: "updatedAt,DESC" },
       );
       return response.data;
     },
@@ -115,13 +137,72 @@ export const DepositPaymentList: React.FC = () => {
     staleTime: 30_000,
   });
 
+  const cancelPendingMutation = useMutation({
+    mutationFn: (orderId: string) =>
+      depositApi.cancelPendingOrder({ id: orderId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.deposit.payments() });
+      setRefundDialogOpen(false);
+      setRefundTargetId(null);
+      setRefundReason("");
+      setRefundError(null);
+    },
+  });
+  const isCancelPending = cancelPendingMutation.isPending;
+
+  const cancelPaymentMutation = useMutation({
+    mutationFn: (payload: { orderId: string; reason: string }) =>
+      depositApi.canclePaymentOrders({
+        id: payload.orderId,
+        cancelReason: payload.reason,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.deposit.payments() });
+      setCancelDialogOpen(false);
+      setCancelTargetId(null);
+      setCancelReason("");
+      setCancelError(null);
+    },
+    onError: (error: any) => {
+      setCancelError(
+        error?.response?.data?.message ??
+          error?.data?.message ??
+          "결제 취소에 실패했습니다."
+      );
+    },
+  });
+  const isCancelPayment = cancelPaymentMutation.isPending;
+
+  const normalizeType = (type?: string | null) =>
+    type ? String(type).trim().toUpperCase() : "";
+
+  const getTypeLabel = (type?: string | null) => {
+    const normalized = normalizeType(type);
+    if (normalized === "DEPOSIT_CHARGE") return "예치금 충전";
+    if (normalized === "ORDER_PAYMENT") return "상품 구매";
+    return type ?? "-";
+  };
+
+  const canRequestRefund = (status?: DepositOrderStatus | null) =>
+    normalizeStatus(status) === "COMPLETED";
+
+  const isDepositCharge = (type?: string | null) =>
+    normalizeType(type) === "DEPOSIT_CHARGE";
+
+  const isWithinOneHour = (value?: string | null) => {
+    if (!value) return false;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return false;
+    return Date.now() - parsed.getTime() <= 60 * 60 * 1000;
+  };
+
   const failureItems: DepositPaymentFailureHistoryDetail[] =
     failureQuery.data?.content ?? [];
   const failureErrorMessage = useMemo(() => {
     if (!failureQuery.isError) return null;
     return getErrorMessage(
       failureQuery.error,
-      "결제 실패 내역을 불러오지 못했습니다."
+      "결제 실패 내역을 불러오지 못했습니다.",
     );
   }, [failureQuery.error, failureQuery.isError]);
 
@@ -131,6 +212,59 @@ export const DepositPaymentList: React.FC = () => {
 
   const handleCloseFailureDetail = () => {
     setFailureOrderId(null);
+  };
+
+  const openCancelDialog = (orderId: string) => {
+    setCancelTargetId(orderId);
+    setCancelReason("");
+    setCancelError(null);
+    setCancelDialogOpen(true);
+  };
+
+  const closeCancelDialog = () => {
+    if (isCancelPayment) return;
+    setCancelDialogOpen(false);
+    setCancelTargetId(null);
+    setCancelReason("");
+    setCancelError(null);
+  };
+
+  const handleConfirmCancel = () => {
+    if (!cancelTargetId || isCancelPayment) return;
+    const trimmed = cancelReason.trim();
+    if (!trimmed) {
+      setCancelError("취소 사유를 입력해주세요.");
+      return;
+    }
+    cancelPaymentMutation.mutate({
+      orderId: cancelTargetId,
+      reason: trimmed,
+    });
+  };
+
+  const openRefundDialog = (orderId: string) => {
+    setRefundTargetId(orderId);
+    setRefundReason("");
+    setRefundError(null);
+    setRefundDialogOpen(true);
+  };
+
+  const closeRefundDialog = () => {
+    if (isCancelPending) return;
+    setRefundDialogOpen(false);
+    setRefundTargetId(null);
+    setRefundReason("");
+    setRefundError(null);
+  };
+
+  const handleConfirmRefund = () => {
+    if (!refundTargetId || isCancelPending) return;
+    const trimmed = refundReason.trim();
+    if (!trimmed) {
+      setRefundError("요청 사유를 입력해주세요.");
+      return;
+    }
+    cancelPendingMutation.mutate(refundTargetId);
   };
 
   if (paymentQuery.isLoading && payments.length === 0) {
@@ -147,10 +281,10 @@ export const DepositPaymentList: React.FC = () => {
     <>
       <List>
         {payments.map((item) => (
-          <React.Fragment key={`${item.orderId}-${item.createdAt ?? ""}`}>
+          <React.Fragment key={`${item.id}-${item.createdAt ?? ""}`}>
             <ListItem alignItems="flex-start">
               <ListItemText
-                primary={`${formatNumber(item.amount)}원`}
+                primary={`총 ${formatNumber(item.amount)}원`}
                 primaryTypographyProps={{ fontWeight: 600 }}
                 secondaryTypographyProps={{
                   variant: "body2",
@@ -168,24 +302,63 @@ export const DepositPaymentList: React.FC = () => {
                     }}
                   >
                     <Chip
-                      label={statusMap[item.status] ?? item.status}
+                      label={
+                        statusMap[normalizeStatus(item.status)] ?? item.status
+                      }
                       size="small"
-                      color={statusColorMap[item.status] ?? "default"}
+                      color={
+                        statusColorMap[normalizeStatus(item.status)] ??
+                        "default"
+                      }
                       variant="outlined"
                       onClick={
-                        item.status === "FAILED"
-                          ? () => handleOpenFailureDetail(item.orderId)
+                        normalizeStatus(item.status) === "FAILED"
+                          ? () => handleOpenFailureDetail(item.id)
                           : undefined
                       }
-                      clickable={item.status === "FAILED"}
+                      clickable={normalizeStatus(item.status) === "FAILED"}
                     />
                     <Typography variant="caption" color="text.secondary">
-                      주문번호: {item.orderId}
+                      주문번호: {item.id}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
-                      요청: {formatDateTime(item.requestedAt)} · 승인:{" "}
-                      {formatDateTime(item.approvedAt)}
+                      유형: {getTypeLabel(item.type)}
                     </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {isDepositCharge(item.type)
+                        ? `PG 결제 ${formatNumber(item.paidAmount ?? 0)}원`
+                        : `PG 결제 ${formatNumber(
+                            item.paidAmount ?? 0
+                          )}원 · 예치금 사용 ${formatNumber(
+                            item.deposit ?? 0
+                          )}원`}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      처리: {formatDateTime(item.updatedAt)}
+                    </Typography>
+                    {isDepositCharge(item.type) && (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        disabled={
+                          !canRequestRefund(item.status) ||
+                          isCancelPending ||
+                          isCancelPayment
+                        }
+                      onClick={() => {
+                        const orderId = String(item.id);
+                        if (isWithinOneHour(item.updatedAt)) {
+                          openCancelDialog(orderId);
+                        } else {
+                          openRefundDialog(orderId);
+                        }
+                      }}
+                    >
+                      {isWithinOneHour(item.updatedAt)
+                        ? "결제 취소"
+                        : "환불 요청"}
+                      </Button>
+                    )}
                   </Box>
                 }
               />
@@ -251,6 +424,86 @@ export const DepositPaymentList: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseFailureDetail}>닫기</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={cancelDialogOpen}
+        onClose={closeCancelDialog}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>결제 취소</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            <Typography variant="body2" color="text.secondary">
+              결제 취소 사유를 입력해주세요.
+            </Typography>
+            <TextField
+              label="취소 사유"
+              value={cancelReason}
+              onChange={(event) => {
+                setCancelReason(event.target.value);
+                setCancelError(null);
+              }}
+              fullWidth
+              multiline
+              minRows={3}
+              error={!!cancelError}
+              helperText={cancelError ?? " "}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeCancelDialog}>닫기</Button>
+          <Button
+            variant="contained"
+            color="warning"
+            onClick={handleConfirmCancel}
+            disabled={isCancelPayment}
+          >
+            결제 취소
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={refundDialogOpen}
+        onClose={closeRefundDialog}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>환불 요청</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            <Typography variant="body2" color="text.secondary">
+              환불 요청 사유를 입력해주세요.
+            </Typography>
+            <TextField
+              label="요청 사유"
+              value={refundReason}
+              onChange={(event) => {
+                setRefundReason(event.target.value);
+                setRefundError(null);
+              }}
+              fullWidth
+              multiline
+              minRows={3}
+              error={!!refundError}
+              helperText={refundError ?? " "}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeRefundDialog}>닫기</Button>
+          <Button
+            variant="contained"
+            color="warning"
+            onClick={handleConfirmRefund}
+            disabled={isCancelPending}
+          >
+            환불 요청
+          </Button>
         </DialogActions>
       </Dialog>
     </>

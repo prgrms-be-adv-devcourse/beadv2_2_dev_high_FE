@@ -16,10 +16,7 @@ import { auctionApi } from "@/apis/auctionApi";
 import { fileApi } from "@/apis/fileApi";
 import { productApi } from "@/apis/productApi";
 import { userApi } from "@/apis/userApi";
-import {
-  type PagedAuctionResponse,
-  AuctionStatus,
-} from "@moreauction/types";
+import { type PagedAuctionResponse, AuctionStatus } from "@moreauction/types";
 import type {
   ApiResponseDto,
   FileGroup,
@@ -60,10 +57,21 @@ const AuctionList: React.FC<AuctionListProps> = ({
 }) => {
   const statusKey = Array.isArray(status) ? status.join(",") : "";
 
+  const buildSort = (status: AuctionStatus[]) => {
+    // status가 여러개면 “어떤 정렬을 할지”가 애매해지니 우선순위로 결정
+    if (status.includes(AuctionStatus.IN_PROGRESS)) return ["auctionEndAt,asc"];
+    if (status.includes(AuctionStatus.READY)) return ["auctionStartAt,desc"];
+    return ["createdAt,desc"];
+  };
+
   const auctionQuery = useQuery({
     queryKey: queryKeys.auctions.list(statusKey, "simple", limit),
     queryFn: async () => {
-      const response = await auctionApi.getAuctionsByStatus(status, limit);
+      const response = await auctionApi.getAuctionsByStatus(
+        status,
+        limit,
+        buildSort(status),
+      );
       return response.data as PagedAuctionResponse;
     },
     staleTime: 30_000,
@@ -73,7 +81,7 @@ const AuctionList: React.FC<AuctionListProps> = ({
     if (!auctionQuery.isError) return null;
     return getErrorMessage(
       auctionQuery.error,
-      "경매 목록을 불러오는데 실패했습니다."
+      "경매 목록을 불러오는데 실패했습니다.",
     );
   }, [auctionQuery.error, auctionQuery.isError]);
 
@@ -98,7 +106,7 @@ const AuctionList: React.FC<AuctionListProps> = ({
     const map = new Map<string, Product>();
     productIds.forEach((id) => {
       const cached = queryClient.getQueryData<Product>(
-        queryKeys.products.detail(id)
+        queryKeys.products.detail(id),
       );
       if (cached) {
         map.set(id, cached);
@@ -121,7 +129,10 @@ const AuctionList: React.FC<AuctionListProps> = ({
       const products = response.data ?? [];
       products.forEach((product) => {
         if (!product?.id) return;
-        queryClient.setQueryData(queryKeys.products.detail(product.id), product);
+        queryClient.setQueryData(
+          queryKeys.products.detail(product.id),
+          product,
+        );
       });
       return products;
     },
@@ -159,19 +170,19 @@ const AuctionList: React.FC<AuctionListProps> = ({
         .map(
           (id) =>
             queryClient.getQueryData<ApiResponseDto<FileGroup>>(
-              queryKeys.files.group(id)
-            )?.data
+              queryKeys.files.group(id),
+            )?.data,
         )
         .filter((group): group is FileGroup => !!group),
-    [fileGroupIds, queryClient]
+    [fileGroupIds, queryClient],
   );
   const cachedFileGroupIds = useMemo(
     () => new Set(cachedFileGroups.map((group) => String(group.fileGroupId))),
-    [cachedFileGroups]
+    [cachedFileGroups],
   );
   const missingFileGroupIds = useMemo(
     () => fileGroupIds.filter((id) => !cachedFileGroupIds.has(id)),
-    [cachedFileGroupIds, fileGroupIds]
+    [cachedFileGroupIds, fileGroupIds],
   );
   const fileGroupsQuery = useQuery({
     queryKey: queryKeys.files.groups(missingFileGroupIds),
@@ -225,7 +236,7 @@ const AuctionList: React.FC<AuctionListProps> = ({
         if (!userInfo?.userId) return;
         queryClient.setQueryData(
           queryKeys.user.detail(userInfo.userId),
-          userInfo
+          userInfo,
         );
       });
       return users;

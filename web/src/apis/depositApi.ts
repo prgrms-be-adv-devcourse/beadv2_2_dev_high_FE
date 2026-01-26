@@ -3,9 +3,9 @@ import type {
   DepositHstRequest,
   DepositInfo,
   DepositOrderInfo,
+  PagedApiResponse,
   PagedDepositHistoryResponse,
   PagedDepositPaymentFailureHistoryResponse,
-  PagedDepositPaymentResponse,
   DepositPaymentFailureHistorySearchRequest,
   PaymentFailReqeuest,
   PaymentSuccessReqeuest,
@@ -119,8 +119,8 @@ export const depositApi = {
     page?: number;
     size?: number;
     sort?: string;
-  }): Promise<ApiResponseDto<PagedDepositPaymentResponse>> => {
-    const res = await client.get("/payments/me", { params });
+  }): Promise<ApiResponseDto<PagedApiResponse<DepositOrderInfo>>> => {
+    const res = await client.get("/payments/orders/me", { params });
     return res.data;
   },
 
@@ -156,6 +156,12 @@ export const depositApi = {
     params: CancelPaymentRequest,
   ): Promise<ApiResponseDto<unknown>> => {
     const res = await client.post(`/payments/orders/cancel`, params);
+    return res.data;
+  },
+  cancelPendingOrder: async (params: {
+    id: string;
+  }): Promise<ApiResponseDto<DepositOrderInfo>> => {
+    const res = await client.post("/payments/orders/cancel-pending", params);
     return res.data;
   },
 };
