@@ -1,5 +1,12 @@
 import { Gavel } from "@mui/icons-material";
-import { Alert, Box, Link, TextField, Tooltip, Typography } from "@mui/material";
+import {
+  Alert,
+  Box,
+  Link,
+  TextField,
+  Tooltip,
+  Typography,
+} from "@mui/material";
 import Button from "@mui/material/Button";
 import { formatNumber } from "@moreauction/utils";
 import { Link as RouterLink } from "react-router-dom";
@@ -64,6 +71,15 @@ const AuctionBidForm: React.FC<AuctionBidFormProps> = ({
     }
     return `${minutes}:${String(secs).padStart(2, "0")}`;
   };
+  const STEP = 100;
+
+  const ceilToStep = (n: number, step = STEP) => Math.ceil(n / step) * step;
+
+  // 서버에서 내려온 원본 최소가(예: currentBidPrice + increment)
+  const minBidPriceRaw = minBidPrice;
+
+  // UI/입력 제약에 사용할 최소가(100원 단위)
+  const minBidPriceStep = ceilToStep(minBidPriceRaw, STEP);
   const bidBanCountdownLabel =
     bidBanCountdown != null ? formatCountdown(bidBanCountdown) : null;
   const bidBanTooltipContent = (
@@ -141,11 +157,13 @@ const AuctionBidForm: React.FC<AuctionBidFormProps> = ({
           type="number"
           label={`입찰 금액 (최고입찰가 ${
             hasAnyBid ? `${formatNumber(currentBidPrice)}원` : "-"
-          } · 최소 ${formatNumber(minBidPrice)}원)`}
+          } · 최소 ${formatNumber(minBidPriceStep)}원)`}
           value={newBidAmount}
           onChange={(e) => setNewBidAmount(e.target.value)}
           fullWidth
-          onFocus={() => !newBidAmount && setNewBidAmount(String(minBidPrice))}
+          onFocus={() =>
+            !newBidAmount && setNewBidAmount(String(minBidPriceStep))
+          }
           disabled={
             isWithdrawn ||
             isRefund ||
@@ -154,7 +172,7 @@ const AuctionBidForm: React.FC<AuctionBidFormProps> = ({
             isSeller ||
             isBidBanned
           }
-          inputProps={{ min: minBidPrice, step: 100 }}
+          inputProps={{ min: minBidPriceStep, step: STEP }}
         />
 
         <Tooltip
