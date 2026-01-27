@@ -108,7 +108,7 @@ export const AuctionParticipationTab: React.FC = () => {
       )}
 
       {!historyQuery.isLoading && !errorMessage && items.length > 0 && (
-        <>
+        <Box sx={{ maxHeight: "60vh", overflowY: "auto", pr: 1 }}>
           <Stack spacing={2}>
             {items.map((item, idx) => (
               <Card key={`participation-${idx}`}>
@@ -201,7 +201,7 @@ export const AuctionParticipationTab: React.FC = () => {
               </Card>
             ))}
           </Stack>
-          <Box sx={{ mt: 2, display: "flex", justifyContent: "center" }}>
+          <Box sx={{ mt: 2, display: "flex", justifyContent: "center", pb: 1 }}>
             <Button
               variant="outlined"
               onClick={() => historyQuery.fetchNextPage()}
@@ -214,7 +214,7 @@ export const AuctionParticipationTab: React.FC = () => {
                 : "모든 내역을 불러왔습니다"}
             </Button>
           </Box>
-        </>
+        </Box>
       )}
     </Box>
   );

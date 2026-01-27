@@ -137,161 +137,163 @@ const PendingOrders: React.FC = () => {
             ) : orders.length === 0 ? (
               <Alert severity="info">구매 대기 중인 주문이 없습니다.</Alert>
             ) : (
-              <Stack spacing={2}>
-                {orders.map((order) => {
-                  const payableAmount =
-                    typeof order.depositAmount === "number"
-                      ? order.winningAmount - order.depositAmount
-                      : order.winningAmount;
-                  const createdAt = format(
-                    new Date(order.createdAt),
-                    "yyyy-MM-dd HH:mm"
-                  );
-                  const payLimitAt = order.payLimitDate
-                    ? new Date(order.payLimitDate)
-                    : null;
-                  const isPayExpired =
-                    payLimitAt != null && now > payLimitAt.getTime();
+              <Box sx={{ maxHeight: "60vh", overflowY: "auto", pr: 1 }}>
+                <Stack spacing={2}>
+                  {orders.map((order) => {
+                    const payableAmount =
+                      typeof order.depositAmount === "number"
+                        ? order.winningAmount - order.depositAmount
+                        : order.winningAmount;
+                    const createdAt = format(
+                      new Date(order.createdAt),
+                      "yyyy-MM-dd HH:mm"
+                    );
+                    const payLimitAt = order.payLimitDate
+                      ? new Date(order.payLimitDate)
+                      : null;
+                    const isPayExpired =
+                      payLimitAt != null && now > payLimitAt.getTime();
 
-                  return (
-                    <Paper
-                      key={order.id}
-                      variant="outlined"
-                      role="button"
-                      tabIndex={0}
-                      sx={{
-                        p: 2,
-                        borderRadius: 2,
-                        borderColor: "rgba(148, 163, 184, 0.4)",
-                        backgroundColor: "rgba(148, 163, 184, 0.04)",
-                        textDecoration: "none",
-                        color: "inherit",
-                        cursor: "pointer",
-                        transition:
-                          "transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease",
-                        "&:hover": {
-                          transform: "translateY(-2px)",
-                          boxShadow: "0 10px 24px rgba(15, 23, 42, 0.12)",
-                          borderColor: "rgba(59, 130, 246, 0.4)",
-                        },
-                        "&:focus-visible": {
-                          outline: "2px solid rgba(59, 130, 246, 0.5)",
-                          outlineOffset: 2,
-                        },
-                      }}
-                      onClick={() => navigate(`/orders/${order.id}`)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          navigate(`/orders/${order.id}`);
-                        }
-                      }}
-                    >
-                      <Stack spacing={1.5}>
-                        <Box
-                          sx={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            gap: 2,
-                          }}
-                        >
-                          <Box>
-                            <Typography variant="subtitle1" fontWeight={700}>
-                              {order.productName ?? "주문"}
-                            </Typography>
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                            >
-                              주문일시 · {createdAt}
-                            </Typography>
-                          </Box>
-                          <Button
-                            variant="contained"
-                            size="small"
-                            disabled={isPayExpired}
-                            onClick={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              navigate(`/orders/${order.id}?pay=1`);
+                    return (
+                      <Paper
+                        key={order.id}
+                        variant="outlined"
+                        role="button"
+                        tabIndex={0}
+                        sx={{
+                          p: 2,
+                          borderRadius: 2,
+                          borderColor: "rgba(148, 163, 184, 0.4)",
+                          backgroundColor: "rgba(148, 163, 184, 0.04)",
+                          textDecoration: "none",
+                          color: "inherit",
+                          cursor: "pointer",
+                          transition:
+                            "transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease",
+                          "&:hover": {
+                            transform: "translateY(-2px)",
+                            boxShadow: "0 10px 24px rgba(15, 23, 42, 0.12)",
+                            borderColor: "rgba(59, 130, 246, 0.4)",
+                          },
+                          "&:focus-visible": {
+                            outline: "2px solid rgba(59, 130, 246, 0.5)",
+                            outlineOffset: 2,
+                          },
+                        }}
+                        onClick={() => navigate(`/orders/${order.id}`)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            navigate(`/orders/${order.id}`);
+                          }
+                        }}
+                      >
+                        <Stack spacing={1.5}>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: 2,
                             }}
                           >
-                            결제하기
-                          </Button>
-                        </Box>
-                        <Box
-                          sx={{
-                            display: "grid",
-                            gridTemplateColumns: {
-                              xs: "1fr",
-                              sm: "repeat(2, 1fr)",
-                              md: "repeat(4, 1fr)",
-                            },
-                            gap: 1.5,
-                          }}
-                        >
-                          <Box>
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
+                            <Box>
+                              <Typography variant="subtitle1" fontWeight={700}>
+                                {order.productName ?? "주문"}
+                              </Typography>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                주문일시 · {createdAt}
+                              </Typography>
+                            </Box>
+                            <Button
+                              variant="contained"
+                              size="small"
+                              disabled={isPayExpired}
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                navigate(`/orders/${order.id}?pay=1`);
+                              }}
                             >
-                              낙찰가
-                            </Typography>
-                            <Typography variant="body2" fontWeight={600}>
-                              {formatWon(order.winningAmount)}
-                            </Typography>
+                              결제하기
+                            </Button>
                           </Box>
-                          <Box>
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                            >
-                              보증금 납부
-                            </Typography>
-                            <Typography variant="body2" fontWeight={600}>
-                              {formatWon(order.depositAmount ?? 0)}
-                            </Typography>
+                          <Box
+                            sx={{
+                              display: "grid",
+                              gridTemplateColumns: {
+                                xs: "1fr",
+                                sm: "repeat(2, 1fr)",
+                                md: "repeat(4, 1fr)",
+                              },
+                              gap: 1.5,
+                            }}
+                          >
+                            <Box>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                낙찰가
+                              </Typography>
+                              <Typography variant="body2" fontWeight={600}>
+                                {formatWon(order.winningAmount)}
+                              </Typography>
+                            </Box>
+                            <Box>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                보증금 납부
+                              </Typography>
+                              <Typography variant="body2" fontWeight={600}>
+                                {formatWon(order.depositAmount ?? 0)}
+                              </Typography>
+                            </Box>
+                            <Box>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                추가 결제금액
+                              </Typography>
+                              <Typography variant="body2" fontWeight={700}>
+                                {formatWon(payableAmount)}
+                              </Typography>
+                            </Box>
+                            <Box>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                결제 기한
+                              </Typography>
+                              <Typography
+                                variant="body2"
+                                fontWeight={600}
+                                color={isPayExpired ? "error" : "text.primary"}
+                              >
+                                {payLimitAt
+                                  ? format(payLimitAt, "yyyy-MM-dd HH:mm")
+                                  : "-"}
+                              </Typography>
+                            </Box>
                           </Box>
-                          <Box>
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                            >
-                              추가 결제금액
-                            </Typography>
-                            <Typography variant="body2" fontWeight={700}>
-                              {formatWon(payableAmount)}
-                            </Typography>
-                          </Box>
-                          <Box>
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                            >
-                              결제 기한
-                            </Typography>
-                            <Typography
-                              variant="body2"
-                              fontWeight={600}
-                              color={isPayExpired ? "error" : "text.primary"}
-                            >
-                              {payLimitAt
-                                ? format(payLimitAt, "yyyy-MM-dd HH:mm")
-                                : "-"}
-                            </Typography>
-                          </Box>
-                        </Box>
-                        <Typography variant="caption" color="text.secondary">
-                          {isPayExpired
-                            ? "결제 기한이 만료되었습니다."
-                            : "결제 버튼을 눌러 바로 진행할 수 있습니다."}
-                        </Typography>
-                      </Stack>
-                    </Paper>
-                  );
-                })}
-              </Stack>
+                          <Typography variant="caption" color="text.secondary">
+                            {isPayExpired
+                              ? "결제 기한이 만료되었습니다."
+                              : "결제 버튼을 눌러 바로 진행할 수 있습니다."}
+                          </Typography>
+                        </Stack>
+                      </Paper>
+                    );
+                  })}
+                </Stack>
+              </Box>
             )}
           </Stack>
         </Paper>
